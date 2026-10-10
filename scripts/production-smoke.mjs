@@ -30,7 +30,7 @@ export const productionSmokeChecks = [
   {
     path: "/ads.txt",
     contentTypes: ["text/plain"],
-    bodyPattern: /google\.com\s*,\s*pub-/i,
+    bodyPattern: /(?:^# Advertising disabled pending Ninja AdMax|^[\w.-]+\s*,\s*[\w-]+\s*,\s*(?:DIRECT|RESELLER))/im,
     description: "ads.txt",
   },
 ];
