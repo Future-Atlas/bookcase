@@ -22,24 +22,23 @@ function responseRecorder() {
   };
 }
 
-test("AdSense runtime is isolated from non-content SPA routes and ad-free users", () => {
+test("Ninja AdMax runtime is restricted to the production timeline and ad-supported visitors", () => {
   const html = fs.readFileSync(
     path.join(__dirname, "../../web/index.html"),
     "utf8",
   );
-
-  assert.match(html, /const allowedPath = \/\^\\\/\$\//);
-  assert.match(html, /function isAdsRouteAllowed\(\)/);
-  assert.match(html, /function reloadIfAdsAreNoLongerAllowed\(\)/);
+  assert.match(html, /expectedHost = "www\.sharemarium\.com"/);
+  assert.match(html, /window\.location\.pathname === "\/"/);
+  assert.match(html, /sharemarium:admax-slot-ready/);
+  assert.match(html, /root\.isConnected/);
   assert.match(html, /currentSupabaseAccessToken/);
   assert.match(html, /\/api\/ad-entitlement/);
   assert.match(html, /entitlementState = "ad_free"/);
-  assert.match(html, /accessToken && entitlementState !== "ads_allowed"/);
+  assert.match(html, /entitlementState !== "ads_allowed"/);
   assert.match(html, /window\.location\.replace\(window\.location\.href\)/);
-  assert.match(html, /if \(reloadIfAdsAreNoLongerAllowed\(\)\) return/);
   assert.match(html, /popstate/);
-  assert.match(html, /history\.pushState/);
-  assert.match(html, /history\.replaceState/);
+  assert.match(html, /history\[method\]/);
+  assert.doesNotMatch(html, /googlesyndication|adsbygoogle|ca-pub-/);
 });
 
 test("ad entitlement endpoint treats anonymous visitors as ad-supported", async () => {

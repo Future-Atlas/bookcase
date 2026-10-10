@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
 import '../widgets/post_card.dart';
+import '../widgets/timeline_ad_slot.dart';
 import '../controllers/book_list_controller.dart';
 import '../models/book.dart';
 import '../models/post.dart';
@@ -1510,9 +1511,17 @@ class _BookListScreenState extends State<BookListScreen> {
           controller: _timelineScrollController,
           padding: const EdgeInsets.only(right: 8),
           physics: const ClampingScrollPhysics(),
-          itemCount: _controller.timelinePosts.length,
+          // One clearly labeled ad slot, and only between real posts.
+          // Never show an ad on empty or nearly empty timelines.
+          itemCount: _controller.timelinePosts.length +
+              (_controller.timelinePosts.length >= 3 ? 1 : 0),
           itemBuilder: (context, index) {
-            final post = _controller.timelinePosts[index];
+            final hasAdSlot = _controller.timelinePosts.length >= 3;
+            if (hasAdSlot && index == 3) {
+              return const TimelineAdSlot();
+            }
+            final postIndex = hasAdSlot && index > 3 ? index - 1 : index;
+            final post = _controller.timelinePosts[postIndex];
             final currentProfileId = Provider.of<SupabaseService>(
               context,
               listen: false,
