@@ -10,7 +10,6 @@ const {
   evaluatePublisherContent,
   fetchHomeAdEligibility,
 } = require("../../api/_home_ad_eligibility");
-const { suppressAdsInRenderedHtml } = require("../../api/seo-home")._test;
 
 function review({
   id,
@@ -143,34 +142,18 @@ test("home ad eligibility is fail-closed without enough original public content"
   });
 });
 
-test("crawler home renderer can suppress an otherwise enabled AdSense loader", () => {
-  const rendered = `
-    <script>window.__sharemariumAdsAllowed = true;</script>
-    <script>
-      (function() {
-        if (!window.__sharemariumAdsAllowed) return;
-        const script = document.createElement('script');
-        script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-test';
-        document.head.appendChild(script);
-      })();
-    </script>
-    <main>Sharemarium</main>`;
-
-  const suppressed = suppressAdsInRenderedHtml(rendered);
-  assert.match(suppressed, /__sharemariumAdsAllowed = false/);
-  assert.doesNotMatch(suppressed, /pagead2\.googlesyndication\.com/);
-});
-
-test("browser AdSense loader waits for the same home content eligibility", () => {
-  const html = fs.readFileSync(
-    path.join(__dirname, "../../web/index.html"),
+test("crawler renderer cannot inject legacy AdSense or new Ninja AdMax", () => {
+  const seoHome = fs.readFileSync(
+    path.join(__dirname, "../../api/seo-home.js"),
     "utf8",
   );
-
-  assert.match(html, /fetch\("\/api\/home-ad-eligibility"/);
-  assert.match(html, /homeContentState !== "eligible"/);
-  assert.match(html, /homeContentState = "not_eligible"/);
-  assert.match(html, /Fail closed when the independent-content check is unavailable/);
+  const seo = fs.readFileSync(
+    path.join(__dirname, "../../api/seo.js"),
+    "utf8",
+  );
+  assert.doesNotMatch(seoHome + seo, /googlesyndication|adsbygoogle|ca-pub-/);
+  assert.doesNotMatch(seoHome + seo, /adm\.shinobi\.jp/);
+  assert.match(seoHome, /path: "\/"/);
 });
 
 test("crawler and SEO preview home requests pass through seo-router", () => {

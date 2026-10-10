@@ -40,27 +40,22 @@
     <meta name="twitter:image" content="https://www.sharemarium.com/icons/Icon-512.png" />
     <script>
       (() => {
-        const allowedPath = /^\/$/;
-        const adClient = "ca-pub-3052085512168272";
-        const adScriptUrl =
-          "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=" +
-          adClient;
-        const homeContentEligibilityTtlMs = 60 * 1000;
-
-        let adScriptLoaded = false;
+        // Ninja AdMax uses only the asynchronous PC/SP "switch" tag.
+        // There is intentionally no advertising script at page load.
+        const expectedHost = "www.sharemarium.com";
+        const publisherLoader = "https://adm.shinobi.jp/st/t.js";
+        let adRequested = false;
+        let activeSlot = null;
+        let entitlementToken = null;
         let entitlementState = "unknown";
-        let entitlementToken = "";
         let entitlementRequest = null;
-        let homeContentState = "unknown";
-        let homeContentRequest = null;
-        let homeContentCheckedAt = 0;
 
-        function normalizedPath() {
-          return (window.location.pathname || "/").replace(/\/+$/, "") || "/";
-        }
-
-        function isAdsRouteAllowed() {
-          return allowedPath.test(normalizedPath());
+        function eligibleRoute() {
+          return (
+            window.location.hostname === expectedHost &&
+            window.location.pathname === "/" &&
+            !window.location.search.includes("seo_preview=")
+          );
         }
 
         function currentSupabaseAccessToken() {
@@ -68,30 +63,34 @@
             for (let i = 0; i < window.localStorage.length; i += 1) {
               const key = window.localStorage.key(i) || "";
               if (!key.startsWith("sb-") || !key.endsWith("-auth-token")) continue;
-              const raw = window.localStorage.getItem(key);
-              if (!raw) continue;
-              const parsed = JSON.parse(raw);
-              const token = parsed?.access_token || parsed?.currentSession?.access_token;
+              const value = window.localStorage.getItem(key);
+              if (!value) continue;
+              const session = JSON.parse(value);
+              const token =
+                session?.access_token || session?.currentSession?.access_token;
               if (typeof token === "string" && token.length > 0) return token;
             }
           } catch (_) {
-            return "";
+            // Fail closed when storage is unavailable.
+            return null;
           }
           return "";
         }
 
-        function refreshAdEntitlement() {
+        async function refreshEntitlement() {
           const token = currentSupabaseAccessToken();
+          if (token === null) {
+            entitlementState = "ad_free";
+            return;
+          }
           if (!token) {
             entitlementToken = "";
             entitlementState = "ads_allowed";
-            entitlementRequest = null;
-            return Promise.resolve();
+            return;
           }
           if (token === entitlementToken && entitlementState !== "unknown") {
-            return entitlementRequest || Promise.resolve();
+            return entitlementRequest;
           }
-
           entitlementToken = token;
           entitlementState = "unknown";
           entitlementRequest = fetch("/api/ad-entitlement", {
@@ -100,175 +99,96 @@
             cache: "no-store",
           })
             .then((response) => {
-              if (!response.ok) throw new Error("entitlement_lookup_failed");
+              if (!response.ok) throw new Error("entitlement_check_failed");
               return response.json();
             })
             .then((body) => {
-              entitlementState = body?.adFree === true ? "ad_free" : "ads_allowed";
+              entitlementState =
+                body?.authenticated === true && body?.adFree === false
+                  ? "ads_allowed"
+                  : "ad_free";
             })
             .catch(() => {
-              // Authenticated users fail closed: if entitlement cannot be
-              // verified, do not risk showing ads to a paid subscriber.
+              // Existing ad-free entitlements must not be shown ads on errors.
               entitlementState = "ad_free";
             })
             .finally(() => {
               entitlementRequest = null;
-              scheduleAdCheck();
             });
           return entitlementRequest;
         }
 
-        function refreshHomeContentEligibility() {
-          if (!isAdsRouteAllowed()) {
-            homeContentState = "unknown";
-            homeContentCheckedAt = 0;
-            return Promise.resolve();
+        function clearLoadedAdsIfDisallowed() {
+          if (!adRequested) return;
+          if (!eligibleRoute() || entitlementState !== "ads_allowed") {
+            // Third-party scripts cannot reliably be unloaded within an SPA.
+            window.location.replace(window.location.href);
           }
-
-          const now = Date.now();
-          const isFresh =
-            homeContentState !== "unknown" &&
-            now - homeContentCheckedAt < homeContentEligibilityTtlMs;
-          if (isFresh) return homeContentRequest || Promise.resolve();
-          if (homeContentRequest) return homeContentRequest;
-
-          homeContentState = "unknown";
-          homeContentRequest = fetch("/api/home-ad-eligibility", {
-            method: "GET",
-            cache: "no-store",
-          })
-            .then((response) => {
-              if (!response.ok) throw new Error("home_content_lookup_failed");
-              return response.json();
-            })
-            .then((body) => {
-              homeContentState = body?.eligible === true ? "eligible" : "not_eligible";
-            })
-            .catch(() => {
-              // Fail closed when the independent-content check is unavailable.
-              homeContentState = "not_eligible";
-            })
-            .finally(() => {
-              homeContentCheckedAt = Date.now();
-              homeContentRequest = null;
-              scheduleAdCheck();
-            });
-          return homeContentRequest;
         }
 
-        function hasMeaningfulContent() {
-          if (!document.body) return false;
-          const text = (document.body.innerText || document.body.textContent || "")
-            .replace(/\s+/g, " ")
-            .trim();
-          if (text.length < 120) return false;
-          return /(Sharemarium|おすすめの本|洋書|人気作品)/.test(text);
-        }
-
-        function shouldLoadAds() {
-          const accessToken = currentSupabaseAccessToken();
-          if (accessToken && entitlementState !== "ads_allowed") return false;
-          if (homeContentState !== "eligible") return false;
-          return (
-            isAdsRouteAllowed() &&
-            hasMeaningfulContent() &&
-            window.__sharemariumAdsAllowed !== false
-          );
-        }
-
-        function reloadIfAdsAreNoLongerAllowed() {
-          if (!adScriptLoaded) return false;
-          if (
-            isAdsRouteAllowed() &&
-            entitlementState !== "ad_free" &&
-            homeContentState !== "not_eligible"
-          ) {
-            return false;
-          }
-          window.location.replace(window.location.href);
-          return true;
-        }
-
-        function loadAdsIfAllowed() {
-          if (!shouldLoadAds() || adScriptLoaded) {
+        async function mountSlot(root, attempts = 0) {
+          if (!root || !eligibleRoute()) return;
+          if (!root.isConnected) {
+            if (attempts < 20) {
+              window.setTimeout(() => void mountSlot(root, attempts + 1), 50);
+            }
             return;
           }
+          const id = root.getAttribute("data-sharemarium-admax-id") || "";
+          const target = root.querySelector(".admax-switch");
+          if (!/^[a-f0-9]{24,64}$/i.test(id) || !target) return;
 
-          adScriptLoaded = true;
+          await refreshEntitlement();
+          if (!root.isConnected || !eligibleRoute()) return;
+          if (entitlementState !== "ads_allowed") {
+            clearLoadedAdsIfDisallowed();
+            return;
+          }
+          if (adRequested) return;
+
+          // The only ad request on this document is within the timeline view.
+          adRequested = true;
+          activeSlot = root;
+          (window.admaxads = window.admaxads || []).push({
+            admax_id: id,
+            type: "switch",
+          });
           const script = document.createElement("script");
           script.async = true;
-          script.src = adScriptUrl;
-          script.crossOrigin = "anonymous";
-          script.dataset.adsense = "1";
+          script.src = publisherLoader;
+          script.dataset.ninjaAdmax = "timeline";
           document.head.appendChild(script);
-          return true;
         }
 
-        let adCheckTimer = 0;
-        let contentObserver = null;
+        window.addEventListener("sharemarium:admax-slot-ready", (event) => {
+          void mountSlot(event.detail);
+        });
 
-        function scheduleAdCheck() {
-          if (adCheckTimer) {
-            window.clearTimeout(adCheckTimer);
-          }
-          adCheckTimer = window.setTimeout(() => {
-            adCheckTimer = 0;
-            void refreshAdEntitlement();
-            void refreshHomeContentEligibility();
-            if (reloadIfAdsAreNoLongerAllowed()) return;
-            if (loadAdsIfAllowed() && contentObserver) {
-              contentObserver.disconnect();
-              contentObserver = null;
+        function scheduleEntitlementReview() {
+          void refreshEntitlement().then(() => {
+            if (activeSlot && !activeSlot.isConnected) {
+              // No additional ad requests are made while the slot is absent.
+              activeSlot = null;
             }
-          }, 0);
-        }
-
-        function observeFlutterContent() {
-          if (!document.body || contentObserver) return;
-          contentObserver = new MutationObserver(scheduleAdCheck);
-          contentObserver.observe(document.body, {
-            childList: true,
-            subtree: true,
-            characterData: true,
+            clearLoadedAdsIfDisallowed();
           });
         }
 
-        function checkAfterDomReady() {
-          observeFlutterContent();
-          void refreshAdEntitlement();
-          void refreshHomeContentEligibility();
-          scheduleAdCheck();
-          window.setTimeout(scheduleAdCheck, 1000);
-          window.setTimeout(scheduleAdCheck, 3000);
+        window.addEventListener("popstate", scheduleEntitlementReview);
+        window.addEventListener("pageshow", scheduleEntitlementReview);
+        window.addEventListener("storage", scheduleEntitlementReview);
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden) scheduleEntitlementReview();
+        });
+
+        for (const method of ["pushState", "replaceState"]) {
+          const original = window.history[method];
+          window.history[method] = function (...args) {
+            const result = original.apply(this, args);
+            scheduleEntitlementReview();
+            return result;
+          };
         }
-
-        if (document.readyState === "loading") {
-          document.addEventListener("DOMContentLoaded", checkAfterDomReady, {
-            once: true,
-          });
-        } else {
-          checkAfterDomReady();
-        }
-
-        window.addEventListener("load", scheduleAdCheck, { passive: true });
-        window.addEventListener("pageshow", scheduleAdCheck, { passive: true });
-        window.addEventListener("popstate", scheduleAdCheck, { passive: true });
-        window.addEventListener("storage", scheduleAdCheck, { passive: true });
-
-        const originalPushState = window.history.pushState;
-        const originalReplaceState = window.history.replaceState;
-
-        window.history.pushState = function (...args) {
-          const result = originalPushState.apply(this, args);
-          scheduleAdCheck();
-          return result;
-        };
-
-        window.history.replaceState = function (...args) {
-          const result = originalReplaceState.apply(this, args);
-          scheduleAdCheck();
-          return result;
-        };
       })();
     </script>
     <script type="application/ld+json">
