@@ -36,7 +36,7 @@ class TimelineAdSlot extends StatelessWidget {
         ..width = '100%'
         ..height = '250px'
         ..textAlign = 'center'
-        ..overflow = 'hidden';
+        ..overflow = 'visible';
 
       final target = html.DivElement()
         ..classes.add('admax-switch')
@@ -63,8 +63,13 @@ class TimelineAdSlot extends StatelessWidget {
     if (!_configured) return const SizedBox.shrink();
     _registerFactory();
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 8),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Reserve enough width for a 300/320px inline creative.
+        // Do not crop an advertisement into nearby post controls.
+        if (constraints.maxWidth < 320) return const SizedBox.shrink();
+        return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
       child: Semantics(
         label: '広告',
         container: true,
@@ -74,7 +79,7 @@ class TimelineAdSlot extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: const [
@@ -90,6 +95,8 @@ class TimelineAdSlot extends StatelessWidget {
           ),
         ),
       ),
+        );
+      },
     );
   }
 }
