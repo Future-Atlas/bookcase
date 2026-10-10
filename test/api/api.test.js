@@ -344,25 +344,24 @@ test("SEO handler returns noindex 404 for a private profile", async () => {
   assert.match(res.body, /noindex/);
 });
 
-test("web HTML loads AdSense only on approved content routes with substantive content", () => {
+test("browser loads Ninja AdMax only after an actual timeline slot mounts", () => {
   const html = fs.readFileSync(
     path.join(__dirname, "../../web/index.html"),
     "utf8",
   );
 
-  assert.match(html, /allowedPath/);
-  assert.match(html, /const allowedPath = \/\^\\\/\$\//);
-  assert.match(html, /hasMeaningfulContent/);
-  assert.match(html, /__sharemariumAdsAllowed !== false/);
-  assert.match(html, /window\.location\.pathname/);
-  assert.match(html, /DOMContentLoaded/);
-  assert.match(html, /MutationObserver/);
-  assert.match(html, /setTimeout\(scheduleAdCheck, 3000\)/);
-  assert.match(html, /popstate|pushState|replaceState/);
-  assert.doesNotMatch(html, /if \(!shouldLoadAds\(\)\) \{\s*return;\s*\}/);
+  assert.match(html, /sharemarium:admax-slot-ready/);
+  assert.match(html, /window\.location\.pathname === "\/"/);
+  assert.match(html, /window\.location\.hostname === expectedHost/);
+  assert.match(html, /root\.isConnected/);
+  assert.match(html, /\/api\/ad-entitlement/);
+  assert.match(html, /entitlementState = "ad_free"/);
+  assert.match(html, /type: "switch"/);
+  assert.match(html, /https:\/\/adm\.shinobi\.jp\/st\/t\.js/);
+  assert.doesNotMatch(html, /googlesyndication|adsbygoogle|ca-pub-/);
 });
 
-test("genre SEO pages never enable AdSense even when books are available", async () => {
+test("genre SEO pages never include an advertising loader", async () => {
   process.env.VERCEL_ENV = "production";
   process.env.RAKUTEN_APP_ID = "app";
   process.env.RAKUTEN_ACCESS_KEY = "key";
@@ -497,7 +496,7 @@ test("Flutter book routes do not resolve legacy sample slugs", () => {
   }
 });
 
-test("AdSense crawlers use the SEO HTML routing", () => {
+test("search crawlers use the SEO HTML routing", () => {
   const vercel = JSON.parse(
     fs.readFileSync(path.join(__dirname, "../../vercel.json"), "utf8"),
   );
