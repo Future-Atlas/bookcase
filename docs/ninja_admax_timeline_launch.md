@@ -12,6 +12,7 @@ credentials and compliant legal disclosures are ready.
 - Clearly labeled 「広告」, separated from post buttons and reactions.
 - Never an overlay/popup/floating banner. **Disable overlay settings in Ninja
   AdMax dashboard**, since the publisher can override the inline placement.
+- Ads are hidden where the available inline width is under 320px, to avoid cropped creatives.
 - One request maximum per browser page load; vendor script cannot reliably be
   removed on client-side navigation. Navigation away from the allowed page
   forces a reload after ads have loaded.
@@ -45,7 +46,7 @@ credentials and compliant legal disclosures are ready.
    staging and any local environments.
 7. Verify as a guest and a standard authenticated user: exactly one label
    and publisher ad request between posts 3 and 4 on the timeline. Check PC
-   and mobile breakpoints; Ninja may require distinct sizes/settings.
+   and mobile breakpoints (narrow displays intentionally hide the slot); Ninja may require distinct sizes/settings.
 8. Verify ad-free account, login/settings/profile/genre/empty timelines,
    route changes, responsive layout and browser extensions.
 9. Confirm tag is recognized by Ninja AdMax. Their automated check begins
