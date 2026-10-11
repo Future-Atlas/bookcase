@@ -42,6 +42,73 @@ void main() {
     expect(timelinePostIndexForItem(13, 12, postsPerAd: 5), 11);
   });
 
+  test('two home genre separators leave just one ad for the timeline', () {
+    expect(homeGenreAdSlotCount, 2);
+    expect(homeTimelineAdSlotStart, 2);
+    expect(homeTimelineMaximumAds, 1);
+    expect(homeGenreAdSlotCount + homeTimelineMaximumAds,
+        timelineMaximumAdsPerPage);
+
+    for (final postCount in <int>[0, 1, 2]) {
+      expect(
+        timelineAdSlotCount(postCount, maximumSlots: homeTimelineMaximumAds),
+        0,
+      );
+    }
+    for (final postCount in <int>[3, 4, 7, 100]) {
+      expect(
+        timelineAdSlotCount(postCount, maximumSlots: homeTimelineMaximumAds),
+        1,
+      );
+    }
+
+    const postCount = 7;
+    final adItems = <int>[];
+    final postItems = <int>[];
+    final total = postCount +
+        timelineAdSlotCount(postCount, maximumSlots: homeTimelineMaximumAds);
+    for (var i = 0; i < total; i++) {
+      if (isTimelineAdItem(
+        i,
+        postCount,
+        maximumSlots: homeTimelineMaximumAds,
+      )) {
+        adItems.add(i);
+      } else {
+        postItems.add(timelinePostIndexForItem(
+          i,
+          postCount,
+          maximumSlots: homeTimelineMaximumAds,
+        ));
+      }
+    }
+    expect(adItems, <int>[2]);
+    expect(postItems, <int>[0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  test('normal five-post interval also respects remaining page budget', () {
+    expect(timelineAdSlotCount(5,
+        postsPerAd: 5, maximumSlots: homeTimelineMaximumAds), 0);
+    expect(timelineAdSlotCount(6,
+        postsPerAd: 5, maximumSlots: homeTimelineMaximumAds), 1);
+    expect(timelineAdSlotCount(99,
+        postsPerAd: 5, maximumSlots: homeTimelineMaximumAds), 1);
+    expect(isTimelineAdItem(5, 12,
+        postsPerAd: 5, maximumSlots: homeTimelineMaximumAds), isTrue);
+    expect(isTimelineAdItem(11, 12,
+        postsPerAd: 5, maximumSlots: homeTimelineMaximumAds), isFalse);
+    expect(timelinePostIndexForItem(12, 12,
+        postsPerAd: 5, maximumSlots: homeTimelineMaximumAds), 11);
+  });
+
+  test('advertisement caps cannot exceed the publisher page limit', () {
+    expect(timelineAdSlotCount(99, maximumSlots: 0), 0);
+    expect(timelineAdSlotCount(99, maximumSlots: -3), 0);
+    expect(timelineAdSlotCount(99, maximumSlots: 1), 1);
+    expect(timelineAdSlotCount(99, maximumSlots: 3), 3);
+    expect(timelineAdSlotCount(99, maximumSlots: 100), 3);
+  });
+
   test('invalid ad interval inserts no advertisements', () {
     expect(timelineAdSlotCount(10, postsPerAd: 0), 0);
     expect(isTimelineAdItem(0, 10, postsPerAd: 0), false);

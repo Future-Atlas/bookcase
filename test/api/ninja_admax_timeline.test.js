@@ -116,15 +116,55 @@ test("the issued synchronous tag remains verbatim but inert", () => {
     /IFrameElement|HtmlIFrameElement|srcdoc/);
 });
 
-test("placement remains after 2, 4, 6 real posts and never exceeds 3", () => {
+test("timeline retains every-two-post spacing within its one-slot page budget", () => {
   const src = read("lib/screens/book_list_screen.dart");
   const policy = read("lib/widgets/timeline_ad_policy.dart");
-  assert.match(src, /isTimelineAdItem\(index, postCount\)/);
-  assert.match(src, /timelinePostIndexForItem\(index, postCount\)/);
+  assert.match(src, /isTimelineAdItem\(\s*index,\s*postCount,\s*maximumSlots: homeTimelineMaximumAds,/);
+  assert.match(src, /timelinePostIndexForItem\(\s*index,\s*postCount,\s*maximumSlots: homeTimelineMaximumAds,/);
   assert.match(src, /kIsWeb && timelineAdReady/);
   assert.match(policy, /defaultValue: 2/);
   assert.match(policy, /timelineMaximumAdsPerPage = 3/);
   assert.match(policy, /NINJA_ADMAX_POSTS_PER_AD/);
+});
+
+test("home book types have two ads in between, plus just one timeline placement", () => {
+  const home = read("lib/screens/book_list_screen.dart");
+  const policy = read("lib/widgets/timeline_ad_policy.dart");
+  const html = read("web/index.html");
+
+  // The insertion order must remain: recommended → ad → western → ad → popular.
+  const anchors = [
+    "title: 'おすすめの本'",
+    "home-ad-between-recommended-western",
+    "title: '洋書'",
+    "home-ad-between-western-popular",
+    "title: '人気作品'",
+    "_buildSectionHeader('タイムライン')",
+    "_buildTimeline()",
+  ];
+  const indexes = anchors.map((anchor) => home.indexOf(anchor));
+  assert.ok(indexes.every((at) => at >= 0), "all home section anchors exist");
+  for (let i = 1; i < indexes.length; i++) {
+    assert.ok(indexes[i - 1] < indexes[i], "ad follows the preceding book type");
+  }
+
+  // Both gaps require real books, Flutter Web, the home route, and ad readiness.
+  assert.match(home, /if \(kIsWeb &&\s+timelineAdReady &&\s+widget\.initialGenre == null &&\s+_controller\.recommendedBooks\.isNotEmpty &&\s+_controller\.westernBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-recommended-western'\),\s+slotIndex: 0,/);
+  assert.match(home, /if \(kIsWeb &&\s+timelineAdReady &&\s+widget\.initialGenre == null &&\s+_controller\.westernBooks\.isNotEmpty &&\s+_controller\.popularBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-western-popular'\),\s+slotIndex: 1,/);
+  assert.match(home, /if \(_controller\.searchQuery\.isNotEmpty\)\s+_buildSearchResults\(\)\s+else/);
+
+  // The remaining timeline slot must use index 2 and at most one placement.
+  assert.match(policy, /timelineMaximumAdsPerPage = 3/);
+  assert.match(policy, /homeGenreAdSlotCount = 2/);
+  assert.match(policy, /homeTimelineAdSlotStart = homeGenreAdSlotCount/);
+  assert.match(policy, /homeTimelineMaximumAds =\s+timelineMaximumAdsPerPage - homeGenreAdSlotCount/);
+  assert.match(home, /slotIndex: homeTimelineAdSlotStart \+/);
+  assert.equal((home.match(/maximumSlots: homeTimelineMaximumAds/g) || []).length, 3);
+  assert.match(html, /const maxAdsPerPage = 3;/);
+
+  // Only one async SDK per page; the three slots share the same approved tag.
+  assert.match(html, /if \(sdkScheduled\) return/);
+  assert.match(html, /renderedSlots\.size >= maxAdsPerPage/);
 });
 
 test("ad configuration fails closed without an actual async publisher ID", () => {
