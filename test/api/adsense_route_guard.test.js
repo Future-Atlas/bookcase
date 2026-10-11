@@ -35,7 +35,8 @@ test("Ninja AdMax runtime is restricted to the production timeline and ad-suppor
   assert.match(html, /\/api\/ad-entitlement/);
   assert.match(html, /entitlementState = "ad_free"/);
   assert.match(html, /entitlementState !== "ads_allowed"/);
-  assert.match(html, /window\.location\.replace\(window\.location\.href\)/);
+  assert.match(html, /renderedSlots\.clear\(\)/);
+  assert.match(html, /slot\.frame\.remove\(\)/);
   assert.match(html, /popstate/);
   assert.match(html, /history\[method\]/);
   assert.doesNotMatch(html, /googlesyndication|adsbygoogle|ca-pub-/);

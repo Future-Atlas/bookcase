@@ -1,61 +1,50 @@
 # Ninja AdMax timeline-only launch checklist
 
-This change replaces automatic AdSense loading with one **optional** Ninja
-AdMax placement. It does **not** activate ads until the exact publisher
-credentials and compliant legal disclosures are ready.
+## Official publisher tag
 
-## Implementation
+The publisher-provided code below is copied **verbatim** into an inert
+HTML template in web/index.html and is only executed inside a sandboxed
+srcdoc iframe when a timeline ad slot is eligible:
 
-- Flutter Web home timeline only, after the third real post (requires >=3 posts).
-- Never on login, settings, book catalog, genre-only, empty timeline,
-  profile, or crawler-rendered SEO HTML.
-- Clearly labeled 「広告」, separated from post buttons and reactions.
-- Never an overlay/popup/floating banner. **Disable overlay settings in Ninja
-  AdMax dashboard**, since the publisher can override the inline placement.
-- Ads are hidden where the available inline width is under 320px, to avoid cropped creatives.
-- One request maximum per browser page load; vendor script cannot reliably be
-  removed on client-side navigation. Navigation away from the allowed page
-  forces a reload after ads have loaded.
-- Ad-free paid subscriptions are checked through /api/ad-entitlement. Checks
-  fail closed for authenticated users on API failures.
-- Config is disabled by default. Android/iOS never load Web publisher tags.
+<!-- admax -->
+<script src="https://adm.shinobi.jp/s/234edc1d1284546b2d177ac7c5531101"></script>
+<!-- admax -->
 
-## Operator steps before enabling
+This is a **synchronous** Ninja AdMax tag. It is not safe to dynamically
+insert that script into the already-running Flutter SPA; the isolated iframe
+allows parser-time execution. Actual rendering and vendor support for this
+embedding strategy still require a real-browser check.
 
-1. Register the **exact** production URL:
-   https://www.sharemarium.com/
-2. Select an **asynchronous PC/SP switch tag**, not the legacy synchronous
-   `https://adm.shinobi.jp/s/...` script. The slot implementation expects
-   `admax-switch`, `admax_id`, `type: "switch"` and
-   `https://adm.shinobi.jp/st/t.js`. The ID must belong to that format.
-3. Use general-audience settings appropriate for a book review SNS.
-   Disable adult creatives and **all overlays**.
-4. Confirm the actual vendor-issued tag matches the shape above. If it
-   differs, adapt the integration before enabling; do not force the ID into
-   the wrong tag type.
-5. Confirm privacy-policy and external-transmission notices accurately cover
-   Ninja AdMax's actual recipient, data categories, purposes, third-party
-   recipients, cookies and opt-out procedure. Obtain any required consents
-   before activating. Current old AdSense disclosures are **not sufficient**.
-   Do not change the operative Terms of Service solely to enable advertising.
-6. Provide Flutter Web build-time values (not secrets):
-   `--dart-define=NINJA_ADMAX_ENABLED=true`
-   `--dart-define=NINJA_ADMAX_SWITCH_ID=<issued switch admax_id>`
-   in the web production build pipeline. Deploying with no values leaves the
-   ad slot fully disabled. Also ensure the flag remains disabled in preview,
-   staging and any local environments.
-7. Verify as a guest and a standard authenticated user: exactly one label
-   and publisher ad request between posts 3 and 4 on the timeline. Check PC
-   and mobile breakpoints (narrow displays intentionally hide the slot); Ninja may require distinct sizes/settings.
-8. Verify ad-free account, login/settings/profile/genre/empty timelines,
-   route changes, responsive layout and browser extensions.
-9. Confirm tag is recognized by Ninja AdMax. Their automated check begins
-   after a real tag is detected. Do not self-click or encourage clicks.
-10. Keep the feature off if any validation fails.
+## Placement policy
 
-## Known limitations
+- Flutter Web home timeline on www.sharemarium.com only.
+- One slot between posts 2-3, 4-5 and 6-7, only when the next post exists.
+- Maximum **three ad slots per page**, following Ninja AdMax guidance.
+- For the trial, NINJA_ADMAX_POSTS_PER_AD defaults to 2. Use the build
+  argument --dart-define=NINJA_ADMAX_POSTS_PER_AD=5 for normal operation.
+- NINJA_ADMAX_ENABLED remains false unless explicitly enabled using
+  --dart-define=NINJA_ADMAX_ENABLED=true in the approved Web build.
+- No native app advertisements and no ads on other routes, guest login,
+  settings, profiles, category screens or SEO-rendered HTML.
+- For authenticated users, paid ad-free entitlements are honored and
+  failures of entitlement checks suppress advertising requests.
+- Existing SNS features, subscription UI flags and Terms remain unchanged.
 
-The review outcome is controlled by Ninja AdMax, not this repository.
-Since no actual advertiser-issued tag is available, no real ad impression,
-approval, or mobile rendering has been verified. The service should stay
-disabled until all operator checks and legal disclosure updates are finished.
+## Preconditions for production activation
+
+1. Verify the supplied tag is for a general-audience, inline placement,
+   with the production URL registered in Ninja AdMax. Disable overlays,
+   popups and unwanted adult creatives in the provider settings.
+2. Confirm this synchronous tag works inside srcdoc iframes. If it does
+   not, obtain an official asynchronous tag rather than injecting the
+   synchronous tag directly into Flutter's dynamic document.
+3. Update Privacy Policy and external-transmission disclosures to cover
+   actual Ninja AdMax data collection, recipients, cookies and opt-out.
+   Obtain any required consent before loading the vendor code.
+4. Check PC/smartphone, post counts 0-2 and 3+, disabled/ad-free user,
+   entitlement failure, route changes, scrolling, SPA navigation, and
+   browser back/forward. Check that no more than 3 frames are requested.
+5. Enable the Web flag only after those checks pass, monitor the real
+   network requests and Ninja AdMax review/approval and revert if needed.
+
+Passing CI does not establish live ad delivery or vendor approval.
