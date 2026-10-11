@@ -4,50 +4,44 @@ import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/material.dart';
 
-/// Only the *asynchronous PC/SP switch tag* is supported here.
-/// Until the official tag is issued and configured, no slot is displayed.
-const bool _adMaxEnabled = bool.fromEnvironment(
-  'NINJA_ADMAX_ENABLED',
-  defaultValue: false,
-);
-const String _adMaxSwitchId = String.fromEnvironment(
-  'NINJA_ADMAX_SWITCH_ID',
-);
+import 'timeline_ad_policy.dart';
 
-const String _viewType = 'sharemarium-ninja-admax-timeline';
+const String _viewTypePrefix = 'sharemarium-ninja-admax-timeline';
 
+/// Flutter Web-only inline advertisement. The publisher's exact synchronous
+/// tag runs in a separate srcdoc iframe after route/entitlement verification.
+/// Never insert the synchronous script into the running Flutter document.
 class TimelineAdSlot extends StatelessWidget {
-  const TimelineAdSlot({super.key});
+  const TimelineAdSlot({super.key, required this.slotIndex});
 
-  static bool _registered = false;
+  final int slotIndex;
+  static final Set<int> _registered = <int>{};
 
-  static bool get _configured =>
-      _adMaxEnabled &&
-      RegExp(r'^[a-fA-F0-9]{24,64}$').hasMatch(_adMaxSwitchId);
+  static String _viewType(int index) => '$_viewTypePrefix-$index';
 
-  static void _registerFactory() {
-    if (_registered) return;
-    _registered = true;
-    ui_web.platformViewRegistry.registerViewFactory(_viewType, (int viewId) {
+  static void _registerFactory(int index) {
+    if (!_registered.add(index)) return;
+
+    ui_web.platformViewRegistry.registerViewFactory(_viewType(index), (
+      int viewId,
+    ) {
       final root = html.DivElement()
         ..classes.add('sharemarium-admax-timeline-slot')
-        ..setAttribute('data-sharemarium-admax-id', _adMaxSwitchId);
+        ..setAttribute('data-sharemarium-admax-slot-index', '$index');
       root.style
         ..width = '100%'
         ..height = '250px'
         ..textAlign = 'center'
-        ..overflow = 'visible';
+        ..overflow = 'hidden';
 
       final target = html.DivElement()
-        ..classes.add('admax-switch')
-        ..setAttribute('data-admax-id', _adMaxSwitchId);
+        ..classes.add('admax-inline-target');
       target.style
-        ..display = 'inline-block'
-        ..maxWidth = '100%';
+        ..width = '100%'
+        ..height = '250px';
 
       root.append(target);
-      // Flutter inserts the platform view after factory creation.
-      // The JS controller retries until the node is connected.
+      // Flutter connects the platform view after factory creation.
       Future<void>.delayed(Duration.zero, () {
         html.window.dispatchEvent(html.CustomEvent(
           'sharemarium:admax-slot-ready',
@@ -60,41 +54,45 @@ class TimelineAdSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!_configured) return const SizedBox.shrink();
-    _registerFactory();
+    if (!timelineAdEnabled || slotIndex < 0 ||
+        slotIndex >= timelineMaximumAdsPerPage) {
+      return const SizedBox.shrink();
+    }
+    _registerFactory(slotIndex);
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Reserve enough width for a 300/320px inline creative.
-        // Do not crop an advertisement into nearby post controls.
-        if (constraints.maxWidth < 320) return const SizedBox.shrink();
+        if (constraints.maxWidth < 300) return const SizedBox.shrink();
         return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 28),
-      child: Semantics(
-        label: '広告',
-        container: true,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border.all(color: Theme.of(context).dividerColor),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                Text('広告', style: TextStyle(fontSize: 12)),
-                SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 250,
-                  child: HtmlElementView(viewType: _viewType),
+          padding: const EdgeInsets.symmetric(vertical: 28),
+          child: Semantics(
+            label: '広告',
+            container: true,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).dividerColor),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 4,
                 ),
-              ],
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('広告', style: TextStyle(fontSize: 12)),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 250,
+                      child: HtmlElementView(viewType: _viewType(slotIndex)),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-      ),
         );
       },
     );
