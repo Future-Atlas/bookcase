@@ -116,11 +116,11 @@ test("the issued synchronous tag remains verbatim but inert", () => {
     /IFrameElement|HtmlIFrameElement|srcdoc/);
 });
 
-test("placement remains after 2, 4, 6 real posts and never exceeds 3", () => {
+test("timeline retains every-two-post spacing within its one-slot page budget", () => {
   const src = read("lib/screens/book_list_screen.dart");
   const policy = read("lib/widgets/timeline_ad_policy.dart");
-  assert.match(src, /isTimelineAdItem\(index, postCount\)/);
-  assert.match(src, /timelinePostIndexForItem\(index, postCount\)/);
+  assert.match(src, /isTimelineAdItem\(\s*index,\s*postCount,\s*maximumSlots: homeTimelineMaximumAds,/);
+  assert.match(src, /timelinePostIndexForItem\(\s*index,\s*postCount,\s*maximumSlots: homeTimelineMaximumAds,/);
   assert.match(src, /kIsWeb && timelineAdReady/);
   assert.match(policy, /defaultValue: 2/);
   assert.match(policy, /timelineMaximumAdsPerPage = 3/);
