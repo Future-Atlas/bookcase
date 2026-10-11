@@ -88,7 +88,7 @@ class TimelineAdSlot extends StatelessWidget {
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
-                      height: ninjaAdmaxAsyncType == 'banner' ? 90 : 250,
+                      height: ninjaAdmaxAsyncType == 'banner' ? 90.0 : 250.0,
                       child: HtmlElementView(viewType: _viewType(slotIndex)),
                     ),
                   ],
