@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
 import '../widgets/post_card.dart';
 import '../widgets/timeline_ad_slot.dart';
+import '../widgets/timeline_ad_policy.dart';
 import '../controllers/book_list_controller.dart';
 import '../models/book.dart';
 import '../models/post.dart';
@@ -1491,6 +1493,11 @@ class _BookListScreenState extends State<BookListScreen> {
         .clamp(420.0, 600.0)
         .toDouble();
 
+    final postCount = _controller.timelinePosts.length;
+    final adSlots = kIsWeb && timelineAdEnabled
+        ? timelineAdSlotCount(postCount)
+        : 0;
+
     return Container(
       height: timelineHeight,
       padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
@@ -1511,16 +1518,19 @@ class _BookListScreenState extends State<BookListScreen> {
           controller: _timelineScrollController,
           padding: const EdgeInsets.only(right: 8),
           physics: const ClampingScrollPhysics(),
-          // One clearly labeled ad slot, and only between real posts.
-          // Never show an ad on empty or nearly empty timelines.
-          itemCount: _controller.timelinePosts.length +
-              (_controller.timelinePosts.length >= 3 ? 1 : 0),
+          // Between-post ads at 2, 4 and 6 posts (up to three).
+          // Change NINJA_ADMAX_POSTS_PER_AD to 5 for normal operation.
+          itemCount: postCount + adSlots,
           itemBuilder: (context, index) {
-            final hasAdSlot = _controller.timelinePosts.length >= 3;
-            if (hasAdSlot && index == 3) {
-              return const TimelineAdSlot();
+            if (adSlots > 0 && isTimelineAdItem(index, postCount)) {
+              return TimelineAdSlot(
+                key: ValueKey('timeline-ad-slot-$index'),
+                slotIndex: index ~/ (timelinePostsPerAd + 1),
+              );
             }
-            final postIndex = hasAdSlot && index > 3 ? index - 1 : index;
+            final postIndex = adSlots > 0
+                ? timelinePostIndexForItem(index, postCount)
+                : index;
             final post = _controller.timelinePosts[postIndex];
             final currentProfileId = Provider.of<SupabaseService>(
               context,

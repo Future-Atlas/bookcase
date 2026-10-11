@@ -76,6 +76,10 @@ jobs:
             session-guard
             delete-account
             admin-delete-account
+            billing-checkout
+            billing-cancel-subscription
+            billing-change-plan
+            billing-webhook
           )
 
           for function_name in "${functions[@]}"; do

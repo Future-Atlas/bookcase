@@ -48,7 +48,7 @@ test('plan only links and previews, without applying or deploying functions', ()
   ]);
 });
 
-test('apply previews first and deploys only the three approved staging functions', () => {
+test('apply previews first and deploys only the approved staging functions', () => {
   const calls = [];
   deploy({ mode: 'apply', env: environment(), run: args => calls.push(args), readLinkedProject: () => `${STAGING_PROJECT}\n` });
   assert.deepEqual(calls, [
@@ -104,7 +104,7 @@ test('migration filenames reject sync copies and duplicate versions', () => {
 
 test('workflow gates cloud deployment on validation and uses staging, never production', () => {
   const workflow = readFileSync(new URL('../../.github/workflows/supabase-deploy-staging.yaml', import.meta.url), 'utf8');
-  const [validation, deployment] = workflow.split(/\r?\n  deploy:\r?\n/);
+  const [validation, deployment] = workflow.split('\n  deploy:\n');
   assert.ok(deployment.includes('needs: validate'));
   assert.ok(deployment.includes('name: staging'));
   assert.ok(!workflow.includes('name: production'));

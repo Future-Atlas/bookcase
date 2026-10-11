@@ -1,14 +1,37 @@
 import 'package:flutter/material.dart';
 
 import '../models/subscription_state.dart';
+import '../services/subscription_checkout_service.dart';
+import '../services/subscription_management_service.dart';
 import '../services/subscription_state_service.dart';
 
 typedef SubscriptionStateLoader = Future<SubscriptionState?> Function();
 
+typedef SubscriptionCheckoutStarter =
+    Future<void> Function({
+      required SubscriptionPlanTier plan,
+      required SubscriptionBillingPeriod billingPeriod,
+    });
+
+typedef SubscriptionCancellationStarter =
+    Future<SubscriptionCancellationResult> Function();
+
+typedef SubscriptionPlanChangeStarter =
+    Future<SubscriptionPlanChangeResult> Function(SubscriptionPlanTier targetPlan);
+
 class SubscriptionStatusScreen extends StatefulWidget {
-  const SubscriptionStatusScreen({super.key, this.loadState});
+  const SubscriptionStatusScreen({
+    super.key,
+    this.loadState,
+    this.startCheckout,
+    this.cancelSubscription,
+    this.changePlan,
+  });
 
   final SubscriptionStateLoader? loadState;
+  final SubscriptionCheckoutStarter? startCheckout;
+  final SubscriptionCancellationStarter? cancelSubscription;
+  final SubscriptionPlanChangeStarter? changePlan;
 
   @override
   State<SubscriptionStatusScreen> createState() =>
@@ -19,6 +42,11 @@ class _SubscriptionStatusScreenState extends State<SubscriptionStatusScreen> {
   SubscriptionState? _state;
   bool _loading = true;
   String? _error;
+  SubscriptionBillingPeriod _billingPeriod =
+      SubscriptionBillingPeriod.monthly;
+  SubscriptionPlanTier? _startingPlan;
+  SubscriptionPlanTier? _changingPlan;
+  bool _canceling = false;
 
   @override
   void initState() {
@@ -50,6 +78,171 @@ class _SubscriptionStatusScreenState extends State<SubscriptionStatusScreen> {
         _loading = false;
         _error = '契約情報を取得できませんでした。';
       });
+    }
+  }
+
+  Future<void> _startCheckout(SubscriptionPlanTier plan) async {
+    if (_startingPlan != null) return;
+    setState(() => _startingPlan = plan);
+
+    try {
+      final starter =
+          widget.startCheckout ?? SubscriptionCheckoutService.startCheckout;
+      await starter(plan: plan, billingPeriod: _billingPeriod);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('購入画面を開きました。決済完了後にこの画面を更新してください。')),
+      );
+    } on SubscriptionCheckoutException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('購入手続きを開始できませんでした。時間をおいて再度お試しください。'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _startingPlan = null);
+    }
+  }
+
+  Future<void> _schedulePlanChange(
+    SubscriptionState state,
+    SubscriptionPlanTier targetPlan,
+  ) async {
+    if (_changingPlan != null || targetPlan == state.effectivePlan) return;
+
+    final effectiveAt = state.currentPeriodEnd;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${targetPlan.label}へ変更しますか？'),
+        content: Text(
+          effectiveAt == null
+              ? '現在の請求期間が終了した時点でプランを変更します。日割り請求・日割り返金は行いません。'
+              : state.isTrialing
+                  ? '${_formatDate(effectiveAt)}の無料体験終了時に${targetPlan.label}へ変更します。'
+                  : '${_formatDate(effectiveAt)}の次回更新日から${targetPlan.label}へ変更します。日割り請求・日割り返金は行いません。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('戻る'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('変更を予約'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _changingPlan = targetPlan);
+    try {
+      final changer = widget.changePlan ??
+          (plan) => SubscriptionManagementService.schedulePlanChange(
+                targetPlan: plan,
+              );
+      final result = await changer(targetPlan);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${_formatDate(result.effectiveAt)}から${result.scheduledPlan.label}へ変更します。',
+          ),
+        ),
+      );
+      await _load();
+    } on SubscriptionPlanChangeException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('プラン変更を予約できませんでした。契約状態を確認して再度お試しください。'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _changingPlan = null);
+    }
+  }
+
+  Future<void> _cancelSubscription(SubscriptionState state) async {
+    if (_canceling) return;
+
+    final immediate = state.isTrialing;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(immediate ? '無料体験を解約しますか？' : '契約を解約しますか？'),
+        content: Text(
+          immediate
+              ? '無料体験は直ちに終了し、Freeプランへ戻ります。この無料体験は再利用できません。'
+              : state.currentPeriodEnd == null
+                  ? '自動更新を停止します。現在の利用期間が終了するまでは有料機能を利用できます。'
+                  : '${_formatDate(state.currentPeriodEnd!)}で自動更新を停止します。それまでは有料機能を利用できます。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('戻る'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('解約する'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _canceling = true);
+    try {
+      final starter =
+          widget.cancelSubscription ??
+          SubscriptionManagementService.cancelCurrentSubscription;
+      final result = await starter();
+      if (!mounted) return;
+
+      final message = switch (result.mode) {
+        SubscriptionCancellationMode.immediate =>
+          '無料体験を解約しました。Freeプランへ移行します。',
+        SubscriptionCancellationMode.periodEnd =>
+          result.effectiveAt == null
+              ? '自動更新を停止しました。現在の利用期間終了後にFreeへ移行します。'
+              : '${_formatDate(result.effectiveAt!)}で自動更新を停止します。',
+        SubscriptionCancellationMode.alreadyScheduled =>
+          'すでに解約予約済みです。',
+        SubscriptionCancellationMode.alreadyCanceled =>
+          '契約はすでに終了しています。',
+      };
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+      await _load();
+    } on SubscriptionCancellationException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('解約手続きを完了できませんでした。時間をおいて再度お試しください。'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _canceling = false);
     }
   }
 
@@ -111,6 +304,21 @@ class _SubscriptionStatusScreenState extends State<SubscriptionStatusScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _CurrentSubscriptionCard(state: state),
+        if (state.isPaid && !state.cancelAtPeriodEnd) ...[
+          const SizedBox(height: 18),
+          _CancellationCard(
+            state: state,
+            canceling: _canceling,
+            onCancel: () => _cancelSubscription(state),
+          ),
+        ],
+        if (state.effectivePlan == SubscriptionPlanTier.free) ...[
+          const SizedBox(height: 18),
+          _CheckoutControls(
+            billingPeriod: _billingPeriod,
+            onChanged: (period) => setState(() => _billingPeriod = period),
+          ),
+        ],
         const SizedBox(height: 18),
         Text(
           'プラン比較',
@@ -125,6 +333,21 @@ class _SubscriptionStatusScreenState extends State<SubscriptionStatusScreen> {
             child: _PlanCard(
               definition: plan,
               currentPlan: state.effectivePlan,
+              billingPeriod: _billingPeriod,
+              startingPlan: _startingPlan,
+              changingPlan: _changingPlan,
+              canChangePlan:
+                  state.isPaid &&
+                  !state.cancelAtPeriodEnd &&
+                  !state.hasScheduledPlan &&
+                  !state.isPastDue &&
+                  plan.tier != SubscriptionPlanTier.free &&
+                  plan.tier != state.effectivePlan,
+              planChangeLabel: state.isTrialing
+                  ? '無料体験終了後に変更'
+                  : '次回更新日から変更',
+              onStartCheckout: _startCheckout,
+              onChangePlan: (target) => _schedulePlanChange(state, target),
             ),
           ),
         ),
@@ -151,9 +374,13 @@ class _SubscriptionStatusScreenState extends State<SubscriptionStatusScreen> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  '現在は契約状態の確認のみ利用できます。新規契約・プラン変更・解約のオンライン操作は、決済機能の公開後にこの画面へ追加します。',
-                  style: TextStyle(height: 1.5),
+                Text(
+                  state.effectivePlan == SubscriptionPlanTier.free
+                      ? 'Plus／Premiumの新規契約はこの画面から開始できます。'
+                      : state.hasScheduledPlan
+                          ? 'プラン変更は予約済みです。現在の契約情報に変更予定日を表示しています。'
+                          : 'Plus／Premium間の変更予約と契約の解約をこの画面から行えます。',
+                  style: const TextStyle(height: 1.5),
                 ),
                 const SizedBox(height: 8),
                 const Text(
@@ -166,6 +393,114 @@ class _SubscriptionStatusScreenState extends State<SubscriptionStatusScreen> {
         ),
         const SizedBox(height: 24),
       ],
+    );
+  }
+}
+
+class _CancellationCard extends StatelessWidget {
+  const _CancellationCard({
+    required this.state,
+    required this.canceling,
+    required this.onCancel,
+  });
+
+  final SubscriptionState state;
+  final bool canceling;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final immediate = state.isTrialing;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '契約の解約',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              immediate
+                  ? '無料体験中の解約は即時反映され、Freeプランへ戻ります。'
+                  : state.currentPeriodEnd == null
+                      ? '解約すると自動更新を停止し、現在の利用期間終了後にFreeへ移行します。'
+                      : '${_formatDate(state.currentPeriodEnd!)}までは現在のプランを利用できます。',
+              style: const TextStyle(fontSize: 12, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: canceling ? null : onCancel,
+              icon: canceling
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cancel_outlined),
+              label: Text(immediate ? '無料体験を解約' : '次回更新日で解約'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CheckoutControls extends StatelessWidget {
+  const _CheckoutControls({
+    required this.billingPeriod,
+    required this.onChanged,
+  });
+
+  final SubscriptionBillingPeriod billingPeriod;
+  final ValueChanged<SubscriptionBillingPeriod> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'お支払い方法',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '月額または年額を選択して、有料プランの購入画面へ進みます。無料体験を未利用の場合は10日間の無料体験が適用されます。',
+              style: TextStyle(fontSize: 12, height: 1.5),
+            ),
+            const SizedBox(height: 14),
+            SegmentedButton<SubscriptionBillingPeriod>(
+              segments: const [
+                ButtonSegment(
+                  value: SubscriptionBillingPeriod.monthly,
+                  label: Text('月額'),
+                  icon: Icon(Icons.calendar_month_outlined),
+                ),
+                ButtonSegment(
+                  value: SubscriptionBillingPeriod.annual,
+                  label: Text('年額'),
+                  icon: Icon(Icons.event_repeat_outlined),
+                ),
+              ],
+              selected: {billingPeriod},
+              onSelectionChanged: (selection) {
+                if (selection.isNotEmpty) onChanged(selection.first);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -364,15 +699,35 @@ const _planDefinitions = <_PlanDefinition>[
 ];
 
 class _PlanCard extends StatelessWidget {
-  const _PlanCard({required this.definition, required this.currentPlan});
+  const _PlanCard({
+    required this.definition,
+    required this.currentPlan,
+    required this.billingPeriod,
+    required this.startingPlan,
+    required this.changingPlan,
+    required this.canChangePlan,
+    required this.planChangeLabel,
+    required this.onStartCheckout,
+    required this.onChangePlan,
+  });
 
   final _PlanDefinition definition;
   final SubscriptionPlanTier currentPlan;
+  final SubscriptionBillingPeriod billingPeriod;
+  final SubscriptionPlanTier? startingPlan;
+  final SubscriptionPlanTier? changingPlan;
+  final bool canChangePlan;
+  final String planChangeLabel;
+  final ValueChanged<SubscriptionPlanTier> onStartCheckout;
+  final ValueChanged<SubscriptionPlanTier> onChangePlan;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final current = definition.tier == currentPlan;
+    final canStartCheckout =
+        currentPlan == SubscriptionPlanTier.free &&
+        definition.tier != SubscriptionPlanTier.free;
     return Card(
       elevation: current ? 2 : 0,
       shape: RoundedRectangleBorder(
@@ -425,6 +780,43 @@ class _PlanCard extends StatelessWidget {
                   ],
                 ),
               ),
+            if (canStartCheckout) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: startingPlan == null
+                      ? () => onStartCheckout(definition.tier)
+                      : null,
+                  child: startingPlan == definition.tier
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text('${billingPeriod.label}で申し込む'),
+                ),
+              ),
+            ],
+            if (canChangePlan) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: changingPlan == null
+                      ? () => onChangePlan(definition.tier)
+                      : null,
+                  icon: changingPlan == definition.tier
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.event_repeat_outlined),
+                  label: Text(planChangeLabel),
+                ),
+              ),
+            ],
           ],
         ),
       ),
