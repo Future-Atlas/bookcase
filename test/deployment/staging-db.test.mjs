@@ -104,7 +104,7 @@ test('migration filenames reject sync copies and duplicate versions', () => {
 
 test('workflow gates cloud deployment on validation and uses staging, never production', () => {
   const workflow = readFileSync(new URL('../../.github/workflows/supabase-deploy-staging.yaml', import.meta.url), 'utf8');
-  const [validation, deployment] = workflow.split('\n  deploy:\n');
+  const [validation, deployment] = workflow.split(/\r?\n  deploy:\r?\n/);
   assert.ok(deployment.includes('needs: validate'));
   assert.ok(deployment.includes('name: staging'));
   assert.ok(!workflow.includes('name: production'));

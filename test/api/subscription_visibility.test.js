@@ -23,3 +23,23 @@ test('account settings hides the entire subscription section behind the release 
   assert.ok(section > gate)
   assert.ok(screen > gate)
 })
+
+test('locked feature messages do not advertise unreleased paid plans', () => {
+  const paths = [
+    'lib/screens/account_settings_screen.dart',
+    'lib/screens/book_list_screen.dart',
+    'lib/screens/user_profile_screen.dart',
+    'lib/services/supabase_service.dart',
+    'lib/services/reply_editing_service.dart',
+    'lib/widgets/post_reply_actions.dart',
+    'lib/widgets/favorite_retention_gate.dart',
+  ]
+  for (const path of paths) {
+    assert.doesNotMatch(
+      read(path),
+      /Premium限定|Premium特典|サブスクでは|サブスク限定|契約終了後も|プラン変更により/,
+      path,
+    )
+  }
+  assert.match(read('lib/widgets/post_reply_actions.dart'), /ご自身の返信の削除/)
+})

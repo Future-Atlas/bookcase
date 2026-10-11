@@ -20,7 +20,8 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.text('伊能 龍之介'), findsOneWidget);
-        expect(find.text('劉 鴻斌'), findsOneWidget);
+        expect(find.text('劉 鴻斌'), findsNothing);
+        expect(find.text('共同開発'), findsNothing);
         final link = tester.widget<Link>(find.byType(Link));
         expect(link.uri.toString(), 'https://www.instagram.com/ryunosukeino/');
         expect(link.target, LinkTarget.blank);
