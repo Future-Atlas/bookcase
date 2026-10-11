@@ -142,9 +142,11 @@
             return;
           }
 
-          const index = Number(
-            root.getAttribute("data-sharemarium-admax-slot-index"),
+          const rawIndex = root.getAttribute(
+            "data-sharemarium-admax-slot-index",
           );
+          if (rawIndex === null || !/^[0-9]+$/.test(rawIndex)) return;
+          const index = Number(rawIndex);
           const target = root.querySelector(".admax-inline-target");
           if (!Number.isInteger(index) || index < 0 ||
               index >= maxAdsPerPage || !target) return;

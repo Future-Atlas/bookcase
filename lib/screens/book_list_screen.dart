@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
@@ -1493,7 +1494,7 @@ class _BookListScreenState extends State<BookListScreen> {
         .toDouble();
 
     final postCount = _controller.timelinePosts.length;
-    final adSlots = timelineAdEnabled
+    final adSlots = kIsWeb && timelineAdEnabled
         ? timelineAdSlotCount(postCount)
         : 0;
 
