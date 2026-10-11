@@ -11,8 +11,8 @@ test("ads.txt authorizes Ninja AdMax sellers without restoring the retired AdSen
   // Ninja AdMax's official reseller list contains Google exchange entries.
   // Those are not the publisher's retired AdSense account.
   assert.doesNotMatch(adsTxt, /pub-3052085512168272/i);
-  assert.match(adsTxt, /^adm\\.shinobi\\.jp,232064,DIRECT\\r?$/m);
-  assert.match(adsTxt, /^google\\.com,pub-[0-9]+,RESELLER(?:,[a-f0-9]+)?\\r?$/m);
+  assert.match(adsTxt, /^adm\.shinobi\.jp,232064,DIRECT\r?$/m);
+  assert.match(adsTxt, /^google\.com,pub-[0-9]+,RESELLER(?:,[a-f0-9]+)?\r?$/m);
 });
 
 test("production smoke accepts Ninja AdMax's authorized seller declarations", async () => {
@@ -28,5 +28,5 @@ test("production smoke accepts Ninja AdMax's authorized seller declarations", as
   );
   assert.ok(check);
   assert.match(adsTxt, check.bodyPattern);
-  assert.match(adsTxt, /^adm\\.shinobi\\.jp,232064,DIRECT\\r?$/m);
+  assert.match(adsTxt, /^adm\.shinobi\.jp,232064,DIRECT\r?$/m);
 });
