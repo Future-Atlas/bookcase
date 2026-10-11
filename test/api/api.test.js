@@ -356,6 +356,7 @@ test("browser loads Ninja AdMax only after an actual timeline slot mounts", () =
   assert.match(html, /root\.isConnected/);
   assert.match(html, /\/api\/ad-entitlement/);
   assert.match(html, /entitlementState = "ad_free"/);
+  assert.match(html, /https:\/\/adm\.shinobi\.jp\/st\/t\.js/);
   assert.match(html, /sharemarium-ninja-admax-official-tag/);
   assert.match(html, /https:\/\/adm\.shinobi\.jp\/s\/234edc1d1284546b2d177ac7c5531101/);
   assert.doesNotMatch(html, /googlesyndication|adsbygoogle|ca-pub-/);

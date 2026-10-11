@@ -12,6 +12,24 @@ const int timelinePostsPerAd = int.fromEnvironment(
   defaultValue: 2,
 );
 
+/// The /s/ synchronous identifier must never be assumed to be an async ID.
+const String ninjaAdmaxAsyncId = String.fromEnvironment(
+  'NINJA_ADMAX_ASYNC_ID',
+  defaultValue: '',
+);
+
+const String ninjaAdmaxAsyncType = String.fromEnvironment(
+  'NINJA_ADMAX_ASYNC_TYPE',
+  defaultValue: 'switch',
+);
+
+bool get timelineAdReady =>
+    timelineAdEnabled &&
+    ninjaAdmaxAsyncId.length >= 8 &&
+    ninjaAdmaxAsyncId.length <= 128 &&
+    !ninjaAdmaxAsyncId.contains(RegExp(r'[^A-Za-z0-9_-]')) &&
+    (ninjaAdmaxAsyncType == 'switch' || ninjaAdmaxAsyncType == 'banner');
+
 /// Ninja AdMax recommends no more than three advertisements per page.
 const int timelineMaximumAdsPerPage = 3;
 

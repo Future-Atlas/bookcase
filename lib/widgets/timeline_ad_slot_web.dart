@@ -6,11 +6,10 @@ import 'package:flutter/material.dart';
 
 import 'timeline_ad_policy.dart';
 
-const String _viewTypePrefix = 'sharemarium-ninja-admax-timeline';
+const String _viewTypePrefix = 'sharemarium-ninja-admax-native';
 
-/// Flutter Web-only inline advertisement. The publisher's exact synchronous
-/// tag runs in a separate srcdoc iframe after route/entitlement verification.
-/// Never insert the synchronous script into the running Flutter document.
+/// Actual DOM slot for the Ninja AdMax asynchronous SPA SDK.
+/// Neither the synchronous /s/ tag nor app-created iframes are used.
 class TimelineAdSlot extends StatelessWidget {
   const TimelineAdSlot({super.key, required this.slotIndex});
 
@@ -21,27 +20,31 @@ class TimelineAdSlot extends StatelessWidget {
 
   static void _registerFactory(int index) {
     if (!_registered.add(index)) return;
-
     ui_web.platformViewRegistry.registerViewFactory(_viewType(index), (
       int viewId,
     ) {
       final root = html.DivElement()
         ..classes.add('sharemarium-admax-timeline-slot')
-        ..setAttribute('data-sharemarium-admax-slot-index', '$index');
+        ..setAttribute('data-sharemarium-admax-slot-index', '$index')
+        ..setAttribute('data-sharemarium-admax-async-id', ninjaAdmaxAsyncId)
+        ..setAttribute('data-sharemarium-admax-async-type', ninjaAdmaxAsyncType);
       root.style
         ..width = '100%'
-        ..height = '250px'
-        ..textAlign = 'center'
-        ..overflow = 'hidden';
+        ..height = ninjaAdmaxAsyncType == 'banner' ? '90px' : '250px'
+        ..overflowX = ninjaAdmaxAsyncType == 'banner' ? 'auto' : 'visible'
+        ..textAlign = 'center';
 
       final target = html.DivElement()
-        ..classes.add('admax-inline-target');
+        ..classes.add(
+          ninjaAdmaxAsyncType == 'switch' ? 'admax-switch' : 'admax-ads',
+        )
+        ..setAttribute('data-admax-id', ninjaAdmaxAsyncId);
       target.style
-        ..width = '100%'
-        ..height = '250px';
+        ..display = 'inline-block'
+        ..width = ninjaAdmaxAsyncType == 'banner' ? '728px' : '100%'
+        ..height = ninjaAdmaxAsyncType == 'banner' ? '90px' : '250px';
 
       root.append(target);
-      // Flutter connects the platform view after factory creation.
       Future<void>.delayed(Duration.zero, () {
         html.window.dispatchEvent(html.CustomEvent(
           'sharemarium:admax-slot-ready',
@@ -54,7 +57,7 @@ class TimelineAdSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!timelineAdEnabled || slotIndex < 0 ||
+    if (!timelineAdReady || slotIndex < 0 ||
         slotIndex >= timelineMaximumAdsPerPage) {
       return const SizedBox.shrink();
     }
@@ -64,7 +67,7 @@ class TimelineAdSlot extends StatelessWidget {
       builder: (context, constraints) {
         if (constraints.maxWidth < 300) return const SizedBox.shrink();
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 28),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           child: Semantics(
             label: '広告',
             container: true,
@@ -85,7 +88,7 @@ class TimelineAdSlot extends StatelessWidget {
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
-                      height: 250,
+                      height: ninjaAdmaxAsyncType == 'banner' ? 90.0 : 250.0,
                       child: HtmlElementView(viewType: _viewType(slotIndex)),
                     ),
                   ],
