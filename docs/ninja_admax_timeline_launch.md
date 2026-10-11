@@ -1,50 +1,70 @@
-# Ninja AdMax timeline-only launch checklist
+# Ninja AdMax: asynchronous native timeline integration
 
-## Official publisher tag
+## Why this change was needed
 
-The publisher-provided code below is copied **verbatim** into an inert
-HTML template in web/index.html and is only executed inside a sandboxed
-srcdoc iframe when a timeline ad slot is eligible:
+The exact original **synchronous** Ninja AdMax tag was:
 
 <!-- admax -->
 <script src="https://adm.shinobi.jp/s/234edc1d1284546b2d177ac7c5531101"></script>
 <!-- admax -->
 
-This is a **synchronous** Ninja AdMax tag. It is not safe to dynamically
-insert that script into the already-running Flutter SPA; the isolated iframe
-allows parser-time execution. Actual rendering and vendor support for this
-embedding strategy still require a real-browser check.
+The text is retained unchanged in an inert HTML template in
+`web/index.html`, but it is no longer used for ad delivery. Loading
+it in a `srcdoc` iframe produced no visible Ninja AdMax network request.
+Do not dynamically execute this /s/ tag on the Flutter SPA page: it uses
+`document.write` and can damage the running document.
 
-## Placement policy
+Ninja AdMax describes its SPA implementation here:
+https://www.ninja.co.jp/admax/help/faq/13947/
+https://github.com/ninjatools/admax-spa-examples
 
-- Flutter Web home timeline on www.sharemarium.com only.
-- One slot between posts 2-3, 4-5 and 6-7, only when the next post exists.
-- Maximum **three ad slots per page**, following Ninja AdMax guidance.
-- For the trial, NINJA_ADMAX_POSTS_PER_AD defaults to 2. Use the build
-  argument --dart-define=NINJA_ADMAX_POSTS_PER_AD=5 for normal operation.
-- NINJA_ADMAX_ENABLED remains false unless explicitly enabled using
-  --dart-define=NINJA_ADMAX_ENABLED=true in the approved Web build.
-- No native app advertisements and no ads on other routes, guest login,
-  settings, profiles, category screens or SEO-rendered HTML.
-- For authenticated users, paid ad-free entitlements are honored and
-  failures of entitlement checks suppress advertising requests.
-- Existing SNS features, subscription UI flags and Terms remain unchanged.
+**A separate publisher-issued asynchronous tag must be obtained.**
+Its `admax_id` must not be guessed from the /s/ URL.
 
-## Preconditions for production activation
+## Configuration
 
-1. Verify the supplied tag is for a general-audience, inline placement,
-   with the production URL registered in Ninja AdMax. Disable overlays,
-   popups and unwanted adult creatives in the provider settings.
-2. Confirm this synchronous tag works inside srcdoc iframes. If it does
-   not, obtain an official asynchronous tag rather than injecting the
-   synchronous tag directly into Flutter's dynamic document.
-3. Update Privacy Policy and external-transmission disclosures to cover
-   actual Ninja AdMax data collection, recipients, cookies and opt-out.
-   Obtain any required consent before loading the vendor code.
-4. Check PC/smartphone, post counts 0-2 and 3+, disabled/ad-free user,
-   entitlement failure, route changes, scrolling, SPA navigation, and
-   browser back/forward. Check that no more than 3 frames are requested.
-5. Enable the Web flag only after those checks pass, monitor the real
-   network requests and Ninja AdMax review/approval and revert if needed.
+Set GitHub Actions **Variables** for the production workflow:
 
-Passing CI does not establish live ad delivery or vendor approval.
+- `NINJA_ADMAX_ASYNC_ID`: the asynchronous `admax_id` issued by Ninja AdMax
+- `NINJA_ADMAX_ASYNC_TYPE`: `switch` for a PC/SP switching tag or
+  `banner` for a vendor-issued banner tag. Default: `switch`.
+
+The production build already sets `NINJA_ADMAX_ENABLED=true` and
+`NINJA_ADMAX_POSTS_PER_AD=2`, and now accepts those two variables.
+Without a valid asynchronous ID, the timeline intentionally shows
+**no empty ad placeholders and makes no third-party advertising requests**.
+This prevents mistaking the literal 「広告」 label for a real advertisement.
+
+After updating the variables, **rerun the production Web deployment**
+so the values are included in Flutter's compiled JavaScript.
+
+## Rendering
+
+- Flutter Web creates the real DOM node directly using `HtmlElementView`:
+  `<div class="admax-switch" data-admax-id="...">` for `switch`;
+  `<div class="admax-ads" data-admax-id="...">` for `banner`.
+- The page queues `{admax_id, type}` and loads
+  `https://adm.shinobi.jp/st/t.js` asynchronously; no wrapper iframe.
+- The SDK itself may produce its own creative iframes as normal.
+- The loader starts only on the production homepage, after a slot
+  exists and the visitor is eligible. Paid ad-free accounts, error
+  responses and other routes never initiate a new SDK load.
+- The maximum remains 3 inline positions, between posts 2-3, 4-5,
+  and 6-7 where the next post exists. Use 5 instead of 2 for normal operation.
+- SDK lifecycle checks use a DOM observer in addition to Flutter events
+  because platform-view creation can precede DOM attachment.
+
+## Real verification still required
+
+1. Obtain and verify the exact *asynchronous* tag and type from the
+   provider's management UI. Do not substitute the old synchronous hash.
+2. Set the GitHub Actions variables and redeploy.
+3. Open the homepage with >=3 real posts and inspect Network:
+   `adm.shinobi.jp/st/t.js` should be requested only when an eligible
+   slot mounts. A successful SDK request alone does not prove ads render.
+4. Verify actual vendor creatives/initial review placeholder, PC/mobile,
+   ad blockers disabled, paid ad-free accounts and other routes.
+5. Confirm the Ninja AdMax review status and update the relevant
+   privacy/external-transmission disclosures.
+
+Officially, SPA integrations are not guaranteed by Ninja AdMax.
