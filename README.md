@@ -10,7 +10,7 @@ the production/staging web deployments and crawler-friendly SEO pages.
 - `main`: production release branch
 - `develop`: long-lived staging/integration branch and repository default branch
 - iOS / Android: in development, not production-targeted yet
-- Public browsing: enabled for public read-only content and SEO/AdSense review
+- Public browsing: enabled for public read-only content and SEO evaluation
 - Write actions: protected by Supabase RLS/RPC checks; Flutter UI checks are not a security boundary
 
 ## Tech Stack
@@ -136,6 +136,16 @@ Supabase workflows:
 Branch protection is a GitHub repository setting rather than repository code.
 The required target settings and the current manual-configuration caveat are
 documented in `docs/github_branch_protection.md`.
+
+## Advertising (Ninja AdMax preparation)
+
+The app no longer loads AdSense. Ninja AdMax is disabled by default and can
+only appear inside the home timeline after at least three posts. Do not enable
+it until a genuine asynchronous PC/SP switch tag, compliant privacy/external
+transmission disclosures and production PC/mobile validation are complete.
+See `docs/ninja_admax_timeline_launch.md`. The `ads.txt` file intentionally
+authorizes no seller while advertising is disabled; replace it with the exact
+seller entries supplied by the ad provider before enabling real demand.
 
 ## CI / Validation
 

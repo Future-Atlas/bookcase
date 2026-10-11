@@ -2,7 +2,7 @@
 // Policy: no Google APIs. Data source order is Rakuten first, then NDL fallback.
 
 const { requestRakuten } = require("./_rakuten_request");
-const { evaluatePublisherContent, isSubstantivePublicReview } = require("./_home_ad_eligibility");
+const { isSubstantivePublicReview } = require("./_home_ad_eligibility");
 const {
   isIndexableProfileSummary,
   isIndexableReview,
@@ -548,7 +548,6 @@ module.exports = async (req, res) => {
     robots,
     pagePath = "/",
     extraJsonLd = [],
-    enableAds = false,
   }) => {
     const absoluteUrl = toAbsoluteUrl(pagePath);
     const fullTitle = title.includes(SITE_NAME)
@@ -587,27 +586,6 @@ module.exports = async (req, res) => {
       <link rel="icon" type="image/svg+xml" sizes="any" href="${SITE_URL}/favicon.svg">
       <link rel="shortcut icon" href="${SITE_URL}/favicon.png">
       <link rel="apple-touch-icon" sizes="192x192" href="${SITE_URL}/icons/Icon-192.png">
-      <script>
-        window.__sharemariumAdsAllowed = ${enableAds ? "true" : "false"};
-      </script>
-      ${
-        enableAds
-          ? `
-      <script>
-        (function() {
-          if (!window.__sharemariumAdsAllowed) return;
-          const existing = document.querySelector('script[data-adsense]');
-          if (existing) return;
-          const script = document.createElement('script');
-          script.async = true;
-          script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3052085512168272';
-          script.crossOrigin = 'anonymous';
-          script.dataset.adsense = '1';
-          document.head.appendChild(script);
-        })();
-      </script>`
-          : ""
-      }
       ${jsonLdList
         .map(
           (item) =>
@@ -1219,19 +1197,12 @@ module.exports = async (req, res) => {
   }
 
   let recentPosts = [];
-  let publisherContentEvaluation = {
-    eligible: false,
-    substantiveReviewCount: 0,
-    distinctAuthorCount: 0,
-  };
-
   try {
     const rawPosts =
       (await supabaseGet(
         "posts?select=id,profile_id,book_id,rating,comment,created_at,is_spoiler,profiles(username)&order=created_at.desc&limit=100",
       )) || [];
 
-    publisherContentEvaluation = evaluatePublisherContent(rawPosts);
     const substantivePosts = rawPosts
       .filter(isSubstantivePublicReview)
       .slice(0, 8);
@@ -1313,15 +1284,9 @@ module.exports = async (req, res) => {
             </ul>
         `;
 
-  // Third-party book catalog results never make the page eligible for ads.
-  // Ads are enabled only after enough original public reviews from multiple
-  // authors exist. seo-home repeats this check and fails closed.
-  const canShowAdsOnHome = publisherContentEvaluation.eligible;
-
   const html = renderPage({
     title: SITE_TITLE,
     description: TOP_DESCRIPTION,
-    enableAds: canShowAdsOnHome,
     content: `
             <section>
             <h2>Sharemarium（シェアマリウム）でできること</h2>
@@ -1367,7 +1332,6 @@ module.exports = async (req, res) => {
     ],
     pagePath: decodedPath || "/",
     // The product landing page is publisher-authored and remains indexable.
-    // Ad eligibility is controlled separately by original UGC thresholds.
     robots: "index,follow",
   });
 
