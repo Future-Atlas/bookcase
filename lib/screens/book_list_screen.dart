@@ -795,6 +795,16 @@ class _BookListScreenState extends State<BookListScreen> {
                               isLoadingInitial:
                                   _controller.isLoadingRecommended,
                             ),
+                          // Only place the genre ad between real book rows.
+                          if (kIsWeb &&
+                              timelineAdReady &&
+                              widget.initialGenre == null &&
+                              _controller.recommendedBooks.isNotEmpty &&
+                              _controller.westernBooks.isNotEmpty)
+                            const TimelineAdSlot(
+                              key: ValueKey('home-ad-between-recommended-western'),
+                              slotIndex: 0,
+                            ),
                           if (widget.initialGenre == null ||
                               widget.initialGenre == 'western')
                             _buildGenreSection(
@@ -808,6 +818,15 @@ class _BookListScreenState extends State<BookListScreen> {
                               isLoadingMore: _controller.isLoadingMoreWestern,
                               hasMore: _controller.hasMoreWestern,
                               isLoadingInitial: _controller.isLoadingWestern,
+                            ),
+                          if (kIsWeb &&
+                              timelineAdReady &&
+                              widget.initialGenre == null &&
+                              _controller.westernBooks.isNotEmpty &&
+                              _controller.popularBooks.isNotEmpty)
+                            const TimelineAdSlot(
+                              key: ValueKey('home-ad-between-western-popular'),
+                              slotIndex: 1,
                             ),
                           if (widget.initialGenre == null ||
                               widget.initialGenre == 'popular')
@@ -1494,8 +1513,13 @@ class _BookListScreenState extends State<BookListScreen> {
         .toDouble();
 
     final postCount = _controller.timelinePosts.length;
+    // Two genre separators reserve slots 0 and 1. The home timeline
+    // receives the final page-wide Ninja AdMax placement, at slot 2.
     final adSlots = kIsWeb && timelineAdReady
-        ? timelineAdSlotCount(postCount)
+        ? timelineAdSlotCount(
+            postCount,
+            maximumSlots: homeTimelineMaximumAds,
+          )
         : 0;
 
     return Container(
@@ -1518,18 +1542,29 @@ class _BookListScreenState extends State<BookListScreen> {
           controller: _timelineScrollController,
           padding: const EdgeInsets.only(right: 8),
           physics: const ClampingScrollPhysics(),
-          // Between-post ads at 2, 4 and 6 posts (up to three).
+          // Keep a single timeline ad after post 2, alongside the two
+          // book-genre separators, for the three-slot page-wide limit.
           // Change NINJA_ADMAX_POSTS_PER_AD to 5 for normal operation.
           itemCount: postCount + adSlots,
           itemBuilder: (context, index) {
-            if (adSlots > 0 && isTimelineAdItem(index, postCount)) {
+            if (adSlots > 0 &&
+                isTimelineAdItem(
+                  index,
+                  postCount,
+                  maximumSlots: homeTimelineMaximumAds,
+                )) {
               return TimelineAdSlot(
-                key: ValueKey('timeline-ad-slot-$index'),
-                slotIndex: index ~/ (timelinePostsPerAd + 1),
+                key: ValueKey('home-timeline-ad-slot-$index'),
+                slotIndex: homeTimelineAdSlotStart +
+                    index ~/ (timelinePostsPerAd + 1),
               );
             }
             final postIndex = adSlots > 0
-                ? timelinePostIndexForItem(index, postCount)
+                ? timelinePostIndexForItem(
+                    index,
+                    postCount,
+                    maximumSlots: homeTimelineMaximumAds,
+                  )
                 : index;
             final post = _controller.timelinePosts[postIndex];
             final currentProfileId = Provider.of<SupabaseService>(
