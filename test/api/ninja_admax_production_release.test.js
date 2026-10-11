@@ -21,5 +21,9 @@ test("Ninja AdMax loads in production Flutter Web builds only", () => {
   assert.match(production, /flutter build web --release[^\n]*--dart-define=NINJA_ADMAX_POSTS_PER_AD=2/);
   assert.doesNotMatch(staging, /--dart-define=NINJA_ADMAX_ENABLED=true/);
   assert.match(policy, /defaultValue: false/);
+  assert.match(production, /NINJA_ADMAX_ASYNC_ID/);
+  assert.match(production, /NINJA_ADMAX_ASYNC_TYPE/);
+  assert.match(policy, /timelineAdReady/);
+  assert.match(policy, /NINJA_ADMAX_ASYNC_ID/);
   assert.ok(tag.includes(target), "the issued AdMax tag must remain verbatim");
 });
