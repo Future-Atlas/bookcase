@@ -27,9 +27,9 @@ for (const environment of ['production', 'preview']) {
       assert.equal(response.statusCode, 200);
       assert.equal(fetches, 0);
       assert.match(response.body, /伊能 龍之介/);
-      assert.match(response.body, /劉 鴻斌/);
+      assert.doesNotMatch(response.body, /劉 鴻斌/);
       assert.match(response.body, /企画・開発・運営/);
-      assert.match(response.body, /共同開発/);
+      assert.doesNotMatch(response.body, /共同開発|"contributor"/);
       assert.match(response.body, /サービスの目的/);
       assert.match(response.body, /掲載コンテンツについて/);
       assert.match(response.body, /運営方針/);

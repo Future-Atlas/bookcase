@@ -810,7 +810,7 @@ class SupabaseService extends ChangeNotifier {
       return null;
     } on PostgrestException catch (e) {
       if (e.message.contains('page_color_subscription_required')) {
-        return 'このページカラーはサブスク限定です。';
+        return '現在のアカウントではこのページカラーを利用できません。';
       }
       if (e.message.contains('USER_ID_IMMUTABLE')) {
         return 'ユーザーIDは登録後に変更できません。';
