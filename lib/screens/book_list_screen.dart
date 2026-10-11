@@ -1494,7 +1494,7 @@ class _BookListScreenState extends State<BookListScreen> {
         .toDouble();
 
     final postCount = _controller.timelinePosts.length;
-    final adSlots = kIsWeb && timelineAdEnabled
+    final adSlots = kIsWeb && timelineAdReady
         ? timelineAdSlotCount(postCount)
         : 0;
 
