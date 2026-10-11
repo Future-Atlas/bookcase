@@ -25,7 +25,12 @@ const String ninjaAdmaxAsyncType = String.fromEnvironment(
 
 bool get timelineAdReady =>
     timelineAdEnabled &&
-    RegExp(r'^[A-Za-z0-9_-]{8,128}
+    ninjaAdmaxAsyncId.length >= 8 &&
+    ninjaAdmaxAsyncId.length <= 128 &&
+    !ninjaAdmaxAsyncId.contains(RegExp(r'[^A-Za-z0-9_-]')) &&
+    (ninjaAdmaxAsyncType == 'switch' || ninjaAdmaxAsyncType == 'banner');
+
+/// Ninja AdMax recommends no more than three advertisements per page.
 const int timelineMaximumAdsPerPage = 3;
 
 /// Ads are only inserted between posts, never after the final post.
