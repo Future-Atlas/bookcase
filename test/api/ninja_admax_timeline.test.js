@@ -67,7 +67,7 @@ function runtime({
   vm.runInNewContext(markup.slice(start + "    <script>".length, end),
     { window, document, MutationObserver, fetch, console });
 
-  function emitSlot(index, id = "async-publisher-id-123", type = "switch") {
+  function emitSlot(index, id = "234edc1d1284546b2d177ac7c5531101", type = "banner") {
     const state = new Map([["data-admax-id", id]]);
     const target = {
       getAttribute(key) { return state.get(key) || null; },
@@ -136,6 +136,8 @@ test("ad configuration fails closed without an actual async publisher ID", () =>
   assert.match(widget, /ninjaAdmaxAsyncId/);
   assert.match(widget, /'admax-switch' : 'admax-ads'/);
   assert.match(widget, /data-admax-id/);
+  assert.match(widget, /'728px'/);
+  assert.match(widget, /'90px'/);
 });
 
 test("three eligible native slots request the async SDK only once", async () => {
@@ -151,8 +153,8 @@ test("three eligible native slots request the async SDK only once", async () => 
   const queue = Array.from(r.window.admaxads);
   assert.equal(queue.length, 3);
   for (const item of queue) {
-    assert.equal(item.admax_id, "async-publisher-id-123");
-    assert.equal(item.type, "switch");
+    assert.equal(item.admax_id, "234edc1d1284546b2d177ac7c5531101");
+    assert.equal(item.type, "banner");
   }
   for (const target of r.targets.slice(0, 3)) {
     assert.equal(target.getAttribute("data-admax-load"), "sdk-loaded");
