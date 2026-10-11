@@ -30,7 +30,8 @@ class TimelineAdSlot extends StatelessWidget {
         ..setAttribute('data-sharemarium-admax-async-type', ninjaAdmaxAsyncType);
       root.style
         ..width = '100%'
-        ..minHeight = '250px'
+        ..height = ninjaAdmaxAsyncType == 'banner' ? '90px' : '250px'
+        ..overflowX = ninjaAdmaxAsyncType == 'banner' ? 'auto' : 'visible'
         ..textAlign = 'center';
 
       final target = html.DivElement()
@@ -40,8 +41,8 @@ class TimelineAdSlot extends StatelessWidget {
         ..setAttribute('data-admax-id', ninjaAdmaxAsyncId);
       target.style
         ..display = 'inline-block'
-        ..width = '100%'
-        ..minHeight = '250px';
+        ..width = ninjaAdmaxAsyncType == 'banner' ? '728px' : '100%'
+        ..height = ninjaAdmaxAsyncType == 'banner' ? '90px' : '250px';
 
       root.append(target);
       Future<void>.delayed(Duration.zero, () {
@@ -87,7 +88,7 @@ class TimelineAdSlot extends StatelessWidget {
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
-                      height: 250,
+                      height: ninjaAdmaxAsyncType == 'banner' ? 90 : 250,
                       child: HtmlElementView(viewType: _viewType(slotIndex)),
                     ),
                   ],
