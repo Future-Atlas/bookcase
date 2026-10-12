@@ -1037,7 +1037,7 @@ module.exports = async (req, res) => {
 
   if (decodedPath === "/about") {
     const description =
-      "Sharemarium（シェアマリウム）は、伊能 龍之介が企画・開発・運営する読書記録Webサービスです。共同開発者は劉 鴻斌です。";
+      "Sharemarium（シェアマリウム）は、伊能 龍之介が企画・開発・運営する読書記録Webサービスです。";
     const html = renderPage({
       title: "運営者情報",
       description,
@@ -1055,8 +1055,6 @@ module.exports = async (req, res) => {
           <p>公開・非公開設定、ネタバレ表示、通報・ブロックなどの機能を用意し、安心して読書体験を共有できる場を目指しています。公開情報や機能は継続的に確認し、必要に応じて改善します。</p>
           <h3>企画・開発・運営</h3>
           <p style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;">伊能 龍之介 <a href="https://www.instagram.com/ryunosukeino/" target="_blank" rel="noopener noreferrer">Instagram</a></p>
-          <h3>共同開発</h3>
-          <p>劉 鴻斌</p>
           <h3>お問い合わせ</h3>
           <p>サービスに関するお問い合わせは、お問い合わせフォームからご連絡ください。</p>
           <p><a href="/contact">お問い合わせフォーム</a></p>
@@ -1078,7 +1076,6 @@ module.exports = async (req, res) => {
             name: "伊能 龍之介",
             sameAs: ["https://www.instagram.com/ryunosukeino/"],
           },
-          contributor: { "@type": "Person", name: "劉 鴻斌" },
         },
       },
       extraJsonLd: [breadcrumbStructuredData([
