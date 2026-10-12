@@ -17,6 +17,7 @@ import '../widgets/post_reply_dialog.dart';
 import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
 import '../widgets/amazon_book_link.dart';
+import '../widgets/public_posts_link.dart';
 import 'report_post_dialog.dart';
 import 'user_profile_screen.dart';
 import 'post_engagement_users_screen.dart';
@@ -1028,11 +1029,7 @@ class _BookListScreenState extends State<BookListScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).pushNamed('/posts'),
-                icon: const Icon(Icons.forum_outlined),
-                label: const Text('他ユーザーのレビューに出会う'),
-              ),
+              const PublicPostsLink(),
               TextButton(
                 onPressed: () => Navigator.of(context).pushNamed('/about'),
                 child: const Text('サービス・運営方針について'),
