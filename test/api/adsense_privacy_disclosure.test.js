@@ -3,72 +3,77 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
+const root = path.join(__dirname, "../..");
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+
 function responseRecorder() {
   return {
     headers: {},
     statusCode: 200,
     body: "",
-    setHeader(name, value) {
-      this.headers[name] = value;
-    },
-    status(code) {
-      this.statusCode = code;
-      return this;
-    },
-    send(value) {
-      this.body = String(value);
-      return this;
-    },
+    setHeader(name, value) { this.headers[name] = value; },
+    status(code) { this.statusCode = code; return this; },
+    send(value) { this.body = String(value); return this; },
   };
 }
 
-test("privacy policy contains the required Google advertising-cookie disclosures", () => {
-  const privacy = fs.readFileSync(
-    path.join(__dirname, "../../lib/screens/privacy_policy_screen.dart"),
-    "utf8",
-  );
-
-  assert.match(privacy, /Googleを含む第三者配信事業者は、Cookieを使用/);
-  assert.match(privacy, /Googleが広告Cookieを使用/);
-  assert.match(privacy, /https:\/\/adssettings\.google\.com\//);
-  assert.match(privacy, /https:\/\/www\.aboutads\.info\//);
-  assert.match(privacy, /2026年9月16日／バージョン1\.10\.0/);
-  assert.match(privacy, /最終改定日[\s\S]*2026年9月16日/);
-  assert.match(privacy, /\*\*バージョン\*\*[\s\S]*1\.10\.0/);
+test("terms already explain advertisements, sponsored reviews and third-party transactions", () => {
+  const terms = read("lib/screens/terms_screen.dart");
+  assert.match(terms, /第23条（広告及び外部サイト）/);
+  assert.match(terms, /広告配信事業者その他の外部事業者へ送信される情報/);
+  assert.match(terms, /「広告」「PR」「献本」「提供」/);
 });
 
-test("legal version constants require renewed privacy consent", () => {
-  const versions = fs.readFileSync(
-    path.join(__dirname, "../../lib/services/legal_document_versions.dart"),
-    "utf8",
-  );
-
-  assert.match(versions, /bundle = '1\.12\.0'/);
-  assert.match(versions, /privacy = '1\.10\.0'/);
+test("privacy policy identifies active Ninja AdMax and conditional Google ads", () => {
+  const policy = read("lib/screens/privacy_policy_screen.dart");
+  assert.match(policy, /忍者ツールズ株式会社/);
+  assert.match(policy, /忍者AdMax/);
+  assert.match(policy, /IPアドレス、閲覧ページのURL/);
+  assert.match(policy, /https:\/\/corp\.ninja\.co\.jp\/privacy\/cookie\//);
+  assert.match(policy, /Googleによる広告配信（Google AdSense）は、現在の広告配信には使用していません/);
+  assert.match(policy, /https:\/\/adssettings\.google\.com\//);
+  assert.match(policy, /2026年10月12日／バージョン1\.11\.0/);
+  assert.match(policy, /\*\*最終改定日\*\*\s*2026年10月12日/);
 });
 
-test("legal changelog records the AdSense privacy-policy revision", () => {
-  const changelog = fs.readFileSync(
-    path.join(__dirname, "../../docs/legal_changelog.md"),
-    "utf8",
-  );
-
-  assert.match(changelog, /プライバシーポリシー \| 1\.10\.0/);
-  assert.match(changelog, /2026年9月16日 \| 1\.10\.0/);
-  assert.match(changelog, /Google広告Cookie/);
+test("external-transmission disclosure names the actual advertising recipient", () => {
+  const disclosure = read("lib/screens/external_transmission_screen.dart");
+  assert.match(disclosure, /忍者ツールズ株式会社（忍者AdMax）/);
+  assert.match(disclosure, /忍者AdMaxの広告を掲載します/);
+  assert.match(disclosure, /IPアドレス、通信に関するリクエスト情報/);
+  assert.match(disclosure, /認証トークン又はレビュー本文/);
+  assert.match(disclosure, /https:\/\/corp\.ninja\.co\.jp\/privacy\/tieup\//);
+  assert.match(disclosure, /Google AdSenseによる広告配信は、現在の本サービスでは稼働していません/);
+  assert.match(disclosure, /2026年10月12日／バージョン1\.10\.0/);
 });
 
-test("crawler privacy HTML inherits the same advertising-cookie disclosure", async () => {
+test("legal versions are independent and trigger re-confirmation for signed-in users", () => {
+  const versions = read("lib/services/legal_document_versions.dart");
+  assert.match(versions, /bundle = '1\.13\.0'/);
+  assert.match(versions, /terms = '1\.10\.0'/);
+  assert.match(versions, /privacy = '1\.11\.0'/);
+  assert.match(versions, /externalTransmission = '1\.10\.0'/);
+});
+
+test("legal revision history agrees with current document versions", () => {
+  const doc = read("docs/legal_changelog.md");
+  assert.match(doc, /プライバシーポリシー \| 1\.11\.0/);
+  assert.match(doc, /外部送信に関する公表事項 \| 1\.10\.0/);
+  assert.match(doc, /2026年10月12日 \| 1\.11\.0/);
+});
+
+test("SEO legal rendering inherits disclosure without injecting ad scripts", async () => {
   delete require.cache[require.resolve("../../api/legal-seo")];
   const handler = require("../../api/legal-seo");
-  const res = responseRecorder();
-
-  await handler({ query: { path: "privacy" } }, res);
-
-  assert.equal(res.statusCode, 200);
-  assert.match(res.body, /Googleを含む第三者配信事業者/);
-  assert.match(res.body, /Googleが広告Cookieを使用/);
-  assert.match(res.body, /adssettings\.google\.com/);
-  assert.match(res.body, /バージョン1\.10\.0/);
-  assert.doesNotMatch(res.body, /pagead2\.googlesyndication\.com/);
+  for (const [route, marker] of [
+    ["privacy", "忍者AdMax"],
+    ["external-transmission", "忍者ツールズ株式会社"],
+  ]) {
+    const res = responseRecorder();
+    await handler({query: {path: route}}, res);
+    assert.equal(res.statusCode, 200);
+    assert.match(res.body, new RegExp(marker));
+    assert.doesNotMatch(res.body, /<script\b/i);
+    assert.doesNotMatch(res.body, /pagead2\.googlesyndication\.com/);
+  }
 });
