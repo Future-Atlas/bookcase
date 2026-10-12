@@ -40,10 +40,9 @@
     <meta name="twitter:image" content="https://www.sharemarium.com/icons/Icon-512.png" />
     <script>
       (() => {
-        // The operator-issued Ninja AdMax script is kept verbatim in the
-        // inert <template> below, and runs only inside an isolated iframe.
+        // The original publisher synchronous tag is kept unchanged in the
+        // inert template below. The actual live integration uses async SDK.
         const expectedHost = "www.sharemarium.com";
-        const maxAdsPerPage = 3;
         const renderedSlots = new Map();
         let entitlementToken = null;
         let entitlementState = "unknown";
@@ -124,19 +123,56 @@
 
         function clearLoadedAdsIfDisallowed() {
           if (eligibleRoute() && entitlementState === "ads_allowed") return;
-          // All vendor code lives inside removable iframes, never in the
-          // parent Flutter document. No SPA navigation reload is necessary.
+          const sdk = document.getElementById("sharemarium-admax-async-sdk");
+          if (sdk) sdk.remove();
+          window.__admax_tag__ = undefined;
+          window.__admax_render__ = undefined;
+          window.admaxads = [];
           for (const slot of renderedSlots.values()) {
-            slot.frame.removeAttribute("srcdoc");
-            slot.frame.remove();
+            slot.target.replaceChildren();
           }
           renderedSlots.clear();
+        }
+
+        let sdkScheduled = false;
+
+        function loadAsyncSdk() {
+          if (sdkScheduled) return;
+          sdkScheduled = true;
+          window.setTimeout(() => {
+            sdkScheduled = false;
+            if (!eligibleRoute() || entitlementState !== "ads_allowed" ||
+                renderedSlots.size === 0 ||
+                currentSupabaseAccessToken() !== entitlementToken) return;
+            const old = document.getElementById("sharemarium-admax-async-sdk");
+            if (old) {
+              old.remove();
+              window.__admax_tag__ = undefined;
+              window.__admax_render__ = undefined;
+            }
+            const script = document.createElement("script");
+            script.id = "sharemarium-admax-async-sdk";
+            script.src = "https://adm.shinobi.jp/st/t.js";
+            script.async = true;
+            script.onerror = () => {
+              console.warn("[Sharemarium AdMax] Failed to load async SDK");
+              for (const slot of renderedSlots.values()) {
+                slot.target.setAttribute("data-admax-load", "error");
+              }
+            };
+            script.onload = () => {
+              for (const slot of renderedSlots.values()) {
+                slot.target.setAttribute("data-admax-load", "sdk-loaded");
+              }
+            };
+            document.head.appendChild(script);
+          }, 100);
         }
 
         async function mountSlot(root, attempts = 0) {
           if (!root || !eligibleRoute()) return;
           if (!root.isConnected) {
-            if (attempts < 20) {
+            if (attempts < 80) {
               window.setTimeout(() => void mountSlot(root, attempts + 1), 50);
             }
             return;
@@ -147,10 +183,18 @@
           );
           if (rawIndex === null || !/^[0-9]+$/.test(rawIndex)) return;
           const index = Number(rawIndex);
-          const target = root.querySelector(".admax-inline-target");
-          if (!Number.isInteger(index) || index < 0 ||
-              index >= maxAdsPerPage || !target) return;
+          const id = root.getAttribute("data-sharemarium-admax-async-id") || "";
+          const type = root.getAttribute("data-sharemarium-admax-async-type");
+          const target = root.querySelector(
+            type === "switch" ? ".admax-switch" : ".admax-ads",
+          );
+          if (!Number.isSafeInteger(index) || index < 0 ||
+              !/^[A-Za-z0-9_-]{8,128}$/.test(id) ||
+              (type !== "switch" && type !== "banner") ||
+              !target || target.getAttribute("data-admax-id") !== id) return;
 
+          const known = renderedSlots.get(index);
+          if (known && known.root === root) return;
           await refreshEntitlement();
           if (!root.isConnected || !eligibleRoute() ||
               entitlementState !== "ads_allowed" ||
@@ -159,44 +203,31 @@
             return;
           }
 
-          const existing = renderedSlots.get(index);
-          if (existing) {
-            // ListView.builder may recycle the Flutter platform view on scroll.
-            // Reattach the existing frame without creating a fourth placement.
-            if (existing.root !== root) {
-              existing.root = root;
-              target.replaceChildren(existing.frame);
-            }
-            return;
+          const latest = renderedSlots.get(index);
+          if (latest && latest.root === root) return;
+          if (latest) {
+            latest.target.replaceChildren();
+            renderedSlots.delete(index);
           }
-          if (renderedSlots.size >= maxAdsPerPage) return;
 
-          const tagTemplate = document.getElementById(
-            "sharemarium-ninja-admax-official-tag",
-          );
-          if (!tagTemplate) return;
+          window.admaxads = window.admaxads || [];
+          window.admaxads.push({ admax_id: id, type });
+          target.setAttribute("data-admax-load", "queued");
+          renderedSlots.set(index, { root, target });
+          loadAsyncSdk();
+        }
 
-          const frame = document.createElement("iframe");
-          frame.setAttribute("title", "広告");
-          frame.setAttribute(
-            "sandbox",
-            "allow-scripts allow-popups allow-popups-to-escape-sandbox",
-          );
-          frame.style.width = "100%";
-          frame.style.height = "250px";
-          frame.style.border = "0";
-          frame.style.display = "block";
-          frame.srcdoc =
-            '<!doctype html><html lang="ja"><head>' +
-            '<meta charset="utf-8">' +
-            '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-            '<style>html,body{margin:0;padding:0;width:100%;height:100%;' +
-            'overflow:auto;text-align:center}</style></head><body>' +
-            tagTemplate.innerHTML +
-            '</body></html>';
-
-          renderedSlots.set(index, { root, frame });
-          target.replaceChildren(frame);
+        function watchTimelineDom() {
+          if (!document.body) return;
+          const observer = new MutationObserver(() => {
+            if (!eligibleRoute()) return;
+            for (const root of document.querySelectorAll(
+              ".sharemarium-admax-timeline-slot",
+            )) {
+              void mountSlot(root);
+            }
+          });
+          observer.observe(document.body, { childList: true, subtree: true });
         }
 
         window.addEventListener("sharemarium:admax-slot-ready", (event) => {
@@ -221,6 +252,11 @@
             scheduleEntitlementReview();
             return result;
           };
+        }
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", watchTimelineDom);
+        } else {
+          watchTimelineDom();
         }
       })();
     </script>
@@ -273,6 +309,13 @@
     <template id="sharemarium-ninja-admax-official-tag">
 <!-- admax -->
 <script src="https://adm.shinobi.jp/s/234edc1d1284546b2d177ac7c5531101"></script>
+<!-- admax -->
+    </template>
+    <template id="sharemarium-ninja-admax-issued-async-tag">
+<!-- admax -->
+<div class="admax-ads" data-admax-id="234edc1d1284546b2d177ac7c5531101" style="display:inline-block;width:728px;height:90px;"></div>
+<script type="text/javascript">(admaxads = window.admaxads || []).push({admax_id: "234edc1d1284546b2d177ac7c5531101",type: "banner"});</script>
+<script type="text/javascript" charset="utf-8" src="https://adm.shinobi.jp/st/t.js" async></script>
 <!-- admax -->
     </template>
     <noscript>

@@ -38,13 +38,13 @@ Future<bool> showPostReplyEditDialog({
             Icon(Icons.lock_rounded, size: 56),
             SizedBox(height: 14),
             Text(
-              '返信の編集はPremium限定です',
+              '現在のアカウントでは返信を編集できません',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             SizedBox(height: 8),
             Text(
-              '契約終了後も既存の返信は閲覧・削除できますが、編集はできません。',
+              '既存の返信の閲覧と、ご自身の返信の削除は引き続き行えます。',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13),
             ),

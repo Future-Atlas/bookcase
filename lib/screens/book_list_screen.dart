@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
+import '../widgets/book_page_bar.dart';
 import '../widgets/post_card.dart';
 import '../widgets/timeline_ad_slot.dart';
 import '../widgets/timeline_ad_policy.dart';
@@ -16,6 +17,7 @@ import '../widgets/post_reply_dialog.dart';
 import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
 import '../widgets/amazon_book_link.dart';
+import '../widgets/public_posts_link.dart';
 import 'report_post_dialog.dart';
 import 'user_profile_screen.dart';
 import 'post_engagement_users_screen.dart';
@@ -223,7 +225,7 @@ class _BookListScreenState extends State<BookListScreen> {
       FavoriteToggleResult.added => 'お気に入りに登録しました。',
       FavoriteToggleResult.removed => 'お気に入りから解除しました。',
       FavoriteToggleResult.standardLimitReached =>
-        '通常利用ではお気に入りは3冊までです。サブスクでは12冊まで登録できます。',
+        'お気に入りは3冊までです。登録済みの本と入れ替えてください。',
       FavoriteToggleResult.subscriberLimitReached =>
         'お気に入りは12冊までです。登録済みの本と入れ替えてください。',
       FavoriteToggleResult.requiresRead => '読了（投稿）した本のみお気に入りに追加できます。',
@@ -795,6 +797,16 @@ class _BookListScreenState extends State<BookListScreen> {
                               isLoadingInitial:
                                   _controller.isLoadingRecommended,
                             ),
+                          // Only place the genre ad between real book rows.
+                          if (kIsWeb &&
+                              timelineAdReady &&
+                              widget.initialGenre == null &&
+                              _controller.recommendedBooks.isNotEmpty &&
+                              _controller.westernBooks.isNotEmpty)
+                            const TimelineAdSlot(
+                              key: ValueKey('home-ad-between-recommended-western'),
+                              slotIndex: 0,
+                            ),
                           if (widget.initialGenre == null ||
                               widget.initialGenre == 'western')
                             _buildGenreSection(
@@ -808,6 +820,15 @@ class _BookListScreenState extends State<BookListScreen> {
                               isLoadingMore: _controller.isLoadingMoreWestern,
                               hasMore: _controller.hasMoreWestern,
                               isLoadingInitial: _controller.isLoadingWestern,
+                            ),
+                          if (kIsWeb &&
+                              timelineAdReady &&
+                              widget.initialGenre == null &&
+                              _controller.westernBooks.isNotEmpty &&
+                              _controller.popularBooks.isNotEmpty)
+                            const TimelineAdSlot(
+                              key: ValueKey('home-ad-between-western-popular'),
+                              slotIndex: 1,
                             ),
                           if (widget.initialGenre == null ||
                               widget.initialGenre == 'popular')
@@ -987,19 +1008,19 @@ class _BookListScreenState extends State<BookListScreen> {
                 icon: Icons.rate_review_outlined,
                 title: '読書体験をレビューとして残す',
                 description:
-                    '星評価だけでなく、印象に残った点や読後の考えを文章で記録できます。ネタバレを含む投稿は明示して公開できます。',
+                    '読んだ本を評価するだけでなく、印象に残った点や読後の考えを文章で記録できます。読んだ本を記録して、あなただけの本棚を作りましょう！',
               ),
               _buildServicePoint(
                 icon: Icons.people_outline,
-                title: 'ほかの読者の感想に触れる',
+                title: '他の読者の感想に触れる',
                 description:
-                    '公開レビューや返信、リアクションを通じて、同じ作品を読んだ人の異なる見方や次に読む本の候補を見つけられます。',
+                    '他ユーザーのレビューやリアクションを通じて、同じ作品を読んだ人の、自分と異なる感想に触れることができます。',
               ),
               _buildServicePoint(
                 icon: Icons.menu_book_outlined,
-                title: '書籍情報と利用者レビューを分けて表示',
+                title: '次に読む本を見つける',
                 description:
-                    'タイトル・著者・書影などは外部の書籍情報を利用する場合がありますが、Sharemariumのレビュー本文は利用者自身の読書体験にもとづく投稿です。',
+                    '「タイトル・著者・出版社」で検索することができます。気になる書籍のレビューを読んで、次に読む本を決めましょう！',
               ),
             ],
           ),
@@ -1008,11 +1029,7 @@ class _BookListScreenState extends State<BookListScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).pushNamed('/posts'),
-                icon: const Icon(Icons.forum_outlined),
-                label: const Text('公開レビューを見る'),
-              ),
+              const PublicPostsLink(),
               TextButton(
                 onPressed: () => Navigator.of(context).pushNamed('/about'),
                 child: const Text('サービス・運営方針について'),
@@ -1021,12 +1038,8 @@ class _BookListScreenState extends State<BookListScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            '本の一覧そのものではなく、実際に読んだ人のレビューや交流がSharemariumの中心コンテンツです。',
-            style: TextStyle(
-              color: mutedColor,
-              fontSize: 12,
-              height: 1.5,
-            ),
+            'あなたの感想や交流が、Sharemariumを作ります。',
+            style: TextStyle(color: mutedColor, fontSize: 12, height: 1.5),
           ),
         ],
       ),
@@ -1222,7 +1235,7 @@ class _BookListScreenState extends State<BookListScreen> {
     // Page controls live outside the horizontal list so they remain visible
     // even when the nine cards fill (or overflow) the available width.
     return SizedBox(
-      height: 220,
+      height: 252,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -1230,7 +1243,7 @@ class _BookListScreenState extends State<BookListScreen> {
             _buildCarouselPageButton(
               direction: AxisDirection.left,
               tooltip: '前の9冊に戻る',
-              onPressed: onLoadPrevious,
+              onPressed: isLoadingMore ? null : onLoadPrevious,
             ),
           Expanded(
             child: _PagedBookScroller(
@@ -1314,7 +1327,7 @@ class _BookListScreenState extends State<BookListScreen> {
         if (_controller.isSearching)
           const Padding(
             padding: EdgeInsets.only(bottom: 12),
-            child: LinearProgressIndicator(minHeight: 2),
+            child: Center(child: CircularProgressIndicator()),
           ),
         if (results.isEmpty)
           Container(
@@ -1403,7 +1416,7 @@ class _BookListScreenState extends State<BookListScreen> {
           ),
         ),
         if (_controller.isSearching)
-          const LinearProgressIndicator(minHeight: 2)
+          const Center(child: CircularProgressIndicator())
         else if (results.isEmpty)
           const SizedBox(
             height: 180,
@@ -1494,7 +1507,9 @@ class _BookListScreenState extends State<BookListScreen> {
         .toDouble();
 
     final postCount = _controller.timelinePosts.length;
-    final adSlots = kIsWeb && timelineAdEnabled
+    // Genre separators use slots 0 and 1. Subsequent timeline ads receive
+    // their own indices starting at 2, with no arbitrary page-wide cap.
+    final adSlots = kIsWeb && timelineAdReady
         ? timelineAdSlotCount(postCount)
         : 0;
 
@@ -1518,14 +1533,16 @@ class _BookListScreenState extends State<BookListScreen> {
           controller: _timelineScrollController,
           padding: const EdgeInsets.only(right: 8),
           physics: const ClampingScrollPhysics(),
-          // Between-post ads at 2, 4 and 6 posts (up to three).
+          // Insert ads after each configured number of posts, provided
+          // another real post follows. No arbitrary per-page slot limit.
           // Change NINJA_ADMAX_POSTS_PER_AD to 5 for normal operation.
           itemCount: postCount + adSlots,
           itemBuilder: (context, index) {
             if (adSlots > 0 && isTimelineAdItem(index, postCount)) {
               return TimelineAdSlot(
-                key: ValueKey('timeline-ad-slot-$index'),
-                slotIndex: index ~/ (timelinePostsPerAd + 1),
+                key: ValueKey('home-timeline-ad-slot-$index'),
+                slotIndex: homeTimelineAdSlotStart +
+                    index ~/ (timelinePostsPerAd + 1),
               );
             }
             final postIndex = adSlots > 0
@@ -1924,9 +1941,6 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
   bool _isRepositioningAfterPageChange = false;
   double _overscrollDistance = 0;
 
-  bool get _showDesktopScrollbar =>
-      mounted && MediaQuery.sizeOf(context).width >= 768;
-
   @override
   void didUpdateWidget(covariant _PagedBookScroller oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -1969,7 +1983,9 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
   }
 
   void _loadPreviousPage() {
-    if (_pageChangePending || !widget.canLoadPrevious) return;
+    if (_pageChangePending || widget.isLoadingMore || !widget.canLoadPrevious) {
+      return;
+    }
     _pageChangePending = true;
     _landAtEndAfterChange = true;
     widget.onLoadPrevious();
@@ -2016,7 +2032,7 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
       controller: _scrollController,
       scrollDirection: Axis.horizontal,
       clipBehavior: Clip.none,
-      padding: EdgeInsets.only(bottom: _showDesktopScrollbar ? 12 : 0),
+      padding: EdgeInsets.zero,
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
@@ -2028,21 +2044,41 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
       ),
     );
 
-    return NotificationListener<ScrollNotification>(
-      onNotification: _handleScrollNotification,
-      child: _showDesktopScrollbar
-          ? Scrollbar(
-              controller: _scrollController,
-              thumbVisibility: true,
-              trackVisibility: true,
-              interactive: true,
-              thickness: 8,
-              radius: const Radius.circular(4),
-              notificationPredicate: (notification) =>
-                  notification.metrics.axis == Axis.horizontal,
-              child: list,
-            )
-          : list,
+    return Column(
+      children: [
+        Expanded(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: AbsorbPointer(
+                  absorbing: widget.isLoadingMore,
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: _handleScrollNotification,
+                    child: list,
+                  ),
+                ),
+              ),
+              if (widget.isLoadingMore)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: Theme.of(
+                      context,
+                    ).scaffoldBackgroundColor.withValues(alpha: 0.7),
+                    child: const Center(child: CircularProgressIndicator()),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        BookPageBar(
+          pageNumber: widget.pageNumber,
+          canLoadPrevious: widget.canLoadPrevious,
+          hasMore: widget.hasMore,
+          isLoading: widget.isLoadingMore,
+          onNext: _loadNextPage,
+          onPrevious: _loadPreviousPage,
+        ),
+      ],
     );
   }
 }
