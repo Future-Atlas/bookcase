@@ -344,6 +344,7 @@ module.exports = async (req, res) => {
     <main>
       <nav class="breadcrumb" aria-label="パンくず"><a href="/">Sharemarium</a> / <a href="/posts">投稿一覧</a> / <a href="${escapeHtml(profileUrl)}">${escapeHtml(username)}</a> / レビュー</nav>
       <h1>『${escapeHtml(bookTitle)}』のレビュー</h1>
+      ${/^(\d{13}|\d{9}[\dXx])$/.test(post.book_id || "") ? `<p><a href="/book/${encodeURIComponent(post.book_id)}">この本の書籍情報と他の感想を見る</a></p>` : ""}
       <div class="meta">
         <span>投稿者: <a href="${escapeHtml(profileUrl)}">${escapeHtml(username)}</a></span>
         ${ratingHtml}

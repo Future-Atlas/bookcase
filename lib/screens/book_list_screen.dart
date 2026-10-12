@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
+import '../widgets/book_search_results.dart';
 import '../widgets/rakuten_credit.dart';
-import '../widgets/book_page_bar.dart';
+import '../models/profile_page_color.dart';
+import '../api/rakuten_api.dart';
 import '../widgets/post_card.dart';
 import '../widgets/timeline_ad_slot.dart';
 import '../widgets/timeline_ad_policy.dart';
@@ -18,15 +20,22 @@ import '../widgets/post_reply_dialog.dart';
 import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
 import '../widgets/rakuten_book_link.dart';
+import '../widgets/public_posts_link.dart';
 import 'report_post_dialog.dart';
 import 'user_profile_screen.dart';
 import 'post_engagement_users_screen.dart';
 
 class BookListScreen extends StatefulWidget {
-  const BookListScreen({super.key, this.onOpenUserProfile, this.initialGenre});
+  const BookListScreen({
+    super.key,
+    this.onOpenUserProfile,
+    this.initialGenre,
+    this.initialBookId,
+  });
 
   final ValueChanged<String>? onOpenUserProfile;
   final String? initialGenre;
+  final String? initialBookId;
 
   @override
   State<BookListScreen> createState() => _BookListScreenState();
@@ -42,6 +51,21 @@ class _BookListScreenState extends State<BookListScreen> {
     super.initState();
     _controller = BookListController();
     _controller.initialize(context);
+    if (widget.initialBookId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openInitialBook());
+    }
+  }
+
+  Future<void> _openInitialBook() async {
+    final book = await RakutenApi.fetchBookById(widget.initialBookId!);
+    if (!mounted) return;
+    if (book != null) {
+      _showBookDetailDialog(book);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('書籍情報を取得できませんでした。時間をおいて再度お試しください。')),
+      );
+    }
   }
 
   @override
@@ -796,12 +820,14 @@ class _BookListScreenState extends State<BookListScreen> {
                             ),
                           // Only place the genre ad between real book rows.
                           if (kIsWeb &&
-                              timelineAdReady &&
+                              timelineAdDisplayReady &&
                               widget.initialGenre == null &&
                               _controller.recommendedBooks.isNotEmpty &&
                               _controller.westernBooks.isNotEmpty)
                             const TimelineAdSlot(
-                              key: ValueKey('home-ad-between-recommended-western'),
+                              key: ValueKey(
+                                'home-ad-between-recommended-western',
+                              ),
                               slotIndex: 0,
                             ),
                           if (widget.initialGenre == null ||
@@ -819,7 +845,7 @@ class _BookListScreenState extends State<BookListScreen> {
                               isLoadingInitial: _controller.isLoadingWestern,
                             ),
                           if (kIsWeb &&
-                              timelineAdReady &&
+                              timelineAdDisplayReady &&
                               widget.initialGenre == null &&
                               _controller.westernBooks.isNotEmpty &&
                               _controller.popularBooks.isNotEmpty)
@@ -1026,11 +1052,7 @@ class _BookListScreenState extends State<BookListScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).pushNamed('/posts'),
-                icon: const Icon(Icons.forum_outlined),
-                label: const Text('他ユーザーのレビューに出会う'),
-              ),
+              const PublicPostsLink(),
               TextButton(
                 onPressed: () => Navigator.of(context).pushNamed('/about'),
                 child: const Text('サービス・運営方針について'),
@@ -1176,7 +1198,7 @@ class _BookListScreenState extends State<BookListScreen> {
               color: const Color(0xFFD00303).withValues(alpha: 0.25),
             ),
           ),
-          child: const Column(
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
@@ -1184,7 +1206,9 @@ class _BookListScreenState extends State<BookListScreen> {
                 height: 24,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Color(0xFFD00303),
+                  color: ProfilePageColors.colorFor(
+                    context.watch<SupabaseService>().activePageColorKey,
+                  ),
                 ),
               ),
               SizedBox(height: 10),
@@ -1262,7 +1286,6 @@ class _BookListScreenState extends State<BookListScreen> {
             _buildCarouselPageButton(
               direction: AxisDirection.right,
               tooltip: '次の9冊を読み込む',
-              isLoading: isLoadingMore,
               onPressed: isLoadingMore ? null : () => onLoadMore(),
             ),
         ],
@@ -1274,7 +1297,6 @@ class _BookListScreenState extends State<BookListScreen> {
     required AxisDirection direction,
     required String tooltip,
     required VoidCallback? onPressed,
-    bool isLoading = false,
   }) {
     return SizedBox(
       width: 28,
@@ -1288,19 +1310,10 @@ class _BookListScreenState extends State<BookListScreen> {
               width: 28,
               height: 72,
               child: Center(
-                child: isLoading
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFFD00303),
-                        ),
-                      )
-                    : CustomPaint(
-                        size: const Size(22, 42),
-                        painter: _CarouselTrianglePainter(direction),
-                      ),
+                child: CustomPaint(
+                  size: const Size(22, 42),
+                  painter: _CarouselTrianglePainter(direction),
+                ),
               ),
             ),
           ),
@@ -1343,38 +1356,7 @@ class _BookListScreenState extends State<BookListScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  final columnCount = width >= 900
-                      ? 5
-                      : width >= 680
-                      ? 4
-                      : width >= 460
-                      ? 3
-                      : 2;
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    clipBehavior: Clip.none,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columnCount,
-                      childAspectRatio: 0.65,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                    ),
-                    itemCount: results.length,
-                    itemBuilder: (context, index) {
-                      final book = results[index];
-                      return BookCard(
-                        book: book,
-                        width: double.infinity,
-                        onTap: () => _showBookDetailDialog(book),
-                      );
-                    },
-                  );
-                },
-              ),
+              BookSearchResults(books: results, onTap: _showBookDetailDialog),
               if (!_controller.isSearching &&
                   _controller.canLoadMoreSearchResults)
                 Padding(
@@ -1508,13 +1490,10 @@ class _BookListScreenState extends State<BookListScreen> {
         .toDouble();
 
     final postCount = _controller.timelinePosts.length;
-    // Two genre separators reserve slots 0 and 1. The home timeline
-    // receives the final page-wide Ninja AdMax placement, at slot 2.
-    final adSlots = kIsWeb && timelineAdReady
-        ? timelineAdSlotCount(
-            postCount,
-            maximumSlots: homeTimelineMaximumAds,
-          )
+    // Genre separators use slots 0 and 1. Subsequent timeline ads receive
+    // their own indices starting at 2, with no arbitrary page-wide cap.
+    final adSlots = kIsWeb && timelineAdDisplayReady
+        ? timelineAdSlotCount(postCount)
         : 0;
 
     return Container(
@@ -1537,29 +1516,20 @@ class _BookListScreenState extends State<BookListScreen> {
           controller: _timelineScrollController,
           padding: const EdgeInsets.only(right: 8),
           physics: const ClampingScrollPhysics(),
-          // Keep a single timeline ad after post 2, alongside the two
-          // book-genre separators, for the three-slot page-wide limit.
+          // Insert ads after each configured number of posts, provided
+          // another real post follows. No arbitrary per-page slot limit.
           // Change NINJA_ADMAX_POSTS_PER_AD to 5 for normal operation.
           itemCount: postCount + adSlots,
           itemBuilder: (context, index) {
-            if (adSlots > 0 &&
-                isTimelineAdItem(
-                  index,
-                  postCount,
-                  maximumSlots: homeTimelineMaximumAds,
-                )) {
+            if (adSlots > 0 && isTimelineAdItem(index, postCount)) {
               return TimelineAdSlot(
                 key: ValueKey('home-timeline-ad-slot-$index'),
-                slotIndex: homeTimelineAdSlotStart +
-                    index ~/ (timelinePostsPerAd + 1),
+                slotIndex:
+                    homeTimelineAdSlotStart + index ~/ (timelinePostsPerAd + 1),
               );
             }
             final postIndex = adSlots > 0
-                ? timelinePostIndexForItem(
-                    index,
-                    postCount,
-                    maximumSlots: homeTimelineMaximumAds,
-                  )
+                ? timelinePostIndexForItem(index, postCount)
                 : index;
             final post = _controller.timelinePosts[postIndex];
             final currentProfileId = Provider.of<SupabaseService>(
@@ -2071,19 +2041,17 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
                     color: Theme.of(
                       context,
                     ).scaffoldBackgroundColor.withValues(alpha: 0.7),
-                    child: const Center(child: CircularProgressIndicator()),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: ProfilePageColors.colorFor(
+                          context.watch<SupabaseService>().activePageColorKey,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
             ],
           ),
-        ),
-        BookPageBar(
-          pageNumber: widget.pageNumber,
-          canLoadPrevious: widget.canLoadPrevious,
-          hasMore: widget.hasMore,
-          isLoading: widget.isLoadingMore,
-          onNext: _loadNextPage,
-          onPrevious: _loadPreviousPage,
         ),
       ],
     );

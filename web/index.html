@@ -43,11 +43,11 @@
         // The original publisher synchronous tag is kept unchanged in the
         // inert template below. The actual live integration uses async SDK.
         const expectedHost = "www.sharemarium.com";
-        const maxAdsPerPage = 3;
         const renderedSlots = new Map();
         let entitlementToken = null;
         let entitlementState = "unknown";
         let entitlementRequest = null;
+        let entitlementRetryAt = 0;
 
         function eligibleRoute() {
           return (
@@ -90,12 +90,14 @@
           if (token === entitlementToken && entitlementRequest) {
             return entitlementRequest;
           }
-          if (token === entitlementToken && entitlementState !== "unknown") {
+          if (token === entitlementToken &&
+              Date.now() < entitlementRetryAt) {
             return;
           }
 
           entitlementToken = token;
           entitlementState = "unknown";
+          entitlementRetryAt = Date.now() + 60000;
           const request = fetch("/api/ad-entitlement", {
             method: "GET",
             headers: { Authorization: "Bearer " + token },
@@ -113,7 +115,10 @@
                   : "ad_free";
             })
             .catch(() => {
-              if (entitlementToken === token) entitlementState = "ad_free";
+              if (entitlementToken === token) {
+                entitlementState = "unknown";
+                entitlementRetryAt = Date.now() + 15000;
+              }
             })
             .finally(() => {
               if (entitlementRequest === request) entitlementRequest = null;
@@ -136,6 +141,7 @@
         }
 
         let sdkScheduled = false;
+        let sdkRetryCount = 0;
 
         function loadAsyncSdk() {
           if (sdkScheduled) return;
@@ -156,9 +162,13 @@
             script.src = "https://adm.shinobi.jp/st/t.js";
             script.async = true;
             script.onerror = () => {
-              console.warn("[Sharemarium AdMax] Failed to load async SDK");
               for (const slot of renderedSlots.values()) {
                 slot.target.setAttribute("data-admax-load", "error");
+              }
+              // Only retry SDK transport failures, never unfilled impressions.
+              if (sdkRetryCount < 2) {
+                sdkRetryCount += 1;
+                window.setTimeout(loadAsyncSdk, sdkRetryCount * 3000);
               }
             };
             script.onload = () => {
@@ -189,8 +199,7 @@
           const target = root.querySelector(
             type === "switch" ? ".admax-switch" : ".admax-ads",
           );
-          if (!Number.isInteger(index) || index < 0 ||
-              index >= maxAdsPerPage ||
+          if (!Number.isSafeInteger(index) || index < 0 ||
               !/^[A-Za-z0-9_-]{8,128}$/.test(id) ||
               (type !== "switch" && type !== "banner") ||
               !target || target.getAttribute("data-admax-id") !== id) return;
@@ -211,7 +220,6 @@
             latest.target.replaceChildren();
             renderedSlots.delete(index);
           }
-          if (renderedSlots.size >= maxAdsPerPage) return;
 
           window.admaxads = window.admaxads || [];
           window.admaxads.push({ admax_id: id, type });
@@ -239,8 +247,20 @@
 
         function scheduleEntitlementReview() {
           if (!eligibleRoute()) clearLoadedAdsIfDisallowed();
-          void refreshEntitlement().then(clearLoadedAdsIfDisallowed);
+          void refreshEntitlement().then(() => {
+            clearLoadedAdsIfDisallowed();
+            if (eligibleRoute() && entitlementState === "ads_allowed") {
+              for (const root of document.querySelectorAll(".sharemarium-admax-timeline-slot")) {
+                void mountSlot(root);
+              }
+            }
+          });
         }
+
+        // Retry transient entitlement failures without bypassing ad-free users.
+        window.setInterval(() => {
+          if (!document.hidden && eligibleRoute()) scheduleEntitlementReview();
+        }, 60000);
 
         window.addEventListener("popstate", scheduleEntitlementReview);
         window.addEventListener("pageshow", scheduleEntitlementReview);

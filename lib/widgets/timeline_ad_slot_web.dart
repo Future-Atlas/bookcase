@@ -5,6 +5,7 @@ import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 
 import 'timeline_ad_policy.dart';
+import '../config/app_environment.dart';
 
 const String _viewTypePrefix = 'sharemarium-ninja-admax-native';
 
@@ -27,7 +28,10 @@ class TimelineAdSlot extends StatelessWidget {
         ..classes.add('sharemarium-admax-timeline-slot')
         ..setAttribute('data-sharemarium-admax-slot-index', '$index')
         ..setAttribute('data-sharemarium-admax-async-id', ninjaAdmaxAsyncId)
-        ..setAttribute('data-sharemarium-admax-async-type', ninjaAdmaxAsyncType);
+        ..setAttribute(
+          'data-sharemarium-admax-async-type',
+          ninjaAdmaxAsyncType,
+        );
       root.style
         ..width = '100%'
         ..height = ninjaAdmaxAsyncType == 'banner' ? '90px' : '250px'
@@ -46,10 +50,9 @@ class TimelineAdSlot extends StatelessWidget {
 
       root.append(target);
       Future<void>.delayed(Duration.zero, () {
-        html.window.dispatchEvent(html.CustomEvent(
-          'sharemarium:admax-slot-ready',
-          detail: root,
-        ));
+        html.window.dispatchEvent(
+          html.CustomEvent('sharemarium:admax-slot-ready', detail: root),
+        );
       });
       return root;
     });
@@ -57,8 +60,21 @@ class TimelineAdSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!timelineAdReady || slotIndex < 0 ||
-        slotIndex >= timelineMaximumAdsPerPage) {
+    if (AppEnvironmentConfig.current == AppEnvironment.staging) {
+      return Container(
+        key: ValueKey('staging-ad-$slotIndex'),
+        width: double.infinity,
+        height: 140,
+        margin: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFF1D600)),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        alignment: Alignment.center,
+        child: const Text('広告（検証用表示・配信なし）'),
+      );
+    }
+    if (!timelineAdReady || slotIndex < 0) {
       return const SizedBox.shrink();
     }
     _registerFactory(slotIndex);
@@ -73,7 +89,7 @@ class TimelineAdSlot extends StatelessWidget {
             container: true,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                border: Border.all(color: Theme.of(context).dividerColor),
+                border: Border.all(color: const Color(0xFFF1D600)),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Padding(
