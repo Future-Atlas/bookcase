@@ -116,23 +116,30 @@ test("the issued synchronous tag remains verbatim but inert", () => {
     /IFrameElement|HtmlIFrameElement|srcdoc/);
 });
 
-test("timeline retains every-two-post spacing within its one-slot page budget", () => {
+test("timeline has no application-imposed slot cap", () => {
   const src = read("lib/screens/book_list_screen.dart");
   const policy = read("lib/widgets/timeline_ad_policy.dart");
-  assert.match(src, /isTimelineAdItem\(\s*index,\s*postCount,\s*maximumSlots: homeTimelineMaximumAds,/);
-  assert.match(src, /timelinePostIndexForItem\(\s*index,\s*postCount,\s*maximumSlots: homeTimelineMaximumAds,/);
+  const slot = read("lib/widgets/timeline_ad_slot_web.dart");
+  const html = read("web/index.html");
+
+  assert.match(src, /timelineAdSlotCount\(postCount\)/);
+  assert.match(src, /isTimelineAdItem\(index, postCount\)/);
+  assert.match(src, /timelinePostIndexForItem\(index, postCount\)/);
   assert.match(src, /kIsWeb && timelineAdReady/);
   assert.match(policy, /defaultValue: 2/);
-  assert.match(policy, /timelineMaximumAdsPerPage = 3/);
   assert.match(policy, /NINJA_ADMAX_POSTS_PER_AD/);
+  assert.match(policy, /return \(postCount - 1\) ~\/ postsPerAd;/);
+  assert.doesNotMatch(policy, /timelineMaximumAdsPerPage|homeTimelineMaximumAds|maximumSlots/);
+  assert.doesNotMatch(slot, /timelineMaximumAdsPerPage|slotIndex >=/);
+  assert.doesNotMatch(html, /maxAdsPerPage|renderedSlots\.size >= maxAdsPerPage/);
+  assert.match(html, /Number\.isSafeInteger\(index\)/);
 });
 
-test("home book types have two ads in between, plus just one timeline placement", () => {
+test("two home book-genre separators and repeated timeline slots have unique indices", () => {
   const home = read("lib/screens/book_list_screen.dart");
   const policy = read("lib/widgets/timeline_ad_policy.dart");
   const html = read("web/index.html");
 
-  // The insertion order must remain: recommended → ad → western → ad → popular.
   const anchors = [
     "title: 'おすすめの本'",
     "home-ad-between-recommended-western",
@@ -145,26 +152,17 @@ test("home book types have two ads in between, plus just one timeline placement"
   const indexes = anchors.map((anchor) => home.indexOf(anchor));
   assert.ok(indexes.every((at) => at >= 0), "all home section anchors exist");
   for (let i = 1; i < indexes.length; i++) {
-    assert.ok(indexes[i - 1] < indexes[i], "ad follows the preceding book type");
+    assert.ok(indexes[i - 1] < indexes[i], "genre ad follows preceding section");
   }
 
-  // Both gaps require real books, Flutter Web, the home route, and ad readiness.
   assert.match(home, /if \(kIsWeb &&\s+timelineAdReady &&\s+widget\.initialGenre == null &&\s+_controller\.recommendedBooks\.isNotEmpty &&\s+_controller\.westernBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-recommended-western'\),\s+slotIndex: 0,/);
   assert.match(home, /if \(kIsWeb &&\s+timelineAdReady &&\s+widget\.initialGenre == null &&\s+_controller\.westernBooks\.isNotEmpty &&\s+_controller\.popularBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-western-popular'\),\s+slotIndex: 1,/);
   assert.match(home, /if \(_controller\.searchQuery\.isNotEmpty\)\s+_buildSearchResults\(\)\s+else/);
-
-  // The remaining timeline slot must use index 2 and at most one placement.
-  assert.match(policy, /timelineMaximumAdsPerPage = 3/);
   assert.match(policy, /homeGenreAdSlotCount = 2/);
   assert.match(policy, /homeTimelineAdSlotStart = homeGenreAdSlotCount/);
-  assert.match(policy, /homeTimelineMaximumAds =\s+timelineMaximumAdsPerPage - homeGenreAdSlotCount/);
-  assert.match(home, /slotIndex: homeTimelineAdSlotStart \+/);
-  assert.equal((home.match(/maximumSlots: homeTimelineMaximumAds/g) || []).length, 3);
-  assert.match(html, /const maxAdsPerPage = 3;/);
-
-  // Only one async SDK per page; the three slots share the same approved tag.
+  assert.match(home, /slotIndex: homeTimelineAdSlotStart \+\s+index ~\/ \(timelinePostsPerAd \+ 1\)/);
   assert.match(html, /if \(sdkScheduled\) return/);
-  assert.match(html, /renderedSlots\.size >= maxAdsPerPage/);
+  assert.doesNotMatch(html, /const maxAdsPerPage/);
 });
 
 test("ad configuration fails closed without an actual async publisher ID", () => {
@@ -180,25 +178,29 @@ test("ad configuration fails closed without an actual async publisher ID", () =>
   assert.match(widget, /'90px'/);
 });
 
-test("three eligible native slots request the async SDK only once", async () => {
+test("ten simultaneous eligible native slots queue ads and share one async SDK", async () => {
   const r = runtime();
-  r.emitSlot(0);
-  r.emitSlot(1);
-  r.emitSlot(2);
-  r.emitSlot(3);
+  for (let index = 0; index < 10; index++) r.emitSlot(index);
   await r.flush();
   assert.equal(r.requests.length, 1);
   assert.equal(r.requests[0].src, "https://adm.shinobi.jp/st/t.js");
   assert.equal(r.requests[0].async, true);
   const queue = Array.from(r.window.admaxads);
-  assert.equal(queue.length, 3);
+  assert.equal(queue.length, 10);
   for (const item of queue) {
     assert.equal(item.admax_id, "234edc1d1284546b2d177ac7c5531101");
     assert.equal(item.type, "banner");
   }
-  for (const target of r.targets.slice(0, 3)) {
+  for (const target of r.targets) {
     assert.equal(target.getAttribute("data-admax-load"), "sdk-loaded");
   }
+
+  // A later-scrolled slot must not be silently dropped by the old 3-slot cap.
+  r.emitSlot(10);
+  await r.flush();
+  assert.equal(r.window.admaxads.length, 11);
+  assert.equal(r.requests.length, 2, "SPA SDK reload handles late-mounted slot");
+  assert.equal(r.targets[10].getAttribute("data-admax-load"), "sdk-loaded");
 });
 
 test("ad-free members and entitlement errors never load SDK", async () => {

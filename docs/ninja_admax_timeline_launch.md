@@ -32,10 +32,11 @@ No GitHub Actions secret or additional variable is needed for the published adve
 - **Only on `https://www.sharemarium.com/` Flutter Web home screen.** Individual genre routes, search results, profiles, and settings never receive additional ad slots.
 - **Placement 0:** after the 「おすすめの本」 carousel and before the 「洋書」 carousel. Only when both sections actually contain books.
 - **Placement 1:** after the 「洋書」 carousel and before 「人気作品」. Only when both sections actually contain books.
-- **Placement 2:** inside the home screen's embedded timeline, after post 2 and before post 3, if those posts exist.
-- **Three advertisements maximum per page**, shared by the two genre separators and the timeline. This follows [the publisher's three-placement recommendation](https://www.ninja.co.jp/admax/help/faq/4269/). Consequently the embedded timeline no longer uses placements after posts 4 and 6 while two category placements are reserved. If one or both genre separators have no content, the unused positions are not reused by the timeline.
-- `NINJA_ADMAX_POSTS_PER_AD=2` is used during the trial; the normal setting of `5` moves **the single timeline placement** to after post 5. Category placements are independent of the post interval.
-- Each ad uses one of the fixed **unique numeric slot indices 0, 1, 2** to avoid collisions in the SPA ad controller and to share the same publisher SDK.
+- **Placement 2 onward:** inside the home screen's embedded timeline, after every 2nd, 4th, 6th, 8th, etc. real post, **only if a next real post exists**. The slot indices are 2, 3, 4, 5, ... to remain unique across the page.
+- **No application-imposed maximum ad count per page.** The actual number of timeline slots is derived from the available post count and `NINJA_ADMAX_POSTS_PER_AD`. Both book-genre separators remain independent of the timeline. An empty adjacent genre means its separator ad is not rendered.
+- The [Ninja AdMax official FAQ](https://www.ninja.co.jp/admax/help/faq/4269/) **still recommends up to three ads on one page**, and warns that larger counts may not display correctly. Removing Sharemarium's guard does **not** change the ad provider's serving limits, ad quality, eCPM, or publisher terms. More app-rendered slots do not guarantee more paid impressions. Verify actual banners and earnings separately.
+- `NINJA_ADMAX_POSTS_PER_AD=2` is used during the trial; switching it to `5` places ads after posts 5, 10, 15, ... when more posts exist, without a maximum. Book-genre placements are independent of this setting.
+- The genre separators keep unique indices 0 and 1. The embedded timeline uses monotonically increasing indices starting at 2. The Flutter widget and SPA controller no longer reject slots based on a hardcoded maximum.
 - `HtmlElementView` creates a genuine inline `<div class="admax-ads" data-admax-id="...">`. The JS controller queues it, then loads `st/t.js` **asynchronously**.
 - The issued banner is **728 × 90 px**. Its dimensions are retained; on narrow screens the banner container permits horizontal scrolling instead of truncating or distorting creatives. For a phone-responsive experience, obtain a dedicated smartphone or PC/SP switching advertisement tag from Ninja AdMax.
 - Ad-free members, entitlement lookup failures and other routes must not load the AdMax SDK. Existing SNS / subscription visibility remains unchanged.
@@ -43,10 +44,10 @@ No GitHub Actions secret or additional variable is needed for the published adve
 ## Verification after deployment
 
 1. Confirm the main-branch Flutter CI and production Vercel deployment succeed.
-2. With an ad blocker disabled, open the real homepage in a logged-out Chrome browser. Confirm genre separators appear only when both adjacent book rows contain books, and that the third slot appears after the first two timeline posts (when at least 3 posts are available).
+2. With an ad blocker disabled, open the real homepage in a logged-out Chrome browser. Confirm the two genre separators appear only when both adjacent book rows contain books, and that additional timeline slots appear after posts 2, 4, 6, and 8 (provided another real post follows).
 3. Inspect DevTools Network: the **`adm.shinobi.jp/st/t.js`** request should appear. An HTTP 200 for the SDK alone is **not proof** that advertising content has been served.
 4. Check the advertisement itself (initial review creative, if provided, or an actual paid creative), desktop and mobile overflow, and Ninja AdMax management dashboard status.
-5. Confirm paid ad-free accounts and non-home routes never request the SDK; confirm search and single-genre views have no ad slots. Check the maximum of three requests/placements, category pagination, navigation, scrolling, and lazy mounts.
+5. Confirm paid ad-free accounts and non-home routes never request the SDK; search and single-genre views must not display ads. Test more than three simultaneous and lazily mounted slots, genre pagination, navigation, scrolling, and no duplicate SDK injections for a batch.
 6. Update privacy/external-transmission disclosures promptly.
 
 Ninja AdMax's SPA samples do not guarantee delivery. If the request still does not appear, investigate Flutter DOM attachment, browser ad blocker, API entitlement, and consent blockers before attributing it to review delays.

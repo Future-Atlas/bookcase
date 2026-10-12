@@ -1510,13 +1510,10 @@ class _BookListScreenState extends State<BookListScreen> {
         .toDouble();
 
     final postCount = _controller.timelinePosts.length;
-    // Two genre separators reserve slots 0 and 1. The home timeline
-    // receives the final page-wide Ninja AdMax placement, at slot 2.
+    // Genre separators use slots 0 and 1. Subsequent timeline ads receive
+    // their own indices starting at 2, with no arbitrary page-wide cap.
     final adSlots = kIsWeb && timelineAdReady
-        ? timelineAdSlotCount(
-            postCount,
-            maximumSlots: homeTimelineMaximumAds,
-          )
+        ? timelineAdSlotCount(postCount)
         : 0;
 
     return Container(
@@ -1539,17 +1536,12 @@ class _BookListScreenState extends State<BookListScreen> {
           controller: _timelineScrollController,
           padding: const EdgeInsets.only(right: 8),
           physics: const ClampingScrollPhysics(),
-          // Keep a single timeline ad after post 2, alongside the two
-          // book-genre separators, for the three-slot page-wide limit.
+          // Insert ads after each configured number of posts, provided
+          // another real post follows. No arbitrary per-page slot limit.
           // Change NINJA_ADMAX_POSTS_PER_AD to 5 for normal operation.
           itemCount: postCount + adSlots,
           itemBuilder: (context, index) {
-            if (adSlots > 0 &&
-                isTimelineAdItem(
-                  index,
-                  postCount,
-                  maximumSlots: homeTimelineMaximumAds,
-                )) {
+            if (adSlots > 0 && isTimelineAdItem(index, postCount)) {
               return TimelineAdSlot(
                 key: ValueKey('home-timeline-ad-slot-$index'),
                 slotIndex: homeTimelineAdSlotStart +
@@ -1557,11 +1549,7 @@ class _BookListScreenState extends State<BookListScreen> {
               );
             }
             final postIndex = adSlots > 0
-                ? timelinePostIndexForItem(
-                    index,
-                    postCount,
-                    maximumSlots: homeTimelineMaximumAds,
-                  )
+                ? timelinePostIndexForItem(index, postCount)
                 : index;
             final post = _controller.timelinePosts[postIndex];
             final currentProfileId = Provider.of<SupabaseService>(

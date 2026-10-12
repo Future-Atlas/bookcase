@@ -43,7 +43,6 @@
         // The original publisher synchronous tag is kept unchanged in the
         // inert template below. The actual live integration uses async SDK.
         const expectedHost = "www.sharemarium.com";
-        const maxAdsPerPage = 3;
         const renderedSlots = new Map();
         let entitlementToken = null;
         let entitlementState = "unknown";
@@ -189,8 +188,7 @@
           const target = root.querySelector(
             type === "switch" ? ".admax-switch" : ".admax-ads",
           );
-          if (!Number.isInteger(index) || index < 0 ||
-              index >= maxAdsPerPage ||
+          if (!Number.isSafeInteger(index) || index < 0 ||
               !/^[A-Za-z0-9_-]{8,128}$/.test(id) ||
               (type !== "switch" && type !== "banner") ||
               !target || target.getAttribute("data-admax-id") !== id) return;
@@ -211,7 +209,6 @@
             latest.target.replaceChildren();
             renderedSlots.delete(index);
           }
-          if (renderedSlots.size >= maxAdsPerPage) return;
 
           window.admaxads = window.admaxads || [];
           window.admaxads.push({ admax_id: id, type });
