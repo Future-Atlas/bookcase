@@ -30,44 +30,28 @@ bool get timelineAdReady =>
     !ninjaAdmaxAsyncId.contains(RegExp(r'[^A-Za-z0-9_-]')) &&
     (ninjaAdmaxAsyncType == 'switch' || ninjaAdmaxAsyncType == 'banner');
 
-/// Ninja AdMax recommends no more than three advertisements per page.
-const int timelineMaximumAdsPerPage = 3;
-
-/// Two genre separator ads are reserved on the real home page.
-/// The embedded timeline can use the one remaining placement.
+/// The first two unique AdMax indices belong to the book-genre separators.
+/// There is intentionally no application-imposed maximum on timeline slots.
 const int homeGenreAdSlotCount = 2;
 const int homeTimelineAdSlotStart = homeGenreAdSlotCount;
-const int homeTimelineMaximumAds =
-    timelineMaximumAdsPerPage - homeGenreAdSlotCount;
 
-/// Ads are only inserted between posts, never after the final post.
+/// Ads are only inserted between existing posts, never after the final post.
+/// The number of slots is determined by available posts and the interval.
 int timelineAdSlotCount(
   int postCount, {
   int postsPerAd = timelinePostsPerAd,
-  int maximumSlots = timelineMaximumAdsPerPage,
 }) {
-  if (postsPerAd < 1 || postCount <= postsPerAd || maximumSlots <= 0) {
-    return 0;
-  }
-  final allowedSlots = maximumSlots > timelineMaximumAdsPerPage
-      ? timelineMaximumAdsPerPage
-      : maximumSlots;
-  final possibleSlots = (postCount - 1) ~/ postsPerAd;
-  return possibleSlots < allowedSlots ? possibleSlots : allowedSlots;
+  if (postsPerAd < 1 || postCount <= postsPerAd) return 0;
+  return (postCount - 1) ~/ postsPerAd;
 }
 
 bool isTimelineAdItem(
   int itemIndex,
   int postCount, {
   int postsPerAd = timelinePostsPerAd,
-  int maximumSlots = timelineMaximumAdsPerPage,
 }) {
   if (postsPerAd < 1) return false;
-  final adCount = timelineAdSlotCount(
-    postCount,
-    postsPerAd: postsPerAd,
-    maximumSlots: maximumSlots,
-  );
+  final adCount = timelineAdSlotCount(postCount, postsPerAd: postsPerAd);
   final cycle = postsPerAd + 1;
   return itemIndex >= 0 &&
       itemIndex < postCount + adCount &&
@@ -79,20 +63,10 @@ int timelinePostIndexForItem(
   int itemIndex,
   int postCount, {
   int postsPerAd = timelinePostsPerAd,
-  int maximumSlots = timelineMaximumAdsPerPage,
 }) {
-  assert(!isTimelineAdItem(
-    itemIndex,
-    postCount,
-    postsPerAd: postsPerAd,
-    maximumSlots: maximumSlots,
-  ));
+  assert(!isTimelineAdItem(itemIndex, postCount, postsPerAd: postsPerAd));
   if (postsPerAd < 1) return itemIndex;
-  final adCount = timelineAdSlotCount(
-    postCount,
-    postsPerAd: postsPerAd,
-    maximumSlots: maximumSlots,
-  );
+  final adCount = timelineAdSlotCount(postCount, postsPerAd: postsPerAd);
   final preceding = itemIndex ~/ (postsPerAd + 1);
   return itemIndex - (preceding < adCount ? preceding : adCount);
 }
