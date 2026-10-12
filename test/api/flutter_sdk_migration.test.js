@@ -42,7 +42,7 @@ test("Dart 3.13 and previously blocked dependencies are locked together", () => 
       new RegExp("^  " + name + ":\\n([\\s\\S]*?)(?=^  [a-z0-9_]+:|^sdks:)", "m"),
     );
     assert.ok(block, "Missing " + name + " lock entry");
-    assert.match(block[1], new RegExp("version: " + version.replace(/\./g, "\\.")));
+    assert.ok(block[1].includes('version: "' + version + '"'), "Wrong " + name + " version");
   }
   assert.match(read(".github/workflows/ci.yaml"), /git diff --exit-code -- pubspec\.lock/);
 });
