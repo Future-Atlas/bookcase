@@ -85,6 +85,9 @@ jobs:
       - name: Check staging target and credentials before connecting
         run: node scripts/deploy-staging-db.mjs guard
 
+      - name: Verify staging PAT/project access (read-only)
+        run: node scripts/preflight-supabase-staging.mjs
+
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3
         with:
