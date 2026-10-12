@@ -8,6 +8,11 @@ const source = fs.readFileSync(
   "utf8",
 );
 
+const link = fs.readFileSync(
+  path.join(__dirname, "../../lib/widgets/public_posts_link.dart"),
+  "utf8",
+);
+
 test("home screen explains Sharemarium's original value to human users", () => {
   assert.match(source, /Sharemariumでできること/);
   assert.match(source, /読書体験をレビューとして残す/);
@@ -18,10 +23,12 @@ test("home screen explains Sharemarium's original value to human users", () => {
   assert.doesNotMatch(source, /ネタバレを含む投稿は明示して公開できます/);
 });
 
-test("home service introduction links to public reviews and operator information", () => {
-  assert.match(source, /pushNamed\('\/posts'\)/);
+test("home service introduction links to public posts and operator information", () => {
+  assert.match(source, /const PublicPostsLink\(\)/);
+  assert.match(link, /pushNamed\('\/posts'\)/);
+  assert.match(link, /投稿一覧を見る/);
   assert.match(source, /pushNamed\('\/about'\)/);
-  assert.match(source, /他ユーザーのレビューに出会う/);
+  assert.match(source, /他ユーザーのレビューやリアクションを通じて/);
   assert.match(source, /サービス・運営方針について/);
 });
 
