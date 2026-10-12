@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "test:api": "node --test test/api/*.test.js"
+    "test:api": "node --test test/api/*.test.js",
+    "model:revenue": "node scripts/monetization-scenario.mjs"
   },
   "devDependencies": {
     "supabase": "2.120.0"
