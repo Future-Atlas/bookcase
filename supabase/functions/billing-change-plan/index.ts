@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import {
+  billingSalesEnabled,
   describeStripePrice,
   formBody,
   requireStripePrice,
@@ -28,6 +29,12 @@ Deno.serve(async (request) => {
   const authorization = request.headers.get('Authorization')
   const token = authorization?.replace(/^Bearer\s+/i, '')
   if (!token) return json({ error: 'Unauthorized' }, 401)
+
+  // Fail closed until sales, legal notices and real Stripe billing are approved.
+  // This check intentionally runs before reading secrets or contacting Stripe.
+  if (!billingSalesEnabled(Deno.env.get('BILLING_SALES_ENABLED'))) {
+    return json({ error: 'Subscriptions are not currently available' }, 503)
+  }
 
   const body = await request.json().catch(() => null)
   const targetPlan = body?.plan?.toString().trim().toLowerCase() ?? ''

@@ -2,6 +2,13 @@ const encoder = new TextEncoder()
 
 export const STRIPE_PROVIDER = 'stripe'
 
+// Checkout and paid plan upgrades remain disabled unless the administrator
+// explicitly opens sales on the Supabase Edge Function runtime.
+// Flutter UI flags or the mere presence of Stripe credentials are not enough.
+export function billingSalesEnabled(value) {
+  return value === 'true'
+}
+
 export function stripePriceCatalog(env) {
   const definitions = [
     ['STRIPE_PRICE_PLUS_MONTHLY', 'plus', 'monthly'],
