@@ -1,0 +1,45 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sharemarium/widgets/public_posts_link.dart';
+
+void main() {
+  for (final compact in <bool>[false, true]) {
+    testWidgets(
+      compact
+          ? 'compact header navigation opens the public posts index'
+          : 'home navigation opens the public posts index',
+      (tester) async {
+        String? openedRoute;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: PublicPostsLink(compact: compact),
+              ),
+            ),
+            onGenerateRoute: (settings) {
+              openedRoute = settings.name;
+              return MaterialPageRoute<void>(
+                builder: (_) => const Scaffold(
+                  body: Center(child: Text('投稿一覧ページ')),
+                ),
+              );
+            },
+          ),
+        );
+
+        if (compact) {
+          expect(find.text('投稿一覧'), findsOneWidget);
+          await tester.tap(find.byKey(const ValueKey('header-public-posts-link')));
+        } else {
+          expect(find.text('投稿一覧を見る'), findsOneWidget);
+          await tester.tap(find.byKey(const ValueKey('home-public-posts-link')));
+        }
+        await tester.pumpAndSettle();
+
+        expect(openedRoute, '/posts');
+        expect(find.text('投稿一覧ページ'), findsOneWidget);
+      },
+    );
+  }
+}
