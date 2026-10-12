@@ -12,16 +12,37 @@ const int timelinePostsPerAd = int.fromEnvironment(
   defaultValue: 2,
 );
 
-/// Ninja AdMax recommends no more than three advertisements per page.
-const int timelineMaximumAdsPerPage = 3;
+/// The /s/ synchronous identifier must never be assumed to be an async ID.
+const String ninjaAdmaxAsyncId = String.fromEnvironment(
+  'NINJA_ADMAX_ASYNC_ID',
+  defaultValue: '',
+);
 
-/// Ads are only inserted between posts, never after the final post.
-int timelineAdSlotCount(int postCount, {int postsPerAd = timelinePostsPerAd}) {
+const String ninjaAdmaxAsyncType = String.fromEnvironment(
+  'NINJA_ADMAX_ASYNC_TYPE',
+  defaultValue: 'switch',
+);
+
+bool get timelineAdReady =>
+    timelineAdEnabled &&
+    ninjaAdmaxAsyncId.length >= 8 &&
+    ninjaAdmaxAsyncId.length <= 128 &&
+    !ninjaAdmaxAsyncId.contains(RegExp(r'[^A-Za-z0-9_-]')) &&
+    (ninjaAdmaxAsyncType == 'switch' || ninjaAdmaxAsyncType == 'banner');
+
+/// The first two unique AdMax indices belong to the book-genre separators.
+/// There is intentionally no application-imposed maximum on timeline slots.
+const int homeGenreAdSlotCount = 2;
+const int homeTimelineAdSlotStart = homeGenreAdSlotCount;
+
+/// Ads are only inserted between existing posts, never after the final post.
+/// The number of slots is determined by available posts and the interval.
+int timelineAdSlotCount(
+  int postCount, {
+  int postsPerAd = timelinePostsPerAd,
+}) {
   if (postsPerAd < 1 || postCount <= postsPerAd) return 0;
-  final possibleSlots = (postCount - 1) ~/ postsPerAd;
-  return possibleSlots < timelineMaximumAdsPerPage
-      ? possibleSlots
-      : timelineMaximumAdsPerPage;
+  return (postCount - 1) ~/ postsPerAd;
 }
 
 bool isTimelineAdItem(
@@ -30,10 +51,7 @@ bool isTimelineAdItem(
   int postsPerAd = timelinePostsPerAd,
 }) {
   if (postsPerAd < 1) return false;
-  final adCount = timelineAdSlotCount(
-    postCount,
-    postsPerAd: postsPerAd,
-  );
+  final adCount = timelineAdSlotCount(postCount, postsPerAd: postsPerAd);
   final cycle = postsPerAd + 1;
   return itemIndex >= 0 &&
       itemIndex < postCount + adCount &&

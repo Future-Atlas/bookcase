@@ -396,7 +396,7 @@ class _PublicAccountSettingsScreenState
         ),
         const SizedBox(height: 4),
         Text(
-          'ヘッダーと投稿の外枠に使用され、他のユーザーにも表示されます。全14色はPremium特典です。',
+          'ヘッダーと投稿の外枠に使用され、他のユーザーにも表示されます。現在のアカウントで利用できる色を選択してください。',
           style: TextStyle(
             fontSize: 12,
             color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
@@ -415,13 +415,17 @@ class _PublicAccountSettingsScreenState
               button: true,
               selected: selected,
               enabled: !locked,
-              label: locked ? '${option.label}はPremium限定' : '${option.label}を選択',
+              label: locked
+                  ? '${option.label}は現在利用できません'
+                  : '${option.label}を選択',
               child: InkWell(
                 borderRadius: BorderRadius.circular(8),
                 onTap: () {
                   if (locked) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('このページカラーはPremium限定です。')),
+                      const SnackBar(
+                        content: Text('現在のアカウントではこのページカラーを利用できません。'),
+                      ),
                     );
                     return;
                   }

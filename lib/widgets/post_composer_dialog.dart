@@ -24,7 +24,7 @@ Future<bool> showPostComposerDialog({
   if (!context.mounted) return false;
 
   final isEditing = existingPost != null;
-  double rating = existingPost?.rating ?? 5.0;
+  double rating = existingPost?.rating ?? 0.0;
   bool isSpoiler = existingPost?.hasSpoiler ?? false;
   bool isSubmitting = false;
   final commentController = TextEditingController(
@@ -170,8 +170,7 @@ Future<bool> showPostComposerDialog({
                         textAlignVertical: TextAlignVertical.top,
                         style: const TextStyle(color: Colors.black87),
                         decoration: const InputDecoration(
-                          hintText:
-                              '例：印象に残った場面、その理由、読後に考えたことなどを自分の言葉で書いてみましょう',
+                          hintText: '例：印象に残った場面、その理由、読後に考えたことなどを自分の言葉で書いてみましょう',
                           hintStyle: TextStyle(color: Colors.black54),
                           border: InputBorder.none,
                           isCollapsed: true,

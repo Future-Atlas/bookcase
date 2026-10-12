@@ -168,7 +168,7 @@ class _FavoriteRetentionSelectionDialogState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'プラン変更により、お気に入りの表示上限は${widget.favoriteLimit}冊になりました。'
+                '現在のお気に入りの表示上限は${widget.favoriteLimit}冊です。'
                 'データは削除されません。表示する${widget.favoriteLimit}冊を選んでください。',
               ),
               const SizedBox(height: 10),
