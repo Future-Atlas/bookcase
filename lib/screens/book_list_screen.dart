@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
+import '../widgets/rakuten_credit.dart';
 import '../widgets/book_page_bar.dart';
 import '../widgets/post_card.dart';
 import '../widgets/timeline_ad_slot.dart';
@@ -16,7 +17,7 @@ import '../widgets/post_composer_dialog.dart';
 import '../widgets/post_reply_dialog.dart';
 import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
-import '../widgets/amazon_book_link.dart';
+import '../widgets/rakuten_book_link.dart';
 import 'report_post_dialog.dart';
 import 'user_profile_screen.dart';
 import 'post_engagement_users_screen.dart';
@@ -593,10 +594,7 @@ class _BookListScreenState extends State<BookListScreen> {
                               );
                             },
                           ),
-                          if (AmazonBookLink.isConfigured) ...[
-                            const SizedBox(height: 12),
-                            AmazonBookLink(book: book),
-                          ],
+                          RakutenBookLink(book: book),
                           const SizedBox(height: 14),
                           Row(
                             children: [
@@ -1633,19 +1631,13 @@ class _BookListScreenState extends State<BookListScreen> {
             '© 2026 Sharemarium. All rights reserved.',
             style: TextStyle(color: Colors.grey[400], fontSize: 11),
           ),
+          const SizedBox(height: 8),
+          const RakutenCredit(),
           const SizedBox(height: 4),
           Text(
             'Powered by Supabase & PostgreSQL',
             style: TextStyle(color: Colors.grey[400], fontSize: 9),
           ),
-          if (AmazonBookLink.isConfigured) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Amazon のアソシエイトとして、Sharemarium は適格販売により収入を得ています。',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[400], fontSize: 9),
-            ),
-          ],
           const SizedBox(height: 12),
           Wrap(
             alignment: WrapAlignment.center,

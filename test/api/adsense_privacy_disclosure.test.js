@@ -33,8 +33,8 @@ test("privacy policy contains the required Google advertising-cookie disclosures
   assert.match(privacy, /https:\/\/adssettings\.google\.com\//);
   assert.match(privacy, /https:\/\/www\.aboutads\.info\//);
   assert.match(privacy, /2026年9月16日／バージョン1\.10\.0/);
-  assert.match(privacy, /最終改定日[\s\S]*2026年9月16日/);
-  assert.match(privacy, /\*\*バージョン\*\*[\s\S]*1\.10\.0/);
+  assert.match(privacy, /最終改定日[\s\S]*2026年10月12日/);
+  assert.match(privacy, /\*\*バージョン\*\*[\s\S]*1\.11\.0/);
 });
 
 test("legal version constants require renewed privacy consent", () => {
@@ -43,8 +43,8 @@ test("legal version constants require renewed privacy consent", () => {
     "utf8",
   );
 
-  assert.match(versions, /bundle = '1\.12\.0'/);
-  assert.match(versions, /privacy = '1\.10\.0'/);
+  assert.match(versions, /bundle = '1\.13\.0'/);
+  assert.match(versions, /privacy = '1\.11\.0'/);
 });
 
 test("legal changelog records the AdSense privacy-policy revision", () => {
