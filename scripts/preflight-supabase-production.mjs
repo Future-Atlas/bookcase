@@ -87,7 +87,9 @@ export async function preflightProductionSupabase({
   } catch {
     throw new Error('Supabase production project preflight returned an unreadable response.');
   }
-  const returnedRef = project?.id ?? project?.ref;
+  // Supabase returns both an internal project ID and the public project ref.
+  // The ref, not the internal ID, must match SUPABASE_PROJECT_ID.
+  const returnedRef = project?.ref ?? project?.id;
   if (returnedRef !== projectRef) {
     throw new Error('Supabase production project ref did not match the response. Deployment is blocked.');
   }
