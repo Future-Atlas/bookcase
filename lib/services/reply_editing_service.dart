@@ -49,7 +49,7 @@ class ReplyEditingService {
       );
       if (error.code == '42501') {
         if (error.message.contains('Premium')) {
-          return '返信の編集はPremium限定です。';
+          return '現在のアカウントでは返信を編集できません。';
         }
         return '現在のアカウントでは返信を編集できません。';
       }
