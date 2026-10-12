@@ -88,7 +88,8 @@ class MyApp extends StatelessWidget {
           secondary: const Color(0xFF264653), // Slate blue
           surface: Colors.white,
         ),
-        textTheme: GoogleFonts.notoSansJpTextTheme(ThemeData.light().textTheme)
+        textTheme: ThemeData.light().textTheme
+            .apply(fontFamily: GoogleFonts.notoSansJp().fontFamily)
             .copyWith(
               titleLarge: TextStyle(
                 fontFamily: GoogleFonts.notoSansJp().fontFamily,
@@ -122,7 +123,8 @@ class MyApp extends StatelessWidget {
           secondary: const Color(0xFF4EA8DE),
           surface: Colors.black,
         ),
-        textTheme: GoogleFonts.notoSansJpTextTheme(ThemeData.dark().textTheme)
+        textTheme: ThemeData.dark().textTheme
+            .apply(fontFamily: GoogleFonts.notoSansJp().fontFamily)
             .copyWith(
               titleLarge: TextStyle(
                 fontFamily: GoogleFonts.notoSansJp().fontFamily,
