@@ -24,8 +24,9 @@ import 'screens/moderation_screen.dart';
 import 'screens/account_suspension_gate.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/public_post_routes.dart';
+import 'widgets/public_posts_link.dart';
 
-enum _HeaderMenuAction { home, myPage, settings, help, moderation, logout }
+enum _HeaderMenuAction { home, posts, myPage, settings, help, moderation, logout }
 
 final supabaseService = SupabaseService();
 final themeService = ThemeService();
@@ -538,6 +539,9 @@ class _MainNavigationShellState extends State<MainNavigationShell>
       case _HeaderMenuAction.home:
         _goToBookList();
         break;
+      case _HeaderMenuAction.posts:
+        Navigator.of(context).pushNamed('/posts');
+        break;
       case _HeaderMenuAction.myPage:
         await _goToProfile();
         break;
@@ -643,13 +647,13 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                     children: [
                       SizedBox(
                         width: headerSideWidth,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: PopupMenuButton<_HeaderMenuAction>(
+                        child: Row(
+                          children: [
+                            PopupMenuButton<_HeaderMenuAction>(
                             tooltip: 'メニュー',
                             icon: Icon(
                               Icons.menu,
-                              size: 38,
+                              size: 30,
                               color: menuIconColor,
                             ),
                             position: PopupMenuPosition.under,
@@ -660,6 +664,16 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                 value: _HeaderMenuAction.home,
                                 child: Text(
                                   'ホーム',
+                                  style: TextStyle(
+                                    fontSize: 28 / 2,
+                                    color: popupMenuTextColor,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: _HeaderMenuAction.posts,
+                                child: Text(
+                                  '投稿一覧',
                                   style: TextStyle(
                                     fontSize: 28 / 2,
                                     color: popupMenuTextColor,
@@ -720,6 +734,13 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                 ),
                             ],
                           ),
+                            Expanded(
+                              child: PublicPostsLink(
+                                compact: true,
+                                foregroundColor: headerColor,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       Expanded(
