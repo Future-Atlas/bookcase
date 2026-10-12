@@ -15,17 +15,17 @@ the production/staging web deployments and crawler-friendly SEO pages.
 
 ## Tech Stack
 
-- Flutter 3.44.9
-- Dart SDK ^3.12.0
-- supabase_flutter ^2.17.2
+- Flutter 3.47.7 (pinned in `.fvmrc` and Flutter workflows)
+- Dart SDK ^3.13.0
+- supabase_flutter ^2.18.0
 - provider ^6.1.2
-- google_fonts ^8.2.1
-- Vercel CLI 58.7.1 in deployment workflows
-- Supabase CLI 2.115.0 in validation/deployment workflows
+- google_fonts ^9.0.0
+- Vercel CLI is pinned separately in production and staging deployment workflows
+- Supabase CLI 2.115.0 in validation/deployment workflows; npm development dependency 2.120.0 (independent pins)
 
 ## Local Development
 
-This project uses FVM to pin Flutter 3.44.9 for repository-local development.
+This project uses FVM to pin Flutter 3.47.7 for repository-local development.
 Install FVM locally if needed, then initialize the project SDK with:
 
 ```bash
@@ -134,18 +134,30 @@ Supabase workflows:
 - `.github/workflows/supabase-deploy-staging.yaml`: guarded staging migrations/Edge Functions from `develop`, with manual plan/apply support
 
 Branch protection is a GitHub repository setting rather than repository code.
-The required target settings and the current manual-configuration caveat are
-documented in `docs/github_branch_protection.md`.
+The current active ruleset, required checks, and remaining review-approval caveat
+are documented in `docs/github_branch_protection.md`.
 
-## Advertising (Ninja AdMax preparation)
+## Advertising (Ninja AdMax Web production)
 
-The app no longer loads AdSense. Ninja AdMax is disabled by default and can
-only appear inside the home timeline after at least three posts. Do not enable
-it until a genuine asynchronous PC/SP switch tag, compliant privacy/external
-transmission disclosures and production PC/mobile validation are complete.
-See `docs/ninja_admax_timeline_launch.md`. The `ads.txt` file intentionally
-authorizes no seller while advertising is disabled; replace it with the exact
-seller entries supplied by the ad provider before enabling real demand.
+Google AdSense is not currently running. The production Web build on `main`
+explicitly enables the publisher-issued asynchronous Ninja AdMax banner.
+The feature remains disabled by default for local/native builds and in the
+staging Web build. Current Web production shows ads only in eligible home-page
+placements; ad-free entitlements suppress third-party advertisement requests.
+
+Two eligible genre separators are placed between the recommended/Western and
+Western/popular book rows. The home timeline can show additional slots after
+every second real post, subject to the existence of another post. **The current
+implementation has no application-imposed maximum**; Ninja AdMax's own FAQ
+recommends no more than three slots per page. This needs a deployment/monetization
+review before materially increasing inventory. Do not conflate the application
+slot count with actual provider-served impressions.
+
+See `docs/ninja_admax_timeline_launch.md` for the exact ad tag, eligibility
+rules and live-browser verification checklist. Review the Privacy Policy and
+external-transmission disclosure for consistency with the actual network
+requests, and verify provider approval before production changes.
+
 
 ## CI / Validation
 
