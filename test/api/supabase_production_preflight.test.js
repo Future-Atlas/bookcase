@@ -62,7 +62,7 @@ test("read-only probe verifies the specific production project and never sends t
       return {
         status: 200,
         ok: true,
-        json: async () => ({ id: env.SUPABASE_PROJECT_ID }),
+        json: async () => ({ id: "internal-project-id", ref: env.SUPABASE_PROJECT_ID }),
       };
     },
   });
