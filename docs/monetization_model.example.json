@@ -1,0 +1,24 @@
+{
+  "scenarioName": "ILLUSTRATIVE ONLY — replace all metrics with real Sharemarium data",
+  "monthlyActiveUsers": 1000,
+  "subscriberShares": {
+    "plusMonthly": 0.02,
+    "plusAnnual": 0.01,
+    "premiumMonthly": 0.01,
+    "premiumAnnual": 0.005
+  },
+  "activeTrialShare": 0.005,
+  "homeVisitsPerFreeUserPerMonth": 8,
+  "possibleAdSlotsPerHomeVisit": 3,
+  "inventoryReadyRate": 0.65,
+  "adBlockRate": 0.25,
+  "fillRate": 0.6,
+  "billableRate": 0.8,
+  "publisherNetEcpmYen": 50,
+  "consumptionTaxRate": 0.1,
+  "processorFeeRate": 0.036,
+  "processorFixedYenPerPayment": 0,
+  "refundRate": 0.01,
+  "fixedMonthlyCostsYen": 15000,
+  "variableMonthlyCostsPerMauYen": 1
+}
