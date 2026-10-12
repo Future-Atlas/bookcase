@@ -5,7 +5,7 @@ const vm = require("node:vm");
 const test = require("node:test");
 
 const read = (file) =>
-  fs.readFileSync(path.join(__dirname, "../..", file), "utf8");
+  fs.readFileSync(path.join(__dirname, "../..", file), "utf8").replace(/\r\n/g, "\n");
 
 const issuedSyncTag =
   '<!-- admax -->\n' +
@@ -34,6 +34,7 @@ function runtime({
     },
     addEventListener(name, fn) { listeners.set(name, fn); },
     setTimeout(fn) { timers.push(fn); return timers.length; },
+    setInterval() { return 1; },
     history: { pushState() {}, replaceState() {} },
   };
   const document = {
@@ -125,7 +126,7 @@ test("timeline has no application-imposed slot cap", () => {
   assert.match(src, /timelineAdSlotCount\(postCount\)/);
   assert.match(src, /isTimelineAdItem\(index, postCount\)/);
   assert.match(src, /timelinePostIndexForItem\(index, postCount\)/);
-  assert.match(src, /kIsWeb && timelineAdReady/);
+  assert.match(src, /kIsWeb && timelineAdDisplayReady/);
   assert.match(policy, /defaultValue: 2/);
   assert.match(policy, /NINJA_ADMAX_POSTS_PER_AD/);
   assert.match(policy, /return \(postCount - 1\) ~\/ postsPerAd;/);
@@ -155,12 +156,12 @@ test("two home book-genre separators and repeated timeline slots have unique ind
     assert.ok(indexes[i - 1] < indexes[i], "genre ad follows preceding section");
   }
 
-  assert.match(home, /if \(kIsWeb &&\s+timelineAdReady &&\s+widget\.initialGenre == null &&\s+_controller\.recommendedBooks\.isNotEmpty &&\s+_controller\.westernBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-recommended-western'\),\s+slotIndex: 0,/);
-  assert.match(home, /if \(kIsWeb &&\s+timelineAdReady &&\s+widget\.initialGenre == null &&\s+_controller\.westernBooks\.isNotEmpty &&\s+_controller\.popularBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-western-popular'\),\s+slotIndex: 1,/);
+  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.recommendedBooks\.isNotEmpty &&\s+_controller\.westernBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\(\s*'home-ad-between-recommended-western',?\s*\),\s+slotIndex: 0,/);
+  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.westernBooks\.isNotEmpty &&\s+_controller\.popularBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-western-popular'\),\s+slotIndex: 1,/);
   assert.match(home, /if \(_controller\.searchQuery\.isNotEmpty\)\s+_buildSearchResults\(\)\s+else/);
   assert.match(policy, /homeGenreAdSlotCount = 2/);
   assert.match(policy, /homeTimelineAdSlotStart = homeGenreAdSlotCount/);
-  assert.match(home, /slotIndex: homeTimelineAdSlotStart \+\s+index ~\/ \(timelinePostsPerAd \+ 1\)/);
+  assert.match(home, /slotIndex:\s+homeTimelineAdSlotStart \+\s+index ~\/ \(timelinePostsPerAd \+ 1\)/);
   assert.match(html, /if \(sdkScheduled\) return/);
   assert.doesNotMatch(html, /const maxAdsPerPage/);
 });

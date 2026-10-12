@@ -49,8 +49,8 @@ test("external-transmission disclosure names the actual advertising recipient", 
 
 test("legal versions are independent and trigger re-confirmation for signed-in users", () => {
   const versions = read("lib/services/legal_document_versions.dart");
-  assert.match(versions, /bundle = '1\.13\.0'/);
-  assert.match(versions, /terms = '1\.10\.0'/);
+  assert.match(versions, /bundle = '1\.14\.0'/);
+  assert.match(versions, /terms = '1\.11\.0'/);
   assert.match(versions, /privacy = '1\.11\.0'/);
   assert.match(versions, /externalTransmission = '1\.10\.0'/);
 });

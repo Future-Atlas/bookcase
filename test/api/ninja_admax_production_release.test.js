@@ -5,7 +5,7 @@ const test = require("node:test");
 
 const projectRoot = path.join(__dirname, "../..");
 const read = (relativePath) =>
-  fs.readFileSync(path.join(projectRoot, relativePath), "utf8");
+  fs.readFileSync(path.join(projectRoot, relativePath), "utf8").replace(/\r\n/g, "\n");
 
 test("Ninja AdMax loads in production Flutter Web builds only", () => {
   const production = read(".github/workflows/deploy.yaml");

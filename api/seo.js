@@ -239,6 +239,9 @@ async function fetchRakutenBookByIsbn(isbn, diagnostics) {
     title: first.title || compact,
     author: first.author || "不明な著者",
     coverUrl: first.largeImageUrl || "",
+    description: first.itemCaption || "",
+    publisher: first.publisherName || "",
+    isbn: compact,
   };
 }
 
@@ -566,20 +569,20 @@ module.exports = async (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>${fullTitle}</title>
-      <meta name="description" content="${description}">
+            <title>${escapeHtml(fullTitle)}</title>
+      <meta name="description" content="${escapeHtml(description)}">
             <meta name="robots" content="${IS_PRODUCTION ? robots || "index,follow" : "noindex,nofollow"}">
       <link rel="canonical" href="${absoluteUrl}">
-        <meta property="og:title" content="${fullTitle}">
-      <meta property="og:description" content="${description}">
+        <meta property="og:title" content="${escapeHtml(fullTitle)}">
+      <meta property="og:description" content="${escapeHtml(description)}">
             <meta property="og:site_name" content="${SITE_BRAND}">
       <meta property="og:type" content="website">
             <meta property="og:locale" content="ja_JP">
       <meta property="og:url" content="${absoluteUrl}">
             <meta property="og:image" content="${OG_IMAGE_URL}">
       <meta name="twitter:card" content="summary_large_image">
-      <meta name="twitter:title" content="${fullTitle}">
-      <meta name="twitter:description" content="${description}">
+      <meta name="twitter:title" content="${escapeHtml(fullTitle)}">
+      <meta name="twitter:description" content="${escapeHtml(description)}">
             <meta name="twitter:image" content="${OG_IMAGE_URL}">
       <link rel="icon" type="image/png" sizes="48x48" href="${SITE_URL}/favicon.png">
       <link rel="icon" type="image/png" sizes="192x192" href="${SITE_URL}/icons/Icon-192.png">
@@ -589,7 +592,7 @@ module.exports = async (req, res) => {
       ${jsonLdList
         .map(
           (item) =>
-            `<script type="application/ld+json">${JSON.stringify(item)}</script>`,
+            `<script type="application/ld+json">${JSON.stringify(item).replace(/</g, "\\u003c")}</script>`,
         )
         .join("")}
       <style>
@@ -626,6 +629,9 @@ module.exports = async (req, res) => {
       <footer>
         <p><a href="${SITE_URL}/about">運営者情報</a> | <a href="${SITE_URL}/contact">お問い合わせ</a></p>
         <p>© 2026 ${SITE_BRAND}. All rights reserved.</p>
+        <!-- Rakuten Web Services Attribution Snippet FROM HERE -->
+        <a href="https://webservice.rakuten.co.jp/" target="_blank"><img src="https://webservice.rakuten.co.jp/img/credit/200709/credit_22121.gif" border="0" alt="Rakuten Web Service Center" title="Rakuten Web Service Center" width="221" height="21"/></a>
+        <!-- Rakuten Web Services Attribution Snippet TO HERE -->
       </footer>
     </body>
     </html>
@@ -1174,6 +1180,50 @@ module.exports = async (req, res) => {
 
   if (decodedPath.startsWith("/book/")) {
     const slug = decodedPath.replace("/book/", "").split("/")[0];
+    if (/^(\d{13}|\d{9}[\dXx])$/.test(slug)) {
+      try {
+        if (!rakutenEnabled()) throw new Error("book_api_unconfigured");
+        const book = await resolveBookByIsbn(slug, diagnostics);
+        if (!book && diagnostics.rakutenIsbnFailures > 0) {
+          throw new Error("book_api_unavailable");
+        }
+        if (book) {
+          const rows = await supabaseGet(
+            `posts?book_id=eq.${encodeURIComponent(slug)}&select=id,comment,is_spoiler,created_at,profiles!inner(username,is_private,is_suspended)&profiles.is_private=eq.false&profiles.is_suspended=eq.false&order=created_at.desc&limit=50`
+          ) || [];
+          const reviews = rows.filter(isIndexableReview);
+          const description = `${book.title}（${book.author}）の書籍情報・読書感想。Sharemariumで読書記録を共有しましょう。`;
+          const html = renderPage({
+            title: `${book.title} - ${book.author}の書籍情報・感想`,
+            description, pagePath: `/book/${slug}`,
+            // Preserve the existing thin-content policy until original reviews exist.
+            robots: reviews.length ? "index,follow" : "noindex,follow",
+            content: `<h1>${escapeHtml(book.title)}</h1>
+              <p>著者：${escapeHtml(book.author)}</p>
+              <p>出版社：${escapeHtml(book.publisher || "")} ／ ISBN：${escapeHtml(slug)}</p>
+              ${book.coverUrl ? `<img width="150" src="${escapeHtml(book.coverUrl)}" alt="${escapeHtml(book.title)}の表紙">` : ""}
+              <h2>書籍紹介</h2><p>${escapeHtml(book.description || "紹介文は準備中です。")}</p>
+              <h2>読者の感想</h2>
+              ${reviews.length ? reviews.map(p => `<article><h3>${escapeHtml(p.profiles?.username || "読者")}さんの感想</h3><p>${escapeHtml(p.comment)}</p><a href="/posts/${encodeURIComponent(p.id)}">投稿を見る</a></article>`).join("") : "<p>公開されている感想はまだありません。</p>"}
+              <p><a href="/">Sharemariumで本を探す</a></p>`,
+            jsonLd: {"@context":"https://schema.org", "@type":"Book",
+              name: book.title, isbn: slug,
+              author: {"@type":"Person", name: book.author},
+              url: toAbsoluteUrl(`/book/${slug}`)},
+          });
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          return res.status(200).send(html);
+        }
+      } catch (_) {
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("Retry-After", "300");
+        return res.status(503).send(renderPage({
+          title: "書籍情報を取得できませんでした", description: "時間をおいて再度お試しください。",
+          content: "<h1>書籍情報を取得できませんでした</h1>", pagePath: `/book/${slug}`,
+          robots: "noindex,nofollow",
+        }));
+      }
+    }
     const notFoundHtml = renderPage({
       title: "書籍ページが見つかりません",
       description: "指定された書籍ページは見つかりませんでした。",
