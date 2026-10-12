@@ -57,8 +57,7 @@ class TimelineAdSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!timelineAdReady || slotIndex < 0 ||
-        slotIndex >= timelineMaximumAdsPerPage) {
+    if (!timelineAdReady || slotIndex < 0) {
       return const SizedBox.shrink();
     }
     _registerFactory(slotIndex);
