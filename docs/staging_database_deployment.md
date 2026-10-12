@@ -7,7 +7,7 @@
 - Supabase: `sharemarium-staging` / `wpoigmywpewrrbudqhgh`
 - ワークフロー: **Deploy Database to Supabase (Staging)**
 
-本番の **Deploy Database to Supabase** は使用しません。本番用ワークフローは変更していません。
+この手順では本番用の **Deploy Database to Supabase** を実行しません。将来本番の認証プレフライト等のワークフロー設定が変更された場合も、ステージング手順は本番DB/Edge Functionsへ接続・反映しません。
 
 ## 事前に登録するSecrets
 
@@ -42,7 +42,7 @@ mainを選んで手動実行してもジョブはスキップされます。
 4. 検証プロジェクトにリンクし、その結果が指定IDと一致するか検査。
 5. `db push --dry-run --include-all` で未適用ファイルを確認。
 6. applyの場合だけ、同じ未適用ファイルを反映。
-7. `session-guard`、`delete-account`、`admin-delete-account` を検証プロジェクトに配置。
+7. `session-guard`、`delete-account`、`admin-delete-account`、`billing-checkout`、`billing-cancel-subscription`、`billing-change-plan`、`billing-webhook` の7関数を検証プロジェクトに配置。
 
 クラウドDBにresetは行いません。DBリセットはSecretsを渡していないGitHubランナーの一時DBに限定しています。dry-runはSQLの実行結果を保証するものではないため、一時DBの構築とテストも必須です。
 
@@ -53,7 +53,8 @@ SQLは複数ファイル全体で一括トランザクションにはなりま�
 Actionsのvalidate/deployが成功し、SummaryのModeが `apply` であることを確認します。plan成功だけではDB構築完了ではありません。
 
 - 検証用Table Editorに `profiles` / `posts` 等がある。
-- 検証用Edge Functionsに上記3関数がある。
+- 検証用Edge Functionsに上記7関数がある。
+- 決済関連の新規販売はデフォルトで禁止する。`BILLING_SALES_ENABLED` はSupabase Edge Function runtimeの設定であり、GitHubのstagingシークレットではない。運用承認前に `true` にしない。
 - Google・XのProvider設定、Site URL、Redirect URLsは別途管理画面で設定する。
 - 関数固有の追加Secretsやスケジュール等が必要なら、別途設定と動作確認を行う。
 - GitHub stagingの `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_REDIRECT_URL` と、Vercel PreviewのURL・公開キーを検証用に切り替える。
