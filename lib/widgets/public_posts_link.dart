@@ -22,7 +22,7 @@ class PublicPostsLink extends StatelessWidget {
   Widget build(BuildContext context) {
     if (compact) {
       return Tooltip(
-        message: '投稿一覧を見る',
+        message: 'タイムラインを見る',
         child: TextButton(
           key: const ValueKey('header-public-posts-link'),
           onPressed: () => _openPosts(context),
@@ -35,7 +35,7 @@ class PublicPostsLink extends StatelessWidget {
           child: const FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              '投稿一覧',
+              'タイムライン',
               maxLines: 1,
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
             ),
@@ -48,7 +48,7 @@ class PublicPostsLink extends StatelessWidget {
       key: const ValueKey('home-public-posts-link'),
       onPressed: () => _openPosts(context),
       icon: const Icon(Icons.forum_outlined),
-      label: const Text('投稿一覧を見る'),
+      label: const Text('タイムラインを見る'),
     );
   }
 }

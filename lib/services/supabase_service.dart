@@ -127,11 +127,13 @@ class SupabaseService extends ChangeNotifier {
           if (user != null) {
             _startSessionGuardLoop();
             unawaited(
-              _ensureProfile(
-                userId: user.id,
-              ).then((_) => refreshActiveProfileAppearance()),
+              _ensureProfile(userId: user.id).then((_) async {
+                await refreshActiveProfileAppearance();
+                if (activeProfileId == user.id) {
+                  await _enforceSessionIpGuard();
+                }
+              }),
             );
-            unawaited(_enforceSessionIpGuard());
           } else {
             _stopSessionGuardLoop();
             _activePageColorKey = ProfilePageColors.defaultKey;
@@ -388,6 +390,7 @@ class SupabaseService extends ChangeNotifier {
 
   Future<bool> _enforceSessionIpGuard() async {
     if (!_isInitialized || _client == null || !isAuthenticated) return true;
+    final checkedToken = _client!.auth.currentSession?.accessToken;
     try {
       final response = await _client!.functions.invoke(
         'session-guard',
@@ -407,6 +410,10 @@ class SupabaseService extends ChangeNotifier {
           ? Map<String, dynamic>.from(payload)
           : const <String, dynamic>{};
       if (data['ipChanged'] == true) {
+        // A delayed response from a previous session cannot sign out a new one.
+        if (_client!.auth.currentSession?.accessToken != checkedToken) {
+          return true;
+        }
         debugPrint('IP change detected. Signing out to protect the session.');
         await signOut();
         return false;

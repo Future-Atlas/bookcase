@@ -13,7 +13,7 @@ import '../widgets/post_composer_dialog.dart';
 import '../widgets/post_reply_dialog.dart';
 import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
-import '../widgets/amazon_book_link.dart';
+import '../widgets/rakuten_book_link.dart';
 import 'profile_book_search_screen.dart';
 import 'report_post_dialog.dart';
 import 'follow_list_screen.dart';
@@ -1971,10 +1971,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           );
                         },
                       ),
-                      if (AmazonBookLink.isConfigured) ...[
-                        const SizedBox(height: 12),
-                        AmazonBookLink(book: book),
-                      ],
+                      RakutenBookLink(book: book),
                       const SizedBox(height: 14),
                       Container(
                         padding: const EdgeInsets.all(12),

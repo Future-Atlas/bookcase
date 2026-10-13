@@ -1,59 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
-import 'package:sharemarium/models/post.dart';
 import 'package:sharemarium/screens/public_post_routes.dart';
-import 'package:sharemarium/services/supabase_service.dart';
-
-class _PostsService extends ChangeNotifier implements SupabaseService {
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-
-  @override
-  Future<List<Post>> fetchTimelinePosts() async => [
-    Post(
-      id: '11111111-1111-4111-8111-111111111111',
-      profileId: 'reader',
-      bookId: 'book',
-      rating: 4,
-      comment: '秘密の結末',
-      isSpoiler: true,
-      createdAt: DateTime(2026, 9, 14),
-      username: '読者',
-      userAvatarUrl: '',
-      bookTitle: 'テスト書籍',
-      bookAuthor: '著者',
-      bookCoverUrl: '',
-    ),
-  ];
-}
+import 'package:sharemarium/screens/book_list_screen.dart';
 
 void main() {
-  testWidgets('index conceals spoilers and opens the selected review URL', (
+  testWidgets('public timeline uses the same home timeline component', (
     tester,
   ) async {
-    String? opened;
+    late Scaffold screen;
     await tester.pumpWidget(
-      ChangeNotifierProvider<SupabaseService>(
-        create: (_) => _PostsService(),
-        child: MaterialApp(
-          home: const PublicPostsScreen(),
-          onGenerateRoute: (settings) {
-            opened = settings.name;
-            return MaterialPageRoute<void>(
-              builder: (_) => const Scaffold(body: Text('レビュー詳細')),
-            );
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            screen = const PublicPostsScreen().build(context) as Scaffold;
+            return const SizedBox();
           },
         ),
       ),
     );
-    await tester.pumpAndSettle();
-    expect(find.text('『テスト書籍』'), findsOneWidget);
-    expect(find.text('秘密の結末'), findsNothing);
-    expect(find.textContaining('ネタバレを含む投稿'), findsOneWidget);
-    await tester.tap(find.text('『テスト書籍』'));
-    await tester.pumpAndSettle();
-    expect(opened, '/posts/11111111-1111-4111-8111-111111111111');
+    expect(
+      (screen.appBar as AppBar).title,
+      isA<Text>().having((text) => text.data, 'title', 'タイムライン'),
+    );
+    expect(
+      screen.body,
+      isA<BookListScreen>().having(
+        (screen) => screen.timelineOnly,
+        'timelineOnly',
+        true,
+      ),
+    );
   });
   test('post index and review permalinks have Flutter routes', () {
     for (final name in [

@@ -130,7 +130,9 @@ async function fetchPublicPosts() {
   }
 
   const url = new URL("/rest/v1/posts", SUPABASE_URL);
-  url.searchParams.set("select", "id,comment,created_at,is_spoiler");
+  url.searchParams.set("select", "id,book_id,comment,created_at,is_spoiler,profiles!inner(is_private,is_suspended)");
+  url.searchParams.set("profiles.is_private", "eq.false");
+  url.searchParams.set("profiles.is_suspended", "eq.false");
   url.searchParams.set("order", "created_at.desc");
   url.searchParams.set("limit", "1000");
 
@@ -180,14 +182,16 @@ async function dynamicPostUrls() {
     const { posts, diagnostic } = await fetchPublicPosts();
     const indexablePosts = posts.filter(isIndexableReview);
     return {
-      urls: indexablePosts.map((post) => ({
+      urls: [...indexablePosts.filter(post => /^(\d{13}|\d{9}[\dXx])$/.test(post.book_id || "")).map(post => ({
+        path: `/book/${post.book_id}`, changefreq: "weekly", priority: "0.7",
+      })), ...indexablePosts.map((post) => ({
         path: `/posts/${encodeURIComponent(String(post.id))}`,
         changefreq: "monthly",
         priority: "0.7",
         lastmod: post.created_at
           ? String(post.created_at).slice(0, 10)
           : undefined,
-      })),
+      }))],
       hasIndexablePostsIndex: isPostsIndexIndexable(posts),
       diagnostic,
     };
