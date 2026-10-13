@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/moderation_models.dart';
 import '../services/supabase_service.dart';
+import '../widgets/featured_books_admin_panel.dart';
 
 class ModerationScreen extends StatefulWidget {
   const ModerationScreen({super.key});
@@ -239,21 +240,26 @@ class _ModerationScreenState extends State<ModerationScreen> {
   Widget build(BuildContext context) {
     return RefreshIndicator(
       onRefresh: _load,
-      child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _reports.isEmpty
-          ? ListView(
-              children: const [
-                SizedBox(height: 120),
-                Center(child: Text('報告はありません。')),
-              ],
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const FeaturedBooksAdminPanel(),
+          const Text(
+            '報告管理',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          if (_loading)
+            const Center(child: CircularProgressIndicator())
+          else if (_reports.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 56),
+              child: Center(child: Text('報告はありません。')),
             )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _reports.length,
-              itemBuilder: (context, index) =>
-                  _buildReportCard(_reports[index]),
-            ),
+          else
+            ..._reports.map(_buildReportCard),
+        ],
+      ),
     );
   }
 
@@ -311,7 +317,9 @@ class _ModerationScreenState extends State<ModerationScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  report.replyMessage.isEmpty ? '（削除済みの返信）' : report.replyMessage,
+                  report.replyMessage.isEmpty
+                      ? '（削除済みの返信）'
+                      : report.replyMessage,
                 ),
               ),
             ],

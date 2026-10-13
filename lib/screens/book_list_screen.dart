@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
 import '../widgets/book_search_results.dart';
@@ -47,6 +48,7 @@ class _BookListScreenState extends State<BookListScreen> {
   late final BookListController _controller;
   final ScrollController _timelineScrollController = ScrollController();
   final Set<String> _pendingReactionPostIds = <String>{};
+  String? _openingBookId;
 
   @override
   void initState() {
@@ -59,14 +61,27 @@ class _BookListScreenState extends State<BookListScreen> {
   }
 
   Future<void> _openInitialBook() async {
-    final book = await RakutenApi.fetchBookById(widget.initialBookId!);
+    final initialBookId = widget.initialBookId?.trim() ?? '';
+    if (initialBookId.isEmpty || _openingBookId == initialBookId) return;
+    _openingBookId = initialBookId;
+    final book = await RakutenApi.fetchBookById(initialBookId);
     if (!mounted) return;
     if (book != null) {
-      _showBookDetailDialog(book);
+      await _showBookDetailDialog(book, openedFromDirectUrl: true);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('書籍情報を取得できませんでした。時間をおいて再度お試しください。')),
       );
+    }
+    _openingBookId = null;
+  }
+
+  @override
+  void didUpdateWidget(covariant BookListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialBookId != oldWidget.initialBookId &&
+        widget.initialBookId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openInitialBook());
     }
   }
 
@@ -337,8 +352,33 @@ class _BookListScreenState extends State<BookListScreen> {
     ).showSnackBar(const SnackBar(content: Text('投稿を削除しました。')));
   }
 
-  void _showBookDetailDialog(Book book) {
-    showDialog(
+  String _currentAppPath() {
+    final fragment = Uri.base.fragment;
+    if (fragment.startsWith('/')) return Uri.parse(fragment).path;
+    return Uri.base.path.isEmpty ? '/' : Uri.base.path;
+  }
+
+  void _replaceBrowserPath(String path) {
+    if (!kIsWeb) return;
+    SystemNavigator.routeInformationUpdated(
+      uri: Uri(path: path),
+      replace: true,
+    );
+  }
+
+  Future<void> _showBookDetailDialog(
+    Book book, {
+    bool openedFromDirectUrl = false,
+  }) async {
+    if (_openingBookId != null && !openedFromDirectUrl) return;
+    final previousPath = _currentAppPath();
+    final canonicalBookId = (book.isbn.isNotEmpty ? book.isbn : book.id).trim();
+    final bookPath = '/book/${Uri.encodeComponent(canonicalBookId)}';
+    if (canonicalBookId.isNotEmpty && previousPath != bookPath) {
+      _replaceBrowserPath(bookPath);
+    }
+
+    await showDialog(
       context: context,
       builder: (context) {
         final hasCover = book.coverUrl.trim().isNotEmpty;
@@ -743,6 +783,15 @@ class _BookListScreenState extends State<BookListScreen> {
         );
       },
     );
+
+    if (!mounted || !kIsWeb) return;
+    if (_currentAppPath() == bookPath) {
+      _replaceBrowserPath(
+        openedFromDirectUrl || previousPath.startsWith('/book/')
+            ? '/'
+            : previousPath,
+      );
+    }
   }
 
   Widget _buildMissingCoverFallback(Book book) {
@@ -780,11 +829,13 @@ class _BookListScreenState extends State<BookListScreen> {
       animation: _controller,
       builder: (context, child) {
         if (widget.timelineOnly) {
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: RefreshIndicator(
+          return LayoutBuilder(
+            builder: (context, constraints) => RefreshIndicator(
               onRefresh: () => _controller.loadData(context),
-              child: _buildTimeline(),
+              child: _buildTimeline(
+                height: constraints.maxHeight,
+                embedded: false,
+              ),
             ),
           );
         }
@@ -812,6 +863,11 @@ class _BookListScreenState extends State<BookListScreen> {
                         if (_controller.searchQuery.isNotEmpty)
                           _buildSearchResults()
                         else ...[
+                          if ((widget.initialGenre == null &&
+                                  (_controller.isLoadingFeatured ||
+                                      _controller.featuredBooks.isNotEmpty)) ||
+                              widget.initialGenre == 'featured')
+                            _buildFeaturedBooksSection(),
                           if (widget.initialGenre == null ||
                               widget.initialGenre == 'recommended')
                             _buildGenreSection(
@@ -879,7 +935,17 @@ class _BookListScreenState extends State<BookListScreen> {
                               isLoadingInitial: _controller.isLoadingPopular,
                             ),
                           if (widget.initialGenre == null) ...[
-                            _buildSectionHeader('タイムライン'),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: PublicPostsLink(
+                                sectionHeading: true,
+                                foregroundColor: ProfilePageColors.colorFor(
+                                  context
+                                      .watch<SupabaseService>()
+                                      .activePageColorKey,
+                                ),
+                              ),
+                            ),
                             _buildTimeline(),
                           ],
                         ],
@@ -1063,7 +1129,11 @@ class _BookListScreenState extends State<BookListScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              const PublicPostsLink(),
+              PublicPostsLink(
+                foregroundColor: ProfilePageColors.colorFor(
+                  context.watch<SupabaseService>().activePageColorKey,
+                ),
+              ),
               TextButton(
                 onPressed: () => Navigator.of(context).pushNamed('/about'),
                 child: const Text('サービス・運営方針について'),
@@ -1147,6 +1217,64 @@ class _BookListScreenState extends State<BookListScreen> {
           isLoadingMore: isLoadingMore,
           hasMore: hasMore,
         ),
+      ],
+    );
+  }
+
+  Widget _buildFeaturedBooksSection() {
+    final dedicatedPage = widget.initialGenre == 'featured';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 12),
+          child: dedicatedPage
+              ? const Text(
+                  '注目の書籍',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                )
+              : TextButton.icon(
+                  key: const ValueKey('featured-books-link'),
+                  onPressed: () =>
+                      Navigator.of(context).pushNamed('/featured-books'),
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                  label: const Text('注目の書籍'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: ProfilePageColors.colorFor(
+                      context.watch<SupabaseService>().activePageColorKey,
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+        ),
+        if (_controller.featuredBooks.isEmpty && !_controller.isLoadingFeatured)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              '現在、公開中の注目書籍はありません。',
+              textAlign: TextAlign.center,
+            ),
+          )
+        else
+          _buildBookCarousel(
+            _controller.featuredBooks,
+            pageNumber: 1,
+            isLoadingInitial: _controller.isLoadingFeatured,
+            onLoadMore: () async {},
+            onLoadPrevious: () {},
+            canLoadPrevious: false,
+            isLoadingMore: false,
+            hasMore: false,
+          ),
       ],
     );
   }
@@ -1461,44 +1589,51 @@ class _BookListScreenState extends State<BookListScreen> {
     );
   }
 
-  Widget _buildTimeline() {
+  Widget _buildTimeline({double? height, bool embedded = true}) {
+    final accountColor = ProfilePageColors.colorFor(
+      context.watch<SupabaseService>().activePageColorKey,
+    );
     if (_controller.isLoadingTimeline && _controller.timelinePosts.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.symmetric(vertical: 40),
-        alignment: Alignment.center,
-        child: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Color(0xFFD00303),
+      return SizedBox(
+        height: height,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: accountColor,
+                ),
               ),
-            ),
-            SizedBox(height: 10),
-            Text('タイムラインを読み込み中...'),
-          ],
+              const SizedBox(height: 10),
+              const Text('タイムラインを読み込み中...'),
+            ],
+          ),
         ),
       );
     }
 
     if (_controller.timelinePosts.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.symmetric(vertical: 40),
-        alignment: Alignment.center,
-        child: Text(
-          'タイムラインの投稿がありません。',
-          style: TextStyle(color: Colors.grey[500]),
+      return SizedBox(
+        height: height,
+        child: Center(
+          child: Text(
+            'タイムラインの投稿がありません。',
+            style: TextStyle(color: Colors.grey[500]),
+          ),
         ),
       );
     }
 
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final timelineHeight = (MediaQuery.sizeOf(context).height * 0.58)
-        .clamp(420.0, 600.0)
-        .toDouble();
+    final timelineHeight =
+        height ??
+        (MediaQuery.sizeOf(context).height * 0.58)
+            .clamp(420.0, 600.0)
+            .toDouble();
 
     final postCount = _controller.timelinePosts.length;
     // Genre separators use slots 0 and 1. Subsequent timeline ads receive
@@ -1506,6 +1641,95 @@ class _BookListScreenState extends State<BookListScreen> {
     final adSlots = kIsWeb && timelineAdDisplayReady
         ? timelineAdSlotCount(postCount)
         : 0;
+
+    final timeline = Scrollbar(
+      controller: _timelineScrollController,
+      thumbVisibility: true,
+      child: ListView.builder(
+        controller: _timelineScrollController,
+        padding: EdgeInsets.fromLTRB(
+          embedded ? 0 : 16,
+          embedded ? 0 : 16,
+          embedded ? 8 : 16,
+          embedded ? 0 : 24,
+        ),
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
+        // Insert ads after each configured number of posts, provided
+        // another real post follows. No arbitrary per-page slot limit.
+        // Change NINJA_ADMAX_POSTS_PER_AD to 5 for normal operation.
+        itemCount: postCount + adSlots,
+        itemBuilder: (context, index) {
+          if (adSlots > 0 && isTimelineAdItem(index, postCount)) {
+            return TimelineAdSlot(
+              key: ValueKey('home-timeline-ad-slot-$index'),
+              slotIndex:
+                  homeTimelineAdSlotStart + index ~/ (timelinePostsPerAd + 1),
+            );
+          }
+          final postIndex = adSlots > 0
+              ? timelinePostIndexForItem(index, postCount)
+              : index;
+          final post = _controller.timelinePosts[postIndex];
+          final currentProfileId = Provider.of<SupabaseService>(
+            context,
+            listen: false,
+          ).activeProfileId;
+          return PostCard(
+            key: ValueKey(post.id),
+            post: post,
+            replies: _controller.timelineReplies[post.id] ?? const [],
+            concealSpoiler: post.profileId != currentProfileId,
+            onUserTap: () => _openUserProfile(post.profileId),
+            onReaction: post.profileId == currentProfileId
+                ? null
+                : (reaction) => _toggleReaction(post.id, reaction),
+            onWantToRead: post.profileId == currentProfileId
+                ? null
+                : () => _toggleWantToReadFromPost(post),
+            onReactionUsers: (reaction) =>
+                _openEngagementUsers(post, reaction: reaction),
+            onWantToReadUsers: () =>
+                _openEngagementUsers(post, wantToRead: true),
+            onDelete: post.profileId == currentProfileId
+                ? () => _deletePost(post)
+                : null,
+            onEdit: post.profileId == currentProfileId
+                ? () => _editPost(post)
+                : null,
+            onFavorite: post.profileId == currentProfileId
+                ? () => _toggleFavoriteFromPost(post)
+                : null,
+            onReport: post.profileId == currentProfileId
+                ? null
+                : () => _reportPost(post.id),
+            onReply: (parentReply) => _replyToPost(post, parentReply),
+            onReplyReport: _reportReply,
+            concealReplySpoiler: (reply) {
+              final profileId = Provider.of<SupabaseService>(
+                context,
+                listen: false,
+              ).activeProfileId;
+              return profileId.isEmpty || reply.profileId != profileId;
+            },
+            canReportReply: (reply) {
+              final profileId = Provider.of<SupabaseService>(
+                context,
+                listen: false,
+              ).activeProfileId;
+              return profileId.isEmpty || reply.profileId != profileId;
+            },
+            onReplyUserTap: _openUserProfile,
+            onRepliesChanged: () => _controller.loadData(context),
+          );
+        },
+      ),
+    );
+
+    if (!embedded) {
+      return SizedBox(height: timelineHeight, child: timeline);
+    }
 
     return Container(
       height: timelineHeight,
@@ -1520,83 +1744,7 @@ class _BookListScreenState extends State<BookListScreen> {
           width: 1.5,
         ),
       ),
-      child: Scrollbar(
-        controller: _timelineScrollController,
-        thumbVisibility: true,
-        child: ListView.builder(
-          controller: _timelineScrollController,
-          padding: const EdgeInsets.only(right: 8),
-          physics: const ClampingScrollPhysics(),
-          // Insert ads after each configured number of posts, provided
-          // another real post follows. No arbitrary per-page slot limit.
-          // Change NINJA_ADMAX_POSTS_PER_AD to 5 for normal operation.
-          itemCount: postCount + adSlots,
-          itemBuilder: (context, index) {
-            if (adSlots > 0 && isTimelineAdItem(index, postCount)) {
-              return TimelineAdSlot(
-                key: ValueKey('home-timeline-ad-slot-$index'),
-                slotIndex:
-                    homeTimelineAdSlotStart + index ~/ (timelinePostsPerAd + 1),
-              );
-            }
-            final postIndex = adSlots > 0
-                ? timelinePostIndexForItem(index, postCount)
-                : index;
-            final post = _controller.timelinePosts[postIndex];
-            final currentProfileId = Provider.of<SupabaseService>(
-              context,
-              listen: false,
-            ).activeProfileId;
-            return PostCard(
-              key: ValueKey(post.id),
-              post: post,
-              replies: _controller.timelineReplies[post.id] ?? const [],
-              concealSpoiler: post.profileId != currentProfileId,
-              onUserTap: () => _openUserProfile(post.profileId),
-              onReaction: post.profileId == currentProfileId
-                  ? null
-                  : (reaction) => _toggleReaction(post.id, reaction),
-              onWantToRead: post.profileId == currentProfileId
-                  ? null
-                  : () => _toggleWantToReadFromPost(post),
-              onReactionUsers: (reaction) =>
-                  _openEngagementUsers(post, reaction: reaction),
-              onWantToReadUsers: () =>
-                  _openEngagementUsers(post, wantToRead: true),
-              onDelete: post.profileId == currentProfileId
-                  ? () => _deletePost(post)
-                  : null,
-              onEdit: post.profileId == currentProfileId
-                  ? () => _editPost(post)
-                  : null,
-              onFavorite: post.profileId == currentProfileId
-                  ? () => _toggleFavoriteFromPost(post)
-                  : null,
-              onReport: post.profileId == currentProfileId
-                  ? null
-                  : () => _reportPost(post.id),
-              onReply: (parentReply) => _replyToPost(post, parentReply),
-              onReplyReport: _reportReply,
-              concealReplySpoiler: (reply) {
-                final profileId = Provider.of<SupabaseService>(
-                  context,
-                  listen: false,
-                ).activeProfileId;
-                return profileId.isEmpty || reply.profileId != profileId;
-              },
-              canReportReply: (reply) {
-                final profileId = Provider.of<SupabaseService>(
-                  context,
-                  listen: false,
-                ).activeProfileId;
-                return profileId.isEmpty || reply.profileId != profileId;
-              },
-              onReplyUserTap: _openUserProfile,
-              onRepliesChanged: () => _controller.loadData(context),
-            );
-          },
-        ),
-      ),
+      child: timeline,
     );
   }
 

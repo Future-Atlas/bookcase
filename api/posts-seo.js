@@ -132,11 +132,11 @@ function renderUnavailable(res, statusCode, message) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
-    <title>投稿一覧 | ${SITE_NAME}</title>
+    <title>タイムライン | ${SITE_NAME}</title>
   </head>
   <body>
     <main style="max-width:760px;margin:48px auto;padding:0 20px;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;">
-      <h1>投稿一覧</h1>
+      <h1>タイムライン</h1>
       <p>${escapeHtml(message)}</p>
       <p><a href="/">Sharemariumへ戻る</a></p>
     </main>
@@ -156,7 +156,7 @@ module.exports = async (_req, res) => {
     return renderUnavailable(
       res,
       503,
-      "投稿一覧を取得できませんでした。時間をおいて再度お試しください。",
+      "タイムラインを取得できませんでした。時間をおいて再度お試しください。",
     );
   }
 
@@ -237,7 +237,7 @@ module.exports = async (_req, res) => {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    name: "Sharemarium 投稿一覧",
+    name: "Sharemarium タイムライン",
     url: canonical,
     mainEntity: {
       "@type": "ItemList",
@@ -262,13 +262,13 @@ module.exports = async (_req, res) => {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>読書レビューの投稿一覧 | ${SITE_NAME}</title>
+    <title>読書レビューのタイムライン | ${SITE_NAME}</title>
     <meta name="description" content="Sharemariumに公開された最新の読書レビューを一覧で確認できます。気になる投稿を選ぶとレビュー詳細を読めます。">
     <meta name="robots" content="${canIndexPostsPage ? "index,follow" : "noindex,follow"}">
     <link rel="canonical" href="${canonical}">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="${SITE_NAME}">
-    <meta property="og:title" content="読書レビューの投稿一覧 | ${SITE_NAME}">
+    <meta property="og:title" content="読書レビューのタイムライン | ${SITE_NAME}">
     <meta property="og:description" content="Sharemariumに公開された最新の読書レビューを一覧で確認できます。">
     <meta property="og:url" content="${canonical}">
     <script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>
@@ -300,7 +300,7 @@ module.exports = async (_req, res) => {
   <body>
     <header><a href="/">Sharemarium</a></header>
     <main>
-      <h1>投稿一覧</h1>
+      <h1>タイムライン</h1>
       <p class="lead">Sharemariumに公開された最新の読書レビューです。気になる投稿を選ぶと詳細を確認できます。</p>
       <section class="posts" aria-label="公開レビュー一覧">
         ${listItems.length > 0 ? listItems.map((item) => item.html).join("\n") : '<p class="empty">現在、表示できる投稿がありません。</p>'}

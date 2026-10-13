@@ -10,7 +10,7 @@ function res() { return {
   status(s) { this.statusCode = s; return this; },
   send(b) { this.body = b; return this; },
 }; }
-function setup({ reviews = [], production = true, error = false } = {}) {
+function setup({ reviews = [], featured = [], production = true, error = false } = {}) {
   process.env.VERCEL_ENV = production ? "production" : "preview";
   process.env.RAKUTEN_APP_ID = "test";
   process.env.RAKUTEN_ACCESS_KEY = "test";
@@ -24,8 +24,12 @@ function setup({ reviews = [], production = true, error = false } = {}) {
     }}]}) };
   };
   global.fetch = async url => {
-    assert.match(String(url), /book_id=eq\.9784101010014/);
-    assert.match(String(url), /profiles.is_private=eq.false/);
+    const requested = String(url);
+    if (requested.includes('/featured_books?')) {
+      return {ok:true,text:async () => JSON.stringify(featured)};
+    }
+    assert.match(requested, /book_id=eq\.9784101010014/);
+    assert.match(requested, /profiles.is_private=eq.false/);
     return {ok:true,text:async () => JSON.stringify(reviews)};
   };
   delete require.cache[require.resolve("../../api/seo")];
@@ -45,9 +49,21 @@ test("book SEO serves title, canonical, schema and only non-spoiler reviews", as
   assert.equal(out.statusCode,200);
   assert.match(out.body, /本&lt;title&gt;/);
   assert.match(out.body, /"@type":"Book"/);
+  assert.match(out.body, /本&lt;title&gt;｜作品概要・レビュー｜Sharemarium/);
   assert.match(out.body, /content="index,follow"/);
   assert.match(out.body, /https:\/\/www.sharemarium.com\/book\/9784101010014/);
   assert.doesNotMatch(out.body,/secret/);
+});
+test("featured books are indexable and expose only verified related screen titles", async () => {
+  const handler = setup({featured:[{
+    book_id:"9784101010014", book_title:"本", related_screen_titles:["実在映画名"],
+  }]});
+  const out=res(); await handler({query:{path:"/book/9784101010014"}},out);
+  assert.equal(out.statusCode,200);
+  assert.match(out.body,/content="index,follow"/);
+  assert.match(out.body,/関連する映像化作品/);
+  assert.match(out.body,/実在映画名/);
+  assert.match(out.body,/property="og:type" content="book"/);
 });
 test("thin book pages and all staging pages are noindex", async () => {
   for (const production of [true,false]) {

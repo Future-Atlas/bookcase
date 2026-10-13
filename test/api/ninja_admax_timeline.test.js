@@ -147,7 +147,7 @@ test("two home book-genre separators and repeated timeline slots have unique ind
     "title: '洋書'",
     "home-ad-between-western-popular",
     "title: '人気作品'",
-    "_buildSectionHeader('タイムライン')",
+    "sectionHeading: true",
     "_buildTimeline()",
   ];
   let previous = -1;

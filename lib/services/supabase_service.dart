@@ -12,6 +12,7 @@ import '../models/post.dart';
 import '../models/post_reply.dart';
 import '../models/social_models.dart';
 import '../models/moderation_models.dart';
+import '../models/featured_book.dart';
 import '../models/profile_page_color.dart';
 import 'content_safety_service.dart';
 import 'input_security_service.dart';
@@ -2520,6 +2521,111 @@ class SupabaseService extends ChangeNotifier {
       return await _client!.rpc('is_current_user_admin') == true;
     } catch (e) {
       debugPrint('Error checking administrator access: $e');
+      return false;
+    }
+  }
+
+  Future<List<FeaturedBook>> fetchFeaturedBooks({
+    bool includeScheduled = false,
+  }) async {
+    if (!_isInitialized || _client == null) return const [];
+    if (includeScheduled && !await isCurrentUserAdmin()) return const [];
+    try {
+      var query = _client!.from('featured_books').select();
+      final response = await query
+          .order('priority')
+          .order('created_at', ascending: false);
+      final featured = (response as List<dynamic>)
+          .map((raw) => FeaturedBook.fromJson(raw as Map<String, dynamic>))
+          .toList(growable: false);
+      if (includeScheduled) return featured;
+
+      final now = DateTime.now().toUtc();
+      return featured
+          .where((item) {
+            final startsAt = item.startsAt?.toUtc();
+            final endsAt = item.endsAt?.toUtc();
+            return (startsAt == null || !startsAt.isAfter(now)) &&
+                (endsAt == null || endsAt.isAfter(now));
+          })
+          .toList(growable: false);
+    } catch (e) {
+      debugPrint('Error fetching featured books: $e');
+      return const [];
+    }
+  }
+
+  Future<bool> adminSaveFeaturedBook({
+    required Book book,
+    DateTime? startsAt,
+    DateTime? endsAt,
+    List<String> relatedScreenTitles = const [],
+  }) async {
+    if (!await isCurrentUserAdmin() || _client == null) return false;
+    final bookId = (book.isbn.isNotEmpty ? book.isbn : book.id).trim();
+    if (bookId.isEmpty || book.title.trim().isEmpty) return false;
+    try {
+      final current = await fetchFeaturedBooks(includeScheduled: true);
+      final existing = current.where((item) => item.book.id == bookId);
+      final priority = existing.isEmpty
+          ? current.length
+          : existing.first.priority;
+      await _client!.from('featured_books').upsert({
+        'book_id': bookId,
+        'book_title': book.title.trim(),
+        'book_author': book.author.trim(),
+        'book_publisher': book.publisher.trim(),
+        'book_cover_url': book.coverUrl.trim(),
+        'book_description': book.description.trim(),
+        'related_screen_titles': relatedScreenTitles
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList(growable: false),
+        'priority': priority,
+        'starts_at': startsAt?.toUtc().toIso8601String(),
+        'ends_at': endsAt?.toUtc().toIso8601String(),
+        'created_by': activeProfileId,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }, onConflict: 'book_id');
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error saving featured book: $e');
+      return false;
+    }
+  }
+
+  Future<bool> adminRemoveFeaturedBook(int id) async {
+    if (!await isCurrentUserAdmin() || _client == null || id <= 0) {
+      return false;
+    }
+    try {
+      await _client!.from('featured_books').delete().eq('id', id);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error removing featured book: $e');
+      return false;
+    }
+  }
+
+  Future<bool> adminReorderFeaturedBooks(List<FeaturedBook> books) async {
+    if (!await isCurrentUserAdmin() || _client == null) return false;
+    try {
+      for (var index = 0; index < books.length; index++) {
+        await _client!
+            .from('featured_books')
+            .update({
+              'priority': index,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('id', books[index].id);
+      }
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Error reordering featured books: $e');
       return false;
     }
   }
