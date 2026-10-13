@@ -60,27 +60,60 @@ jobs:
           test -f supabase/config.toml
           test -f supabase/seed.sql
 
+      - name: Validate production database target
+        shell: bash
+        run: |
+          node <<'NODE'
+          const raw = process.env.SUPABASE_DB_URL || "";
+          if (!raw) {
+            throw new Error("SUPABASE_DB_URL is not configured");
+          }
+
+          let parsed;
+          try {
+            parsed = new URL(raw);
+          } catch {
+            throw new Error("SUPABASE_DB_URL is not a valid URL");
+          }
+
+          if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+            throw new Error("SUPABASE_DB_URL must use the postgres protocol");
+          }
+          if (parsed.port !== '5432') {
+            throw new Error("SUPABASE_DB_URL must use the Session pooler on port 5432");
+          }
+          if (
+            parsed.hostname !== 'pooler.supabase.com' &&
+            !parsed.hostname.endsWith('.pooler.supabase.com')
+          ) {
+            throw new Error("SUPABASE_DB_URL must use a Supabase Session pooler host");
+          }
+          NODE
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
       - name: Validate migration plan
         run: |
           supabase link --project-ref "$SUPABASE_PROJECT_ID" -p "$SUPABASE_DB_PASSWORD"
+          supabase migration list --db-url "$SUPABASE_DB_URL"
           # Production can receive migrations whose timestamp predates an already
           # applied remote migration when develop changes are promoted later.
           # --include-all keeps the repository migration history authoritative.
-          supabase db push --dry-run --include-all
+          supabase db push --dry-run --include-all --db-url "$SUPABASE_DB_URL"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
 
       - name: Deploy database migrations
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply_migrations }}
         run: |
-          supabase link --project-ref "$SUPABASE_PROJECT_ID" -p "$SUPABASE_DB_PASSWORD"
-          supabase db push --include-all
+          supabase db push --include-all --db-url "$SUPABASE_DB_URL"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
 
       - name: Deploy edge functions
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_edge_functions }}

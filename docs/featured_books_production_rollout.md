@@ -18,18 +18,23 @@ only reference to existing data is a nullable `created_by` foreign key to
 1. Replace the GitHub `production` environment secret
    `SUPABASE_ACCESS_TOKEN` with a valid token. Never paste the value in an
    issue, PR, log, or source file.
-2. Confirm `SUPABASE_PROJECT_ID` and `SUPABASE_DB_PASSWORD` still point to the
-   production project.
-3. Wait for `Validate Supabase Migrations` on the PR. It starts a local
+2. Add `SUPABASE_DB_URL` to the GitHub `production` environment. Use the
+   production project's Supabase Session pooler URL on port `5432`. Replace the
+   password placeholder locally and percent-encode special characters in the
+   password before saving the secret.
+3. Confirm `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`, and the project ref in
+   the Session pooler username all point to the same production project.
+4. Wait for `Validate Supabase Migrations` on the PR. It starts a local
    Supabase instance, rebuilds the database from migrations, and runs the DB
    tests. It does not connect to production.
-4. Review the migration and the `featured_books_test.sql` RLS coverage.
+5. Review the migration and the `featured_books_test.sql` RLS coverage.
 
 ## After merging the PR
 
 Merging to `main` runs `Deploy Database to Supabase` in plan-only mode. The
-workflow links to production and runs `supabase db push --dry-run --include-all`,
-but it does not apply migrations or deploy Edge Functions.
+workflow validates the Session pooler host and port, reads remote migration
+history, and runs `supabase db push --dry-run --include-all --db-url ...`, but
+it does not apply migrations or deploy Edge Functions.
 
 In the `Validate migration plan` log, confirm that
 `20261013180000_add_featured_books.sql` is listed and that no unexpected
