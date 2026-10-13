@@ -24,7 +24,7 @@ test("home screen explains Sharemarium's original value to human users", () => {
 });
 
 test("home service introduction links to public posts and operator information", () => {
-  assert.match(source, /const PublicPostsLink\(\)/);
+  assert.match(source, /PublicPostsLink\(\s*foregroundColor:/);
   assert.match(link, /pushNamed\('\/posts'\)/);
   assert.match(link, /タイムラインを見る/);
   assert.match(source, /pushNamed\('\/about'\)/);

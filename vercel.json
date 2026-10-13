@@ -6,6 +6,21 @@
   "outputDirectory": "build/web",
   "headers": [
     {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "staging.sharemarium.com"
+        }
+      ],
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
       "source": "/sitemap.xml",
       "headers": [
         {
@@ -39,6 +54,19 @@
         {
           "type": "host",
           "value": "book-case-u9uq.vercel.app"
+        }
+      ],
+      "status": 308,
+      "headers": {
+        "Location": "https://www.sharemarium.com/$1"
+      }
+    },
+    {
+      "src": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "sharemariumbookcase.vercel.app"
         }
       ],
       "status": 308,
@@ -141,7 +169,7 @@
       "dest": "/api/seo-router?path=/"
     },
     {
-      "src": "/(genre/.*|book/.*|user/.*|users/.*|profile/.*|privacy|terms|community-guidelines|infringement-policy|external-transmission|contact|about)",
+      "src": "/(featured-books|genre/.*|book/.*|user/.*|users/.*|profile/.*|privacy|terms|community-guidelines|infringement-policy|external-transmission|contact|about)",
       "has": [
         {
           "type": "header",

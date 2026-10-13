@@ -154,6 +154,28 @@ async function fetchPublicPosts() {
   };
 }
 
+async function fetchFeaturedBooks() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { books: [], diagnostic: "featured=skipped:missing_env" };
+  }
+  const url = new URL("/rest/v1/featured_books", SUPABASE_URL);
+  url.searchParams.set("select", "book_id,updated_at");
+  url.searchParams.set("order", "priority.asc,created_at.desc");
+  url.searchParams.set("limit", "500");
+  const response = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!response.ok) throw new Error(`featured_http_${response.status}`);
+  const books = await response.json();
+  return {
+    books: Array.isArray(books) ? books : [],
+    diagnostic: "featured=ok",
+  };
+}
+
 async function dynamicProfileUrls() {
   try {
     const { profiles, diagnostic } = await fetchPublicProfiles();
@@ -208,6 +230,43 @@ async function dynamicPostUrls() {
   }
 }
 
+async function dynamicFeaturedUrls() {
+  try {
+    const { books, diagnostic } = await fetchFeaturedBooks();
+    const valid = books.filter((book) =>
+      /^(\d{13}|\d{9}[\dXx])$/.test(String(book?.book_id || "")),
+    );
+    return {
+      urls: [
+        ...(valid.length
+          ? [
+              {
+                path: "/featured-books",
+                changefreq: "weekly",
+                priority: "0.8",
+              },
+            ]
+          : []),
+        ...valid.map((book) => ({
+          path: `/book/${book.book_id}`,
+          changefreq: "weekly",
+          priority: "0.8",
+          lastmod: book.updated_at
+            ? String(book.updated_at).slice(0, 10)
+            : undefined,
+        })),
+      ],
+      diagnostic,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 80) : "unknown";
+    return {
+      urls: [],
+      diagnostic: IS_PRODUCTION ? "featured=error" : `featured=error:${message}`,
+    };
+  }
+}
+
 function dedupeUrls(urls) {
   const byLoc = new Map();
   for (const url of urls) {
@@ -220,15 +279,17 @@ function dedupeUrls(urls) {
 }
 
 module.exports = async (_req, res) => {
-  const [profiles, posts] = await Promise.all([
+  const [profiles, posts, featured] = await Promise.all([
     dynamicProfileUrls(),
     dynamicPostUrls(),
+    dynamicFeaturedUrls(),
   ]);
   const urls = dedupeUrls([
     ...FIXED_URLS,
     ...(posts.hasIndexablePostsIndex ? [POSTS_INDEX_URL] : []),
     ...profiles.urls,
     ...posts.urls,
+    ...featured.urls,
   ]).map(sitemapUrl);
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;
@@ -236,6 +297,7 @@ module.exports = async (_req, res) => {
   res.setHeader("Content-Type", "application/xml; charset=utf-8");
   res.setHeader("X-Sitemap-Diagnostics", profiles.diagnostic);
   res.setHeader("X-Sitemap-Post-Diagnostics", posts.diagnostic);
+  res.setHeader("X-Sitemap-Featured-Diagnostics", featured.diagnostic);
   if (!IS_PRODUCTION) {
     res.setHeader("X-Robots-Tag", "noindex, nofollow");
   }

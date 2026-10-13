@@ -56,6 +56,9 @@ class BookListController extends ChangeNotifier {
   bool _popularReachedEnd = false;
   bool get canLoadPreviousPopular => popularPage > 1;
 
+  List<Book> featuredBooks = [];
+  bool isLoadingFeatured = true;
+
   // タイムライン用
   List<Post> timelinePosts = [];
   Map<String, List<PostReply>> timelineReplies = {};
@@ -254,6 +257,7 @@ class BookListController extends ChangeNotifier {
     isLoadingRecommended = true;
     isLoadingWestern = true;
     isLoadingPopular = true;
+    isLoadingFeatured = true;
     isLoadingTimeline = true;
     notifyListeners();
 
@@ -275,9 +279,20 @@ class BookListController extends ChangeNotifier {
     recommendedBooks = [];
     westernBooks = [];
     popularBooks = [];
+    featuredBooks = [];
     timelinePosts = [];
     timelineReplies = {};
     notifyListeners();
+
+    try {
+      final featured = await SupabaseService().fetchFeaturedBooks();
+      featuredBooks = featured.map((item) => item.book).toList(growable: false);
+    } catch (_) {
+      featuredBooks = [];
+    } finally {
+      isLoadingFeatured = false;
+      notifyListeners();
+    }
 
     try {
       recommendedBooks = await repository.fetchBooksByGenre(

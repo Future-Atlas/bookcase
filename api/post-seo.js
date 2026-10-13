@@ -169,7 +169,7 @@ function renderErrorPage({ title, message, statusCode, res }) {
     <main style="max-width:720px;margin:48px auto;padding:0 20px;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;">
       <h1>${escapeHtml(title)}</h1>
       <p>${escapeHtml(message)}</p>
-      <p><a href="/posts">投稿一覧へ戻る</a></p>
+      <p><a href="/posts">タイムラインへ戻る</a></p>
     </main>
   </body>
 </html>`);
@@ -342,7 +342,7 @@ module.exports = async (req, res) => {
   <body>
     <header><a href="/">Sharemarium</a></header>
     <main>
-      <nav class="breadcrumb" aria-label="パンくず"><a href="/">Sharemarium</a> / <a href="/posts">投稿一覧</a> / <a href="${escapeHtml(profileUrl)}">${escapeHtml(username)}</a> / レビュー</nav>
+      <nav class="breadcrumb" aria-label="パンくず"><a href="/">Sharemarium</a> / <a href="/posts">タイムライン</a> / <a href="${escapeHtml(profileUrl)}">${escapeHtml(username)}</a> / レビュー</nav>
       <h1>『${escapeHtml(bookTitle)}』のレビュー</h1>
       ${/^(\d{13}|\d{9}[\dXx])$/.test(post.book_id || "") ? `<p><a href="/book/${encodeURIComponent(post.book_id)}">この本の書籍情報と他の感想を見る</a></p>` : ""}
       <div class="meta">
@@ -358,7 +358,7 @@ module.exports = async (req, res) => {
       </section>
       <p class="about">このページはSharemariumに公開された読書レビューの個別ページです。</p>
     </main>
-    <footer><a href="/posts">投稿一覧へ戻る</a></footer>
+    <footer><a href="/posts">タイムラインへ戻る</a></footer>
   </body>
 </html>`);
 };
