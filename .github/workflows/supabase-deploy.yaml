@@ -8,6 +8,17 @@ on:
       - "supabase/**"
       - ".github/workflows/supabase-deploy.yaml"
   workflow_dispatch:
+    inputs:
+      apply_migrations:
+        description: "Apply the validated migrations to the production database"
+        required: true
+        type: boolean
+        default: false
+      deploy_edge_functions:
+        description: "Deploy production Edge Functions (not required for featured_books)"
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   deploy:
@@ -62,6 +73,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Deploy database migrations
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply_migrations }}
         run: |
           supabase link --project-ref "$SUPABASE_PROJECT_ID" -p "$SUPABASE_DB_PASSWORD"
           supabase db push --include-all
@@ -71,6 +83,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Deploy edge functions
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_edge_functions }}
         run: |
           functions=(
             session-guard
