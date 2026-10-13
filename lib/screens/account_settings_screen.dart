@@ -289,6 +289,28 @@ class _AccountColorTheme extends StatelessWidget {
         progressIndicatorTheme: base.progressIndicatorTheme.copyWith(
           color: accountColor,
         ),
+        listTileTheme: base.listTileTheme.copyWith(
+          iconColor: accountColor,
+          selectedColor: accountColor,
+        ),
+        iconButtonTheme: IconButtonThemeData(
+          style: IconButton.styleFrom(foregroundColor: accountColor),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(foregroundColor: accountColor),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: accountColor,
+            side: BorderSide(color: accountColor),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: accountColor,
+            foregroundColor: onAccountColor,
+          ),
+        ),
       ),
       child: child,
     );

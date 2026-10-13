@@ -38,7 +38,12 @@ test("home CTA uses タイムラインを見る and routes to the existing publi
   assert.match(main, /onGenerateRoute: publicPostRoute,/);
   assert.match(routes, /title: const Text\('タイムライン'\)/);
   assert.match(home, /sectionHeading: true/);
-  assert.match(home, /_buildTimeline\(\s*height:/);
+  assert.match(
+    home,
+    /if \(widget\.timelineOnly\)[\s\S]*?_buildTimeline\(\s*height: constraints\.maxHeight,\s*embedded: false,/,
+  );
+  assert.match(home, /_buildTimeline\(\),/);
+  assert.match(home, /if \(!embedded\) \{\s*return SizedBox\(/);
   // No extra login or authentication requirement is introduced by the shortcut.
   assert.doesNotMatch(link, /isAuthenticated|login|token|authGate/);
 });
