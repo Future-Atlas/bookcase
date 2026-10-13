@@ -29,6 +29,7 @@ function setup({ reviews = [], featured = [], production = true, error = false }
       return {ok:true,text:async () => JSON.stringify(featured)};
     }
     assert.match(requested, /book_id=eq\.9784101010014/);
+    assert.match(requested, /profiles:profiles!posts_profile_id_fkey/);
     assert.match(requested, /profiles.is_private=eq.false/);
     return {ok:true,text:async () => JSON.stringify(reviews)};
   };
@@ -76,4 +77,34 @@ test("API failures are retryable rather than a permanent missing-book response",
   const handler=setup({error:true}); const out=res();
   await handler({query:{path:"/book/9784101010014"}},out);
   assert.equal(out.statusCode,503); assert.equal(out.headers["Cache-Control"],"no-store");
+});
+
+test("book SEO stays available when the optional review lookup fails", async () => {
+  const handler = setup();
+  global.fetch = async url => {
+    if (String(url).includes('/featured_books?')) {
+      return {ok:true,text:async () => "[]"};
+    }
+    return {ok:false,status:400,text:async () => '{"message":"relationship error"}'};
+  };
+  const out = res();
+  await handler({query:{path:"/book/9784101010014"}}, out);
+  assert.equal(out.statusCode, 200);
+  assert.match(out.body, /本&lt;title&gt;/);
+  assert.match(out.body, /content="noindex,follow"/);
+  assert.match(out.headers["X-SEO-Diagnostics"], /supabase_book_reviews_err=yes/);
+});
+
+test("book SEO ignores a query string forwarded with the rewritten path", async () => {
+  const handler = setup();
+  const out = res();
+  await handler(
+    {query:{path:"/book/9784101010014?utm_source=search"}},
+    out,
+  );
+  assert.equal(out.statusCode, 200);
+  assert.match(
+    out.body,
+    /https:\/\/www\.sharemarium\.com\/book\/9784101010014/,
+  );
 });

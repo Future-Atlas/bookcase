@@ -130,7 +130,10 @@ async function fetchPublicPosts() {
   }
 
   const url = new URL("/rest/v1/posts", SUPABASE_URL);
-  url.searchParams.set("select", "id,book_id,comment,created_at,is_spoiler,profiles!inner(is_private,is_suspended)");
+  url.searchParams.set(
+    "select",
+    "id,book_id,comment,created_at,is_spoiler,profiles:profiles!posts_profile_id_fkey(is_private,is_suspended)",
+  );
   url.searchParams.set("profiles.is_private", "eq.false");
   url.searchParams.set("profiles.is_suspended", "eq.false");
   url.searchParams.set("order", "created_at.desc");

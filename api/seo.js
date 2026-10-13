@@ -308,6 +308,22 @@ async function resolveBookByIsbn(isbn, diagnostics) {
   return fetchNdlBookByIsbn(isbn, diagnostics);
 }
 
+async function fetchPublicReviewsForBook(bookId, diagnostics) {
+  try {
+    return (
+      (await supabaseGet(
+        `posts?book_id=eq.${encodeURIComponent(bookId)}&select=id,comment,is_spoiler,created_at,profiles:profiles!posts_profile_id_fkey(username,is_private,is_suspended)&profiles.is_private=eq.false&profiles.is_suspended=eq.false&order=created_at.desc&limit=50`,
+      )) || []
+    );
+  } catch (err) {
+    // Review data is optional for a book overview. A temporary PostgREST or
+    // relationship error must not turn a valid catalog page into a 503.
+    diagnostics.supabaseBookReviewsError =
+      err instanceof Error ? err.message.slice(0, 80) : "unknown";
+    return [];
+  }
+}
+
 function renderBookList(books) {
   if (!books.length) {
     return "<p>現在、表示できる本情報がありません。</p>";
@@ -356,6 +372,7 @@ function setDiagnosticsHeader(res, diagnostics) {
       `ndl_fallback=${ENABLE_NDL_FALLBACK ? "on" : "off"}`,
       `supabase_index_err=${diagnostics.supabaseIndexError === "none" ? "no" : "yes"}`,
       `supabase_profile_err=${diagnostics.supabaseProfileError === "none" ? "no" : "yes"}`,
+      `supabase_book_reviews_err=${diagnostics.supabaseBookReviewsError === "none" ? "no" : "yes"}`,
     ].join(";"),
   );
 }
@@ -556,7 +573,10 @@ function buildBookDescription(book) {
 
 module.exports = async (req, res) => {
   const { path } = req.query;
-  const decodedPath = decodeURIComponent(path || "");
+  // Vercel may forward the original query string together with the rewritten
+  // path. It is not part of the canonical route and must not become part of an
+  // ISBN/profile slug.
+  const decodedPath = decodeURIComponent(String(path || "").split("?")[0]);
   const diagnostics = {
     rakutenSectionFailures: [],
     rakutenIsbnFailures: 0,
@@ -564,6 +584,7 @@ module.exports = async (req, res) => {
     ndlIsbnFailures: 0,
     supabaseIndexError: "none",
     supabaseProfileError: "none",
+    supabaseBookReviewsError: "none",
   };
 
   if (!IS_PRODUCTION) {
@@ -1276,9 +1297,7 @@ module.exports = async (req, res) => {
           } catch (_) {
             // A missing optional editorial table must not hide book pages.
           }
-          const rows = await supabaseGet(
-            `posts?book_id=eq.${encodeURIComponent(slug)}&select=id,comment,is_spoiler,created_at,profiles!inner(username,is_private,is_suspended)&profiles.is_private=eq.false&profiles.is_suspended=eq.false&order=created_at.desc&limit=50`
-          ) || [];
+          const rows = await fetchPublicReviewsForBook(slug, diagnostics);
           const reviews = rows.filter(isIndexableReview);
           const authorText = book.author ? `（${book.author}）` : "";
           const description = `${book.title}${authorText}の作品概要・読者レビュー。Sharemariumで読書記録を共有しましょう。`;
@@ -1327,11 +1346,13 @@ module.exports = async (req, res) => {
             ],
           });
           res.setHeader("Content-Type", "text/html; charset=utf-8");
+          setDiagnosticsHeader(res, diagnostics);
           return res.status(200).send(html);
         }
       } catch (_) {
         res.setHeader("Cache-Control", "no-store");
         res.setHeader("Retry-After", "300");
+        setDiagnosticsHeader(res, diagnostics);
         return res.status(503).send(renderPage({
           title: "書籍情報を取得できませんでした", description: "時間をおいて再度お試しください。",
           content: "<h1>書籍情報を取得できませんでした</h1>", pagePath: `/book/${slug}`,
