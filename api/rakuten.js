@@ -12,6 +12,7 @@ const ENDPOINTS = {
 function createHandler({ request = requestRakuten, env = process.env } = {}) {
   const appId = env.RAKUTEN_APP_ID || "";
   const accessKey = env.RAKUTEN_ACCESS_KEY || "";
+  const affiliateId = (env.RAKUTEN_AFFILIATE_ID || "").trim();
   const referer = env.RAKUTEN_REFERER || "https://www.sharemarium.com/";
   const requestCounts = new Map();
 
@@ -68,6 +69,8 @@ function createHandler({ request = requestRakuten, env = process.env } = {}) {
     applicationId: appId,
     accessKey,
   });
+  // Only the server-owned identifier may receive attribution.
+  if (affiliateId) query.set("affiliateId", affiliateId);
 
   for (const [key, value] of Object.entries(passthrough)) {
     if (!allowedParameters.has(key)) continue;

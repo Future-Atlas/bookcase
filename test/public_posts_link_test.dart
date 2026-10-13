@@ -29,10 +29,10 @@ void main() {
         );
 
         if (compact) {
-          expect(find.text('投稿一覧'), findsOneWidget);
+          expect(find.text('タイムライン'), findsOneWidget);
           await tester.tap(find.byKey(const ValueKey('header-public-posts-link')));
         } else {
-          expect(find.text('投稿一覧を見る'), findsOneWidget);
+          expect(find.text('タイムラインを見る'), findsOneWidget);
           await tester.tap(find.byKey(const ValueKey('home-public-posts-link')));
         }
         await tester.pumpAndSettle();

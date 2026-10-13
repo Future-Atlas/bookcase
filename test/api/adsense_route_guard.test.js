@@ -28,7 +28,7 @@ test("Ninja AdMax runtime is restricted to the production timeline and ad-suppor
     "utf8",
   );
   assert.match(html, /expectedHost = "www\.sharemarium\.com"/);
-  assert.match(html, /window\.location\.pathname === "\/"/);
+  assert.ok(html.includes('["/", "/posts", "/posts/"].includes(window.location.pathname)'));
   assert.match(html, /sharemarium:admax-slot-ready/);
   assert.match(html, /root\.isConnected/);
   assert.match(html, /currentSupabaseAccessToken/);

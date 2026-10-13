@@ -673,7 +673,7 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                 PopupMenuItem(
                                   value: _HeaderMenuAction.posts,
                                   child: Text(
-                                    '投稿一覧',
+                                    'タイムライン',
                                     style: TextStyle(
                                       fontSize: 28 / 2,
                                       color: popupMenuTextColor,
