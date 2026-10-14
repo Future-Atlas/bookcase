@@ -6,6 +6,8 @@ import '../models/post.dart';
 import '../services/content_safety_service.dart';
 import '../services/supabase_service.dart';
 
+const int _postCommentMaxLength = 1000;
+
 Future<bool> showPostComposerDialog({
   required BuildContext context,
   required Book book,
@@ -43,7 +45,15 @@ Future<bool> showPostComposerDialog({
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
-            title: isEditing ? const Text('投稿を編集') : null,
+            title: isEditing
+                ? const Text(
+                    '投稿を編集',
+                    style: TextStyle(
+                      color: Color(0xFFFF3B30),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  )
+                : null,
             content: SizedBox(
               width: dialogWidth,
               child: SingleChildScrollView(
@@ -164,6 +174,7 @@ Future<bool> showPostComposerDialog({
                       padding: const EdgeInsets.all(10),
                       child: TextField(
                         controller: commentController,
+                        maxLength: _postCommentMaxLength,
                         expands: true,
                         minLines: null,
                         maxLines: null,
@@ -179,7 +190,7 @@ Future<bool> showPostComposerDialog({
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      '短い感想でも投稿できます。あとで振り返ったときに分かるよう、作品のどこが印象に残ったか、なぜそう感じたかまで書くと読書記録として役立ちます。',
+                      '1000字以内で、自由に感想を記入してください。特定の人物や組織に対する誹謗中傷や個人情報を記載した場合、投稿が削除されることがあります。',
                       style: TextStyle(
                         color: Colors.black54,
                         fontSize: 12,

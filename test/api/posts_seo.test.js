@@ -123,7 +123,7 @@ test("posts index renders public reviews with reply counts and detail links", as
     new URL(profilesRequest).searchParams.get("select"),
     "id,username,user_id",
   );
-  assert.match(res.body, /<h1>投稿一覧<\/h1>/);
+  assert.match(res.body, /<h1>タイムライン<\/h1>/);
   assert.match(res.body, new RegExp(`href="/posts/${POST_A}"`));
   assert.match(res.body, new RegExp(`href="/posts/${POST_B}"`));
   assert.match(res.body, /2件の返信/);

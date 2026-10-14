@@ -8,10 +8,10 @@ const STAGING_PROJECT_REF = 'wpoigmywpewrrbudqhgh';
 export function validateProductionEnvironment(env) {
   if (
     env.GITHUB_ACTIONS !== 'true' ||
-    env.GITHUB_REPOSITORY !== 'Future-Atlas/sharemarium' ||
+    env.GITHUB_REPOSITORY !== 'Future-Atlas/bookcase' ||
     env.GITHUB_REF !== 'refs/heads/main'
   ) {
-    throw new Error('Supabase production preflight is restricted to main on Future-Atlas/sharemarium.');
+    throw new Error('Supabase production preflight is restricted to main on Future-Atlas/bookcase.');
   }
 
   const projectRef = env.SUPABASE_PROJECT_ID;

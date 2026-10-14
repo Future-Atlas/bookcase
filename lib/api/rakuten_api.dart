@@ -274,7 +274,40 @@ class RakutenApi {
       reviewCount: parsedReviewCount,
       genre: genre,
       description: description,
+      rakutenAffiliateUrl: bookData['affiliateUrl'] as String? ?? '',
     );
+  }
+
+  /// Resolve saved books by exact ISBN, never by an approximate title match.
+  static Future<String?> fetchAffiliateUrlForBook(Book book) async {
+    if (!_canRequestRakuten()) return null;
+    final isbn = (book.isbn.isNotEmpty ? book.isbn : book.id)
+        .replaceAll(RegExp(r'[\s-]'), '')
+        .toUpperCase();
+    if (!RegExp(r'^(\d{13}|\d{9}[\dX])$').hasMatch(isbn)) return null;
+    try {
+      for (final endpoint in ['book', 'foreign']) {
+        final response = await _requestRakuten(endpoint, {
+          'isbn': isbn,
+          'hits': '1',
+        }).timeout(const Duration(seconds: 15));
+        if (response == null || response.statusCode != 200) return null;
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        for (final entry in data['Items'] as List? ?? []) {
+          final item = entry['Item'];
+          if (item is! Map<String, dynamic>) continue;
+          final resultIsbn = (item['isbn']?.toString() ?? '')
+              .replaceAll(RegExp(r'[\s-]'), '')
+              .toUpperCase();
+          if (resultIsbn != isbn) continue;
+          // An exact match without affiliateUrl also means the ID is unset.
+          return item['affiliateUrl'] as String?;
+        }
+      }
+    } catch (_) {
+      // Purchase links are optional; reading and posting remain available.
+    }
+    return null;
   }
 
   static Future<List<Book>> searchByKeyword({

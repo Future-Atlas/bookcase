@@ -83,6 +83,33 @@ async function supabaseGet(pathAndQuery) {
   return parseJsonSafe(body) || [];
 }
 
+async function fetchFeaturedBooks() {
+  const rows =
+    (await supabaseGet(
+      "featured_books?select=book_id,book_title,book_author,book_publisher,book_cover_url,book_description,related_screen_titles,priority,starts_at,ends_at&order=priority.asc,created_at.desc",
+    )) || [];
+  return rows.filter(
+    (row) => row && row.book_id && row.book_title,
+  );
+}
+
+function renderFeaturedBookList(books) {
+  if (!books.length) return "<p>現在、公開中の注目書籍はありません。</p>";
+  return books
+    .map(
+      (book) => `<article class="book-item">
+        ${book.book_cover_url ? `<a href="/book/${encodeURIComponent(book.book_id)}"><img class="book-cover" src="${escapeHtml(book.book_cover_url)}" alt="${escapeHtml(book.book_title)}の表紙"></a>` : ""}
+        <div class="book-details">
+          <h3 class="book-title"><a href="/book/${encodeURIComponent(book.book_id)}">${escapeHtml(book.book_title)}</a></h3>
+          ${book.book_author ? `<p class="book-author">著者：${escapeHtml(book.book_author)}</p>` : ""}
+          ${book.book_description ? `<p>${escapeHtml(truncateForMeta(book.book_description, 180))}</p>` : ""}
+          <p><a href="/book/${encodeURIComponent(book.book_id)}">作品概要・レビューを見る</a></p>
+        </div>
+      </article>`,
+    )
+    .join("");
+}
+
 function rakutenEnabled() {
   return RAKUTEN_APP_ID !== "" && RAKUTEN_ACCESS_KEY !== "";
 }
@@ -237,8 +264,11 @@ async function fetchRakutenBookByIsbn(isbn, diagnostics) {
 
   return {
     title: first.title || compact,
-    author: first.author || "不明な著者",
+    author: first.author || "",
     coverUrl: first.largeImageUrl || "",
+    description: first.itemCaption || "",
+    publisher: first.publisherName || "",
+    isbn: compact,
   };
 }
 
@@ -276,6 +306,22 @@ async function resolveBookByIsbn(isbn, diagnostics) {
   if (rakuten) return rakuten;
   if (!ENABLE_NDL_FALLBACK) return null;
   return fetchNdlBookByIsbn(isbn, diagnostics);
+}
+
+async function fetchPublicReviewsForBook(bookId, diagnostics) {
+  try {
+    return (
+      (await supabaseGet(
+        `posts?book_id=eq.${encodeURIComponent(bookId)}&select=id,comment,is_spoiler,created_at,profiles:profiles!posts_profile_id_fkey(username,is_private,is_suspended)&profiles.is_private=eq.false&profiles.is_suspended=eq.false&order=created_at.desc&limit=50`,
+      )) || []
+    );
+  } catch (err) {
+    // Review data is optional for a book overview. A temporary PostgREST or
+    // relationship error must not turn a valid catalog page into a 503.
+    diagnostics.supabaseBookReviewsError =
+      err instanceof Error ? err.message.slice(0, 80) : "unknown";
+    return [];
+  }
 }
 
 function renderBookList(books) {
@@ -326,6 +372,7 @@ function setDiagnosticsHeader(res, diagnostics) {
       `ndl_fallback=${ENABLE_NDL_FALLBACK ? "on" : "off"}`,
       `supabase_index_err=${diagnostics.supabaseIndexError === "none" ? "no" : "yes"}`,
       `supabase_profile_err=${diagnostics.supabaseProfileError === "none" ? "no" : "yes"}`,
+      `supabase_book_reviews_err=${diagnostics.supabaseBookReviewsError === "none" ? "no" : "yes"}`,
     ].join(";"),
   );
 }
@@ -526,7 +573,10 @@ function buildBookDescription(book) {
 
 module.exports = async (req, res) => {
   const { path } = req.query;
-  const decodedPath = decodeURIComponent(path || "");
+  // Vercel may forward the original query string together with the rewritten
+  // path. It is not part of the canonical route and must not become part of an
+  // ISBN/profile slug.
+  const decodedPath = decodeURIComponent(String(path || "").split("?")[0]);
   const diagnostics = {
     rakutenSectionFailures: [],
     rakutenIsbnFailures: 0,
@@ -534,6 +584,7 @@ module.exports = async (req, res) => {
     ndlIsbnFailures: 0,
     supabaseIndexError: "none",
     supabaseProfileError: "none",
+    supabaseBookReviewsError: "none",
   };
 
   if (!IS_PRODUCTION) {
@@ -548,6 +599,8 @@ module.exports = async (req, res) => {
     robots,
     pagePath = "/",
     extraJsonLd = [],
+    ogImageUrl = OG_IMAGE_URL,
+    ogType = "website",
   }) => {
     const absoluteUrl = toAbsoluteUrl(pagePath);
     const fullTitle = title.includes(SITE_NAME)
@@ -566,21 +619,21 @@ module.exports = async (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>${fullTitle}</title>
-      <meta name="description" content="${description}">
+            <title>${escapeHtml(fullTitle)}</title>
+      <meta name="description" content="${escapeHtml(description)}">
             <meta name="robots" content="${IS_PRODUCTION ? robots || "index,follow" : "noindex,nofollow"}">
       <link rel="canonical" href="${absoluteUrl}">
-        <meta property="og:title" content="${fullTitle}">
-      <meta property="og:description" content="${description}">
+        <meta property="og:title" content="${escapeHtml(fullTitle)}">
+      <meta property="og:description" content="${escapeHtml(description)}">
             <meta property="og:site_name" content="${SITE_BRAND}">
-      <meta property="og:type" content="website">
+      <meta property="og:type" content="${escapeHtml(ogType)}">
             <meta property="og:locale" content="ja_JP">
       <meta property="og:url" content="${absoluteUrl}">
-            <meta property="og:image" content="${OG_IMAGE_URL}">
+            <meta property="og:image" content="${escapeHtml(ogImageUrl)}">
       <meta name="twitter:card" content="summary_large_image">
-      <meta name="twitter:title" content="${fullTitle}">
-      <meta name="twitter:description" content="${description}">
-            <meta name="twitter:image" content="${OG_IMAGE_URL}">
+      <meta name="twitter:title" content="${escapeHtml(fullTitle)}">
+      <meta name="twitter:description" content="${escapeHtml(description)}">
+            <meta name="twitter:image" content="${escapeHtml(ogImageUrl)}">
       <link rel="icon" type="image/png" sizes="48x48" href="${SITE_URL}/favicon.png">
       <link rel="icon" type="image/png" sizes="192x192" href="${SITE_URL}/icons/Icon-192.png">
       <link rel="icon" type="image/svg+xml" sizes="any" href="${SITE_URL}/favicon.svg">
@@ -589,7 +642,7 @@ module.exports = async (req, res) => {
       ${jsonLdList
         .map(
           (item) =>
-            `<script type="application/ld+json">${JSON.stringify(item)}</script>`,
+            `<script type="application/ld+json">${JSON.stringify(item).replace(/</g, "\\u003c")}</script>`,
         )
         .join("")}
       <style>
@@ -626,6 +679,9 @@ module.exports = async (req, res) => {
       <footer>
         <p><a href="${SITE_URL}/about">運営者情報</a> | <a href="${SITE_URL}/contact">お問い合わせ</a></p>
         <p>© 2026 ${SITE_BRAND}. All rights reserved.</p>
+        <!-- Rakuten Web Services Attribution Snippet FROM HERE -->
+        <a href="https://webservice.rakuten.co.jp/" target="_blank"><img src="https://webservice.rakuten.co.jp/img/credit/200709/credit_22121.gif" border="0" alt="Rakuten Web Service Center" title="Rakuten Web Service Center" width="221" height="21"/></a>
+        <!-- Rakuten Web Services Attribution Snippet TO HERE -->
       </footer>
     </body>
     </html>
@@ -1125,6 +1181,55 @@ module.exports = async (req, res) => {
     return res.status(200).send(html);
   }
 
+  if (decodedPath === "/featured-books") {
+    let featuredBooks = [];
+    try {
+      featuredBooks = await fetchFeaturedBooks();
+    } catch (err) {
+      diagnostics.supabaseIndexError =
+        err instanceof Error ? err.message.slice(0, 80) : "unknown";
+    }
+    const html = renderPage({
+      title: "注目の書籍",
+      description:
+        "Sharemarium運営者が選んだ注目の書籍です。作品概要と読者レビューを確認できます。",
+      content: `<section>
+        <h1>注目の書籍</h1>
+        <p>Sharemarium運営者が、実在する書籍情報を確認して選んだ作品です。</p>
+        ${renderFeaturedBookList(featuredBooks)}
+      </section>`,
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        name: "注目の書籍 | Sharemarium",
+        url: toAbsoluteUrl(decodedPath),
+        mainEntity: {
+          "@type": "ItemList",
+          itemListElement: featuredBooks.map((book, index) => ({
+            "@type": "ListItem",
+            position: index + 1,
+            url: toAbsoluteUrl(`/book/${encodeURIComponent(book.book_id)}`),
+            name: book.book_title,
+          })),
+        },
+      },
+      extraJsonLd: [
+        breadcrumbStructuredData([
+          { name: "ホーム", url: `${SITE_URL}/` },
+          { name: "注目の書籍", url: toAbsoluteUrl(decodedPath) },
+        ]),
+      ],
+      pagePath: decodedPath,
+      robots: featuredBooks.length ? "index,follow" : "noindex,follow",
+    });
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    if (!featuredBooks.length) {
+      res.setHeader("X-Robots-Tag", "noindex, follow");
+    }
+    setDiagnosticsHeader(res, diagnostics);
+    return res.status(200).send(html);
+  }
+
   const genreSection = sectionByGenrePath(decodedPath);
   if (genreSection) {
     let books = [];
@@ -1174,6 +1279,87 @@ module.exports = async (req, res) => {
 
   if (decodedPath.startsWith("/book/")) {
     const slug = decodedPath.replace("/book/", "").split("/")[0];
+    if (/^(\d{13}|\d{9}[\dXx])$/.test(slug)) {
+      try {
+        if (!rakutenEnabled()) throw new Error("book_api_unconfigured");
+        const book = await resolveBookByIsbn(slug, diagnostics);
+        if (!book && diagnostics.rakutenIsbnFailures > 0) {
+          throw new Error("book_api_unavailable");
+        }
+        if (book) {
+          let featured = null;
+          try {
+            const featuredRows = await fetchFeaturedBooks();
+            featured =
+              featuredRows.find(
+                (item) => String(item.book_id) === String(slug),
+              ) || null;
+          } catch (_) {
+            // A missing optional editorial table must not hide book pages.
+          }
+          const rows = await fetchPublicReviewsForBook(slug, diagnostics);
+          const reviews = rows.filter(isIndexableReview);
+          const authorText = book.author ? `（${book.author}）` : "";
+          const description = `${book.title}${authorText}の作品概要・読者レビュー。Sharemariumで読書記録を共有しましょう。`;
+          const relatedScreenTitles = Array.isArray(
+            featured?.related_screen_titles,
+          )
+            ? featured.related_screen_titles.filter(Boolean)
+            : [];
+          const html = renderPage({
+            title: `${book.title}｜作品概要・レビュー｜Sharemarium`,
+            description, pagePath: `/book/${slug}`,
+            // Editorially selected books and books with an original public
+            // review are indexable. Catalog-only pages stay out of the index.
+            robots: reviews.length || featured ? "index,follow" : "noindex,follow",
+            ogType: "book",
+            ogImageUrl: book.coverUrl || OG_IMAGE_URL,
+            content: `<h1>${escapeHtml(book.title)}</h1>
+              ${book.author ? `<p>著者：${escapeHtml(book.author)}</p>` : ""}
+              <p>${book.publisher ? `出版社：${escapeHtml(book.publisher)} ／ ` : ""}ISBN：${escapeHtml(slug)}</p>
+              ${book.coverUrl ? `<img width="150" src="${escapeHtml(book.coverUrl)}" alt="${escapeHtml(book.title)}の表紙">` : ""}
+              <h2>書籍紹介</h2><p>${escapeHtml(book.description || "紹介文は準備中です。")}</p>
+              ${relatedScreenTitles.length ? `<h2>関連する映像化作品</h2><ul>${relatedScreenTitles.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ul>` : ""}
+              <h2>読者の感想</h2>
+              ${reviews.length ? reviews.map(p => `<article><h3>${escapeHtml(p.profiles?.username || "読者")}さんの感想</h3><p>${escapeHtml(p.comment)}</p><a href="/posts/${encodeURIComponent(p.id)}">投稿を見る</a></article>`).join("") : "<p>公開されている感想はまだありません。</p>"}
+              <p><a href="/">Sharemariumで本を探す</a></p>`,
+            jsonLd: {
+              "@context": "https://schema.org",
+              "@type": "Book",
+              name: book.title,
+              isbn: slug,
+              ...(book.author
+                ? { author: { "@type": "Person", name: book.author } }
+                : {}),
+              ...(book.publisher
+                ? { publisher: { "@type": "Organization", name: book.publisher } }
+                : {}),
+              ...(book.description ? { description: book.description } : {}),
+              ...(book.coverUrl ? { image: book.coverUrl } : {}),
+              url: toAbsoluteUrl(`/book/${slug}`),
+            },
+            extraJsonLd: [
+              breadcrumbStructuredData([
+                { name: "ホーム", url: `${SITE_URL}/` },
+                { name: book.title, url: toAbsoluteUrl(`/book/${slug}`) },
+              ]),
+            ],
+          });
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          setDiagnosticsHeader(res, diagnostics);
+          return res.status(200).send(html);
+        }
+      } catch (_) {
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("Retry-After", "300");
+        setDiagnosticsHeader(res, diagnostics);
+        return res.status(503).send(renderPage({
+          title: "書籍情報を取得できませんでした", description: "時間をおいて再度お試しください。",
+          content: "<h1>書籍情報を取得できませんでした</h1>", pagePath: `/book/${slug}`,
+          robots: "noindex,nofollow",
+        }));
+      }
+    }
     const notFoundHtml = renderPage({
       title: "書籍ページが見つかりません",
       description: "指定された書籍ページは見つかりませんでした。",
@@ -1191,6 +1377,14 @@ module.exports = async (req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     setDiagnosticsHeader(res, diagnostics);
     return res.status(404).send(notFoundHtml);
+  }
+
+  let featuredForHome = [];
+  try {
+    featuredForHome = await fetchFeaturedBooks();
+  } catch (err) {
+    diagnostics.supabaseIndexError =
+      err instanceof Error ? err.message.slice(0, 80) : "unknown";
   }
 
   let recentPosts = [];
@@ -1271,6 +1465,7 @@ module.exports = async (req, res) => {
             <h2>主要ページ</h2>
             <ul>
                 <li><a href="${SITE_URL}/posts">公開レビュー一覧</a></li>
+                ${featuredForHome.length ? `<li><a href="${SITE_URL}/featured-books">注目の書籍</a></li>` : ""}
                 <li><a href="${SITE_URL}/about">運営者情報</a></li>
                 <li><a href="${SITE_URL}/privacy">プライバシーポリシー</a></li>
                 <li><a href="${SITE_URL}/terms">利用規約</a></li>
@@ -1299,6 +1494,11 @@ module.exports = async (req, res) => {
             <p>読んだ本を忘れずに記録したい方、所有している本を整理したい方、読書習慣を振り返りたい方に向けたサービスです。</p>
             <p><a href="${SITE_URL}/">Sharemariumを始める</a> / <a href="${SITE_URL}/contact">お問い合わせ</a></p>
             </section>
+      ${featuredForHome.length ? `<section>
+        <h2><a href="${SITE_URL}/featured-books">注目の書籍</a></h2>
+        <p>Sharemarium運営者が選んだ作品です。各作品の概要と公開レビューを確認できます。</p>
+        ${renderFeaturedBookList(featuredForHome)}
+      </section>` : ""}
       <section>
         <h2>Sharemariumで公開された最新レビュー</h2>
         <p>実際にSharemariumの利用者が投稿した読書レビューです。書籍カタログの転載ではなく、読書体験にもとづく感想を掲載しています。</p>
