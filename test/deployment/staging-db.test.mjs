@@ -5,7 +5,7 @@ import { deploy, FUNCTIONS, STAGING_PROJECT, validateEnvironment, validateMigrat
 
 const environment = () => ({
   GITHUB_ACTIONS: 'true',
-  GITHUB_REPOSITORY: 'Future-Atlas/sharemarium',
+  GITHUB_REPOSITORY: 'Future-Atlas/bookcase',
   GITHUB_REF: 'refs/heads/develop',
   SUPABASE_PROJECT_ID: STAGING_PROJECT,
   SUPABASE_DB_PASSWORD: 'test-password-only',

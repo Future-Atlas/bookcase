@@ -8,7 +8,7 @@ export const FUNCTIONS = ['session-guard', 'delete-account', 'admin-delete-accou
 
 export function validateEnvironment(env) {
   if (env.GITHUB_ACTIONS !== 'true' ||
-      env.GITHUB_REPOSITORY !== 'Future-Atlas/sharemarium' ||
+      env.GITHUB_REPOSITORY !== 'Future-Atlas/bookcase' ||
       env.GITHUB_REF !== 'refs/heads/develop') {
     throw new Error('Deployment is restricted to develop in the Sharemarium GitHub repository.');
   }

@@ -39,10 +39,11 @@ mainを選んで手動実行してもジョブはスキップされます。
 1. GitHubランナーの一時DBで全マイグレーションを最初から実行。
 2. `supabase/tests` のアクセス制限テストを実行。
 3. 別ジョブでstagingのSecretsを読み、接続先・必須値を検査。
-4. 検証プロジェクトにリンクし、その結果が指定IDと一致するか検査。
-5. `db push --dry-run --include-all` で未適用ファイルを確認。
-6. applyの場合だけ、同じ未適用ファイルを反映。
-7. `session-guard`、`delete-account`、`admin-delete-account`、`billing-checkout`、`billing-cancel-subscription`、`billing-change-plan`、`billing-webhook` の7関数を検証プロジェクトに配置。
+4. Supabase Management APIの読み取り専用GETで、stagingのPATが指定プロジェクトにアクセスできるか確認。401/403/404などのエラーを秘密情報を出さずに検出。実際のDBへの書き込み権限はこの段階では未検証。
+5. 検証プロジェクトにリンクし、その結果が指定IDと一致するか検査。
+6. `db push --dry-run --include-all` で未適用ファイルを確認。
+7. applyの場合だけ、同じ未適用ファイルを反映。
+8. `session-guard`、`delete-account`、`admin-delete-account`、`billing-checkout`、`billing-cancel-subscription`、`billing-change-plan`、`billing-webhook` の7関数を検証プロジェクトに配置。
 
 クラウドDBにresetは行いません。DBリセットはSecretsを渡していないGitHubランナーの一時DBに限定しています。dry-runはSQLの実行結果を保証するものではないため、一時DBの構築とテストも必須です。
 

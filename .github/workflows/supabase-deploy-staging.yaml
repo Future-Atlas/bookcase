@@ -30,7 +30,7 @@ defaults:
 
 jobs:
   validate:
-    if: github.repository == 'Future-Atlas/sharemarium' && github.ref == 'refs/heads/develop'
+    if: github.repository == 'Future-Atlas/bookcase' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # No cloud credentials in this job: reset/test only the runner's local DB.
@@ -67,7 +67,7 @@ jobs:
 
   deploy:
     needs: validate
-    if: github.repository == 'Future-Atlas/sharemarium' && github.ref == 'refs/heads/develop'
+    if: github.repository == 'Future-Atlas/bookcase' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
@@ -84,6 +84,9 @@ jobs:
 
       - name: Check staging target and credentials before connecting
         run: node scripts/deploy-staging-db.mjs guard
+
+      - name: Verify staging PAT/project access (read-only)
+        run: node scripts/preflight-supabase-staging.mjs
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3
