@@ -2914,7 +2914,7 @@ class SupabaseService extends ChangeNotifier {
       comment,
       fieldLabel: '感想',
       allowNewLines: true,
-      maxLength: 3000,
+      maxLength: 1000,
     );
     if (commentError != null) {
       debugPrint(commentError);
@@ -2924,7 +2924,7 @@ class SupabaseService extends ChangeNotifier {
     final normalizedComment = InputSecurityService.normalizeText(
       comment,
       allowNewLines: true,
-      maxLength: 3000,
+      maxLength: 1000,
     );
 
     final isAgeRestricted =
@@ -3000,14 +3000,14 @@ class SupabaseService extends ChangeNotifier {
       comment,
       fieldLabel: '感想',
       allowNewLines: true,
-      maxLength: 3000,
+      maxLength: 1000,
     );
     if (commentError != null) return false;
 
     final trimmedComment = InputSecurityService.normalizeText(
       comment,
       allowNewLines: true,
-      maxLength: 3000,
+      maxLength: 1000,
     );
     if (trimmedComment.isEmpty || rating < 1 || rating > 5) return false;
 
