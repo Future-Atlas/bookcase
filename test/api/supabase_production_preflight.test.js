@@ -131,10 +131,10 @@ test("production workflow checks credentials before any Supabase link, db push, 
   assert.ok(verify > 0 && verify < link);
   assert.ok(deployMigrations > verify && deployFunctions > deployMigrations);
   assert.match(workflow, /environment:\s+name: production/);
-  assert.match(workflow, /apply_migrations:[\\s\\S]*?default: false/);
-  assert.match(workflow, /deploy_edge_functions:[\\s\\S]*?default: false/);
-  assert.match(workflow, /github\\.event_name == 'workflow_dispatch' && inputs\\.apply_migrations/);
-  assert.match(workflow, /github\\.event_name == 'workflow_dispatch' && inputs\\.deploy_edge_functions/);
+  assert.match(workflow, /apply_migrations:[\s\S]*?default: false/);
+  assert.match(workflow, /deploy_edge_functions:[\s\S]*?default: false/);
+  assert.match(workflow, /github\.event_name == 'workflow_dispatch' && inputs\.apply_migrations/);
+  assert.match(workflow, /github\.event_name == 'workflow_dispatch' && inputs\.deploy_edge_functions/);
   assert.match(workflow, /supabase db push --dry-run --include-all --db-url/);
   assert.match(workflow, /SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/);
   assert.match(workflow, /SUPABASE_PROJECT_ID: \$\{\{ secrets\.SUPABASE_PROJECT_ID \}\}/);
