@@ -8,7 +8,7 @@ const read = p => fs.readFileSync(path.join(__dirname, '../..', p), 'utf8');
 function goodEnv() {
   return {
     GITHUB_ACTIONS: 'true',
-    GITHUB_REPOSITORY: 'Future-Atlas/sharemarium',
+    GITHUB_REPOSITORY: 'Future-Atlas/bookcase',
     GITHUB_REF: 'refs/heads/develop',
     SUPABASE_PROJECT_ID: 'wpoigmywpewrrbudqhgh',
     SUPABASE_ACCESS_TOKEN: 'sbp_fake-token-for-unit-tests',
