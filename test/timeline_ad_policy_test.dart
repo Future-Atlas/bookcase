@@ -6,15 +6,15 @@ void main() {
     expect(timelineAdSlotCount(0), 0);
     expect(timelineAdSlotCount(1), 0);
     expect(timelineAdSlotCount(2), 0);
-    expect(timelineAdSlotCount(3), 1);
-    expect(timelineAdSlotCount(4), 1);
-    expect(timelineAdSlotCount(5), 2);
-    expect(timelineAdSlotCount(6), 2);
-    expect(timelineAdSlotCount(7), 3);
-    expect(timelineAdSlotCount(9), 4);
-    expect(timelineAdSlotCount(21), 10);
-    expect(timelineAdSlotCount(100), 49);
-    expect(timelineAdSlotCount(1000), 499);
+    expect(timelineAdSlotCount(3), 0);
+    expect(timelineAdSlotCount(4), 0);
+    expect(timelineAdSlotCount(5), 0);
+    expect(timelineAdSlotCount(6), 1);
+    expect(timelineAdSlotCount(7), 1);
+    expect(timelineAdSlotCount(9), 1);
+    expect(timelineAdSlotCount(21), 4);
+    expect(timelineAdSlotCount(100), 19);
+    expect(timelineAdSlotCount(1000), 199);
 
     const postCount = 9;
     final ads = <int>[];
@@ -27,7 +27,7 @@ void main() {
         posts.add(timelinePostIndexForItem(i, postCount));
       }
     }
-    expect(ads, <int>[2, 5, 8, 11]);
+    expect(ads, <int>[5]);
     expect(posts, <int>[0, 1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
@@ -39,8 +39,10 @@ void main() {
     expect(timelineAdSlotCount(99, postsPerAd: 5), 19);
     expect(timelineAdSlotCount(101, postsPerAd: 5), 20);
     expect(
-      [for (var i = 0; i < 14; i++)
-        if (isTimelineAdItem(i, 12, postsPerAd: 5)) i],
+      [
+        for (var i = 0; i < 14; i++)
+          if (isTimelineAdItem(i, 12, postsPerAd: 5)) i,
+      ],
       <int>[5, 11],
     );
     expect(timelinePostIndexForItem(12, 12, postsPerAd: 5), 10);
@@ -53,12 +55,12 @@ void main() {
 
     const postCount = 13;
     final timelineAds = timelineAdSlotCount(postCount);
-    expect(timelineAds, 6);
+    expect(timelineAds, 2);
     final slotIndices = <int>[
       for (var index = 0; index < timelineAds; index++)
         homeTimelineAdSlotStart + index,
     ];
-    expect(slotIndices, <int>[2, 3, 4, 5, 6, 7]);
+    expect(slotIndices, <int>[2, 3]);
     expect(slotIndices.toSet().length, slotIndices.length);
   });
 
@@ -66,20 +68,15 @@ void main() {
     for (final postCount in <int>[0, 1, 2, 3, 7, 9, 21, 100, 101, 1000]) {
       for (final postsPerAd in <int>[2, 5, 13]) {
         final posts = <int>[];
-        final adCount = timelineAdSlotCount(
-          postCount,
-          postsPerAd: postsPerAd,
-        );
+        final adCount = timelineAdSlotCount(postCount, postsPerAd: postsPerAd);
         var renderedAdCount = 0;
         for (var i = 0; i < postCount + adCount; i++) {
           if (isTimelineAdItem(i, postCount, postsPerAd: postsPerAd)) {
             renderedAdCount++;
           } else {
-            posts.add(timelinePostIndexForItem(
-              i,
-              postCount,
-              postsPerAd: postsPerAd,
-            ));
+            posts.add(
+              timelinePostIndexForItem(i, postCount, postsPerAd: postsPerAd),
+            );
           }
         }
         expect(

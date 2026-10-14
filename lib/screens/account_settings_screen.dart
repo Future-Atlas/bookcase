@@ -39,7 +39,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   bool _deleting = false;
 
   void _push(Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => _AccountColorTheme(child: screen)),
+    );
   }
 
   Future<void> _openPrivacySettings() async {
@@ -81,7 +83,6 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('退会する'),
           ),
         ],
@@ -116,125 +117,134 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       );
     }
 
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const _SectionTitle('ユーザー設定'),
-            _SettingsCard(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.manage_accounts_outlined),
-                  title: const Text('アカウント設定'),
-                  subtitle: const Text('ユーザー名・ユーザーID（変更不可）・鍵アカウント'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _push(const _PublicAccountSettingsScreen()),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.privacy_tip_outlined),
-                  title: const Text('プライバシー設定'),
-                  subtitle: const Text('氏名・生年月日・電話番号・メールアドレス'),
-                  trailing: const Icon(Icons.lock_outline),
-                  onTap: _openPrivacySettings,
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: const EdgeInsets.only(left: 40, right: 16),
-                  leading: const Icon(Icons.block_outlined),
-                  title: const Text('ブロックしているアカウント'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _push(const _BlockedAccountsScreen()),
-                ),
-                const Divider(height: 1),
-                Consumer<ThemeService>(
-                  builder: (context, themeService, _) => ListTile(
-                    contentPadding: const EdgeInsets.only(left: 40, right: 16),
-                    leading: const Icon(Icons.dark_mode_outlined),
-                    title: const Text('ダークモード'),
-                    trailing: Switch(
-                      value: themeService.isDarkMode,
-                      onChanged: themeService.setDarkMode,
-                    ),
-                    onTap: () =>
-                        themeService.setDarkMode(!themeService.isDarkMode),
-                  ),
-                ),
-              ],
-            ),
-            if (FeatureFlags.subscriptionUiEnabled) ...[
-              const SizedBox(height: 18),
-              const _SectionTitle('プラン・契約'),
+    final accountColor = ProfilePageColors.colorFor(service.activePageColorKey);
+    return _AccountColorTheme(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const _SectionTitle('ユーザー設定'),
               _SettingsCard(
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.workspace_premium_outlined),
-                    title: const Text('プラン・契約'),
-                    subtitle: const Text('現在のプラン・無料体験・次回更新日を確認'),
+                    leading: const Icon(Icons.manage_accounts_outlined),
+                    title: const Text('アカウント設定'),
+                    subtitle: const Text('ユーザー名・ユーザーID（変更不可）・鍵アカウント'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _push(const SubscriptionStatusScreen()),
+                    onTap: () => _push(const _PublicAccountSettingsScreen()),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.privacy_tip_outlined),
+                    title: const Text('プライバシー設定'),
+                    subtitle: const Text('氏名・生年月日・電話番号・メールアドレス'),
+                    trailing: const Icon(Icons.lock_outline),
+                    onTap: _openPrivacySettings,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    contentPadding: const EdgeInsets.only(left: 40, right: 16),
+                    leading: const Icon(Icons.block_outlined),
+                    title: const Text('ブロックしているアカウント'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _push(const _BlockedAccountsScreen()),
+                  ),
+                  const Divider(height: 1),
+                  Consumer<ThemeService>(
+                    builder: (context, themeService, _) => ListTile(
+                      contentPadding: const EdgeInsets.only(
+                        left: 40,
+                        right: 16,
+                      ),
+                      leading: const Icon(Icons.dark_mode_outlined),
+                      title: const Text('ダークモード'),
+                      trailing: Switch(
+                        value: themeService.isDarkMode,
+                        onChanged: themeService.setDarkMode,
+                      ),
+                      onTap: () =>
+                          themeService.setDarkMode(!themeService.isDarkMode),
+                    ),
                   ),
                 ],
               ),
+              if (FeatureFlags.subscriptionUiEnabled) ...[
+                const SizedBox(height: 18),
+                const _SectionTitle('プラン・契約'),
+                _SettingsCard(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.workspace_premium_outlined),
+                      title: const Text('プラン・契約'),
+                      subtitle: const Text('現在のプラン・無料体験・次回更新日を確認'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _push(const SubscriptionStatusScreen()),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 18),
+              const _SectionTitle('各種ポリシー'),
+              _SettingsCard(
+                children: [
+                  _policyTile('利用規約', const TermsScreen()),
+                  _policyTile('プライバシーポリシー', const PrivacyPolicyScreen()),
+                  _policyTile(
+                    'コミュニティガイドライン',
+                    const CommunityGuidelinesScreen(),
+                  ),
+                  _policyTile('権利侵害・通報ポリシー', const InfringementPolicyScreen()),
+                  _policyTile(
+                    '外部送信に関する公表事項',
+                    const ExternalTransmissionScreen(),
+                    last: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const _SectionTitle('お問い合わせ'),
+              _SettingsCard(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.mail_outline),
+                    title: const Text('お問い合わせフォーム'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _push(const ContactScreen()),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.delete_forever_outlined),
+                    iconColor: accountColor,
+                    textColor: accountColor,
+                    title: const Text('退会'),
+                    trailing: _deleting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.chevron_right),
+                    onTap: _deleting ? null : _deleteAccount,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const _SectionTitle('アプリ情報'),
+              const _SettingsCard(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.info_outline),
+                    title: Text('Sharemarium'),
+                    subtitle: Text('バージョン 1.1.0+2'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 28),
             ],
-            const SizedBox(height: 18),
-            const _SectionTitle('各種ポリシー'),
-            _SettingsCard(
-              children: [
-                _policyTile('利用規約', const TermsScreen()),
-                _policyTile('プライバシーポリシー', const PrivacyPolicyScreen()),
-                _policyTile('コミュニティガイドライン', const CommunityGuidelinesScreen()),
-                _policyTile('権利侵害・通報ポリシー', const InfringementPolicyScreen()),
-                _policyTile(
-                  '外部送信に関する公表事項',
-                  const ExternalTransmissionScreen(),
-                  last: true,
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            const _SectionTitle('お問い合わせ'),
-            _SettingsCard(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.mail_outline),
-                  title: const Text('お問い合わせフォーム'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _push(const ContactScreen()),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.delete_forever_outlined),
-                  iconColor: Colors.red,
-                  textColor: Colors.red,
-                  title: const Text('退会'),
-                  trailing: _deleting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.chevron_right),
-                  onTap: _deleting ? null : _deleteAccount,
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            const _SectionTitle('アプリ情報'),
-            const _SettingsCard(
-              children: [
-                ListTile(
-                  leading: Icon(Icons.info_outline),
-                  title: Text('Sharemarium'),
-                  subtitle: Text('バージョン 1.1.0+2'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 28),
-          ],
+          ),
         ),
       ),
     );
@@ -251,6 +261,60 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           if (!last) const Divider(height: 1),
         ],
       );
+}
+
+class _AccountColorTheme extends StatelessWidget {
+  const _AccountColorTheme({required this.child, this.colorKey});
+
+  final Widget child;
+  final String? colorKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context);
+    final accountColor = ProfilePageColors.colorFor(
+      colorKey ?? context.watch<SupabaseService>().activePageColorKey,
+    );
+    final onAccountColor = accountColor.computeLuminance() > 0.55
+        ? Colors.black
+        : Colors.white;
+    return Theme(
+      data: base.copyWith(
+        colorScheme: base.colorScheme.copyWith(
+          primary: accountColor,
+          onPrimary: onAccountColor,
+          secondary: accountColor,
+          onSecondary: onAccountColor,
+        ),
+        progressIndicatorTheme: base.progressIndicatorTheme.copyWith(
+          color: accountColor,
+        ),
+        listTileTheme: base.listTileTheme.copyWith(
+          iconColor: accountColor,
+          selectedColor: accountColor,
+        ),
+        iconButtonTheme: IconButtonThemeData(
+          style: IconButton.styleFrom(foregroundColor: accountColor),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(foregroundColor: accountColor),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: accountColor,
+            side: BorderSide(color: accountColor),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: accountColor,
+            foregroundColor: onAccountColor,
+          ),
+        ),
+      ),
+      child: child,
+    );
+  }
 }
 
 class _PublicAccountSettingsScreen extends StatefulWidget {
@@ -513,148 +577,153 @@ class _PublicAccountSettingsScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('アカウント設定')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 620),
-                child: Form(
-                  key: _formKey,
-                  child: ListView(
-                    padding: const EdgeInsets.all(20),
-                    children: [
-                      Center(
-                        child: Column(
-                          children: [
-                            CircleAvatar(
-                              radius: 52,
-                              backgroundImage: _avatarUrl.isEmpty
-                                  ? null
-                                  : NetworkImage(_avatarUrl),
-                              child: _avatarUrl.isEmpty
-                                  ? const Icon(Icons.person, size: 52)
-                                  : null,
-                            ),
-                            const SizedBox(height: 12),
-                            Wrap(
-                              alignment: WrapAlignment.center,
-                              spacing: 8,
-                              children: [
-                                FilledButton.icon(
-                                  onPressed: _updatingAvatar
-                                      ? null
-                                      : _chooseAvatar,
-                                  icon: _updatingAvatar
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Icon(Icons.photo_camera_outlined),
-                                  label: Text(
-                                    _avatarUrl.isEmpty
-                                        ? 'デバイスから画像を選択'
-                                        : 'デバイスから画像を変更',
-                                  ),
-                                ),
-                                if (_avatarUrl.isNotEmpty)
-                                  TextButton(
+    return _AccountColorTheme(
+      colorKey: _pageColorKey,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('アカウント設定')),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 620),
+                  child: Form(
+                    key: _formKey,
+                    child: ListView(
+                      padding: const EdgeInsets.all(20),
+                      children: [
+                        Center(
+                          child: Column(
+                            children: [
+                              CircleAvatar(
+                                radius: 52,
+                                backgroundImage: _avatarUrl.isEmpty
+                                    ? null
+                                    : NetworkImage(_avatarUrl),
+                                child: _avatarUrl.isEmpty
+                                    ? const Icon(Icons.person, size: 52)
+                                    : null,
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 8,
+                                children: [
+                                  FilledButton.icon(
                                     onPressed: _updatingAvatar
                                         ? null
-                                        : _removeAvatar,
-                                    child: const Text('画像を削除'),
+                                        : _chooseAvatar,
+                                    icon: _updatingAvatar
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.photo_camera_outlined,
+                                          ),
+                                    label: Text(
+                                      _avatarUrl.isEmpty
+                                          ? 'デバイスから画像を選択'
+                                          : 'デバイスから画像を変更',
+                                    ),
                                   ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'JPEG・PNG・WebP／5MB以下',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ],
+                                  if (_avatarUrl.isNotEmpty)
+                                    TextButton(
+                                      onPressed: _updatingAvatar
+                                          ? null
+                                          : _removeAvatar,
+                                      child: const Text('画像を削除'),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'JPEG・PNG・WebP／5MB以下',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      TextFormField(
-                        controller: _usernameController,
-                        maxLength: 30,
-                        decoration: const InputDecoration(
-                          labelText: 'ユーザー名',
-                          helperText: 'プロフィールに表示される名前です。いつでも変更できます。',
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 24),
+                        TextFormField(
+                          controller: _usernameController,
+                          maxLength: 30,
+                          decoration: const InputDecoration(
+                            labelText: 'ユーザー名',
+                            helperText: 'プロフィールに表示される名前です。いつでも変更できます。',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) => (value?.trim().isEmpty ?? true)
+                              ? 'ユーザー名を入力してください。'
+                              : null,
                         ),
-                        validator: (value) => (value?.trim().isEmpty ?? true)
-                            ? 'ユーザー名を入力してください。'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _userIdController,
-                        readOnly: true,
-                        canRequestFocus: false,
-                        enableInteractiveSelection: false,
-                        mouseCursor: SystemMouseCursors.basic,
-                        maxLength: 20,
-                        decoration: const InputDecoration(
-                          labelText: 'ユーザーID',
-                          prefixText: '@',
-                          helperText: 'ユーザーIDは変更できません。',
-                          hoverColor: Colors.transparent,
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _userIdController,
+                          readOnly: true,
+                          canRequestFocus: false,
+                          enableInteractiveSelection: false,
+                          mouseCursor: SystemMouseCursors.basic,
+                          maxLength: 20,
+                          decoration: const InputDecoration(
+                            labelText: 'ユーザーID',
+                            prefixText: '@',
+                            helperText: 'ユーザーIDは変更できません。',
+                            hoverColor: Colors.transparent,
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) =>
+                              RegExp(
+                                r'^[a-z0-9_]{3,20}$',
+                              ).hasMatch((value ?? '').trim().toLowerCase())
+                              ? null
+                              : 'ユーザーIDの形式を確認してください。',
                         ),
-                        validator: (value) =>
-                            RegExp(
-                              r'^[a-z0-9_]{3,20}$',
-                            ).hasMatch((value ?? '').trim().toLowerCase())
-                            ? null
-                            : 'ユーザーIDの形式を確認してください。',
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _bioController,
-                        minLines: 4,
-                        maxLines: 7,
-                        maxLength: 300,
-                        decoration: const InputDecoration(
-                          labelText: '自己紹介文',
-                          hintText: '好きな本や読書について入力してください。',
-                          helperText: 'プロフィール上で公開されます。',
-                          alignLabelWithHint: true,
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _bioController,
+                          minLines: 4,
+                          maxLines: 7,
+                          maxLength: 300,
+                          decoration: const InputDecoration(
+                            labelText: '自己紹介文',
+                            hintText: '好きな本や読書について入力してください。',
+                            helperText: 'プロフィール上で公開されます。',
+                            alignLabelWithHint: true,
+                            border: OutlineInputBorder(),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                      _buildPageColorPicker(),
-                      const SizedBox(height: 8),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('鍵アカウント'),
-                        subtitle: Text(
-                          _isPrivate
-                              ? '承認したフォロワーだけが投稿を閲覧できます。'
-                              : '誰でも投稿を閲覧できます。',
+                        const SizedBox(height: 20),
+                        _buildPageColorPicker(),
+                        const SizedBox(height: 8),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('鍵アカウント'),
+                          subtitle: Text(
+                            _isPrivate
+                                ? '承認したフォロワーだけが投稿を閲覧できます。'
+                                : '誰でも投稿を閲覧できます。',
+                          ),
+                          value: _isPrivate,
+                          onChanged: (value) =>
+                              setState(() => _isPrivate = value),
                         ),
-                        value: _isPrivate,
-                        onChanged: (value) =>
-                            setState(() => _isPrivate = value),
-                      ),
-                      const SizedBox(height: 24),
-                      FilledButton(
-                        onPressed: _saving ? null : _save,
-                        child: _saving
-                            ? const CircularProgressIndicator()
-                            : const Text('保存する'),
-                      ),
-                    ],
+                        const SizedBox(height: 24),
+                        FilledButton(
+                          onPressed: _saving ? null : _save,
+                          child: _saving
+                              ? const CircularProgressIndicator()
+                              : const Text('保存する'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+      ),
     );
   }
 }

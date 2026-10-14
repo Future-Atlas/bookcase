@@ -5,7 +5,7 @@ const test = require("node:test");
 
 const projectRoot = path.join(__dirname, "../..");
 const read = (relativePath) =>
-  fs.readFileSync(path.join(projectRoot, relativePath), "utf8");
+  fs.readFileSync(path.join(projectRoot, relativePath), "utf8").replace(/\r\n/g, "\n");
 
 test("Ninja AdMax loads in production Flutter Web builds only", () => {
   const production = read(".github/workflows/deploy.yaml");
@@ -18,7 +18,7 @@ test("Ninja AdMax loads in production Flutter Web builds only", () => {
     '<!-- admax -->';
 
   assert.match(production, /flutter build web --release[^\n]*--dart-define=NINJA_ADMAX_ENABLED=true/);
-  assert.match(production, /flutter build web --release[^\n]*--dart-define=NINJA_ADMAX_POSTS_PER_AD=2/);
+  assert.match(production, /flutter build web --release[^\n]*--dart-define=NINJA_ADMAX_POSTS_PER_AD=5/);
   assert.doesNotMatch(staging, /--dart-define=NINJA_ADMAX_ENABLED=true/);
   assert.match(policy, /defaultValue: false/);
   assert.match(production, /NINJA_ADMAX_ASYNC_ID/);

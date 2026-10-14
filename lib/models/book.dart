@@ -12,6 +12,7 @@ class Book {
   final int reviewCount;
   final String genre;
   final String description;
+  final String rakutenAffiliateUrl;
 
   const Book({
     required this.id,
@@ -25,6 +26,7 @@ class Book {
     this.reviewCount = 0,
     this.genre = '',
     this.description = '',
+    this.rakutenAffiliateUrl = '',
   });
 
   // Factory from NDL JSON (simplified)
@@ -50,7 +52,10 @@ class Book {
   // Factory from Rakuten JSON (simplified)
   factory Book.fromRakutenJson(Map<String, dynamic> json) {
     final title = json['title'] ?? '不明なタイトル';
-    final author = (json['author'] as List?)?.join(', ') ?? '不明な著者';
+    final rawAuthor = json['author'];
+    final author = rawAuthor is List
+        ? rawAuthor.join(', ')
+        : rawAuthor?.toString() ?? '不明な著者';
     final publisher = json['publisherName'] ?? '不明な出版社';
     final pubDate = json['salesDate'] ?? '';
     final isbn = json['isbn'] ?? '';
@@ -73,6 +78,7 @@ class Book {
       isbn: isbn,
       coverUrl: coverUrl,
       ratingAvg: ratingAvg,
+      rakutenAffiliateUrl: json['affiliateUrl'] as String? ?? '',
       reviewCount: reviewCount,
       genre: '',
       description: '',
@@ -91,6 +97,7 @@ class Book {
     int? reviewCount,
     String? genre,
     String? description,
+    String? rakutenAffiliateUrl,
   }) {
     return Book(
       id: id ?? this.id,
@@ -104,6 +111,7 @@ class Book {
       reviewCount: reviewCount ?? this.reviewCount,
       genre: genre ?? this.genre,
       description: description ?? this.description,
+      rakutenAffiliateUrl: rakutenAffiliateUrl ?? this.rakutenAffiliateUrl,
     );
   }
 }

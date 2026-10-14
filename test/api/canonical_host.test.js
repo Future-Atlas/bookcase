@@ -41,7 +41,12 @@ test("all crawler-facing production SEO surfaces use the www canonical origin", 
 
 test("legacy Vercel production host permanently redirects to the canonical www host", () => {
   const config = JSON.parse(read("vercel.json"));
-  const redirect = config.routes?.[0];
+  const redirects = config.routes?.filter(
+    (route) => route.status === 308 && route.headers?.Location,
+  );
+  const redirect = redirects.find(
+    (route) => route.has?.[0]?.value === "book-case-u9uq.vercel.app",
+  );
 
   assert.equal(redirect?.src, "/(.*)");
   assert.deepEqual(redirect?.has, [
@@ -55,6 +60,22 @@ test("legacy Vercel production host permanently redirects to the canonical www h
     redirect?.headers?.Location,
     "https://www.sharemarium.com/$1",
   );
+  assert.ok(
+    redirects.some(
+      (route) => route.has?.[0]?.value === "sharemariumbookcase.vercel.app",
+    ),
+  );
+});
+
+test("staging sends a noindex response header", () => {
+  const config = JSON.parse(read("vercel.json"));
+  const staging = config.headers.find(
+    (entry) => entry.has?.[0]?.value === "staging.sharemarium.com",
+  );
+  assert.ok(staging);
+  assert.deepEqual(staging.headers, [
+    { key: "X-Robots-Tag", value: "noindex, nofollow" },
+  ]);
 });
 
 test("production smoke checks the final indexed www host", () => {

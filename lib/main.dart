@@ -26,7 +26,7 @@ import 'screens/notifications_screen.dart';
 import 'screens/public_post_routes.dart';
 import 'widgets/public_posts_link.dart';
 
-enum _HeaderMenuAction { home, posts, myPage, settings, help, moderation, logout }
+enum _HeaderMenuAction { home, myPage, settings, help, moderation, logout }
 
 final supabaseService = SupabaseService();
 final themeService = ThemeService();
@@ -146,6 +146,10 @@ class MyApp extends StatelessWidget {
       themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light,
       routes: {
         '/login': (context) => const AuthScreen(),
+        '/featured-books': (context) => Scaffold(
+          appBar: AppBar(title: const Text('注目の書籍')),
+          body: const BookListScreen(initialGenre: 'featured'),
+        ),
         '/terms': (context) => const TermsScreen(),
         '/privacy': (context) => const PrivacyPolicyScreen(),
         '/community-guidelines': (context) => const CommunityGuidelinesScreen(),
@@ -203,10 +207,18 @@ class _MainNavigationShellState extends State<MainNavigationShell>
   String? _viewedProfileColorKey;
 
   String? _genreFromPath(String path) {
+    if (path == '/featured-books') return 'featured';
     if (path == '/genre/recommended') return 'recommended';
     if (path == '/genre/western') return 'western';
     if (path == '/genre/popular') return 'popular';
     return null;
+  }
+
+  String? _bookIdFromPath(String path) {
+    if (!path.startsWith('/book/')) return null;
+    final encodedId = path.substring('/book/'.length).split('/').first;
+    if (encodedId.isEmpty) return null;
+    return Uri.decodeComponent(encodedId);
   }
 
   bool _isOpeningLogin = false;
@@ -541,9 +553,6 @@ class _MainNavigationShellState extends State<MainNavigationShell>
       case _HeaderMenuAction.home:
         _goToBookList();
         break;
-      case _HeaderMenuAction.posts:
-        Navigator.of(context).pushNamed('/posts');
-        break;
       case _HeaderMenuAction.myPage:
         await _goToProfile();
         break;
@@ -666,16 +675,6 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                   value: _HeaderMenuAction.home,
                                   child: Text(
                                     'ホーム',
-                                    style: TextStyle(
-                                      fontSize: 28 / 2,
-                                      color: popupMenuTextColor,
-                                    ),
-                                  ),
-                                ),
-                                PopupMenuItem(
-                                  value: _HeaderMenuAction.posts,
-                                  child: Text(
-                                    '投稿一覧',
                                     style: TextStyle(
                                       fontSize: 28 / 2,
                                       color: popupMenuTextColor,
@@ -824,6 +823,9 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                             key: const ValueKey('BookListScreen'),
                             onOpenUserProfile: _openUserProfile,
                             initialGenre: _genreFromPath(
+                              _currentAppPathFromUri(Uri.base),
+                            ),
+                            initialBookId: _bookIdFromPath(
                               _currentAppPathFromUri(Uri.base),
                             ),
                           )

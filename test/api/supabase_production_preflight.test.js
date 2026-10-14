@@ -6,7 +6,7 @@ const test = require("node:test");
 const preflight = import("../../scripts/preflight-supabase-production.mjs");
 const goodEnv = () => ({
   GITHUB_ACTIONS: "true",
-  GITHUB_REPOSITORY: "Future-Atlas/sharemarium",
+  GITHUB_REPOSITORY: "Future-Atlas/bookcase",
   GITHUB_REF: "refs/heads/main",
   SUPABASE_PROJECT_ID: "abcdefghijklmnopqrst",
   SUPABASE_ACCESS_TOKEN: "sbp_unit-test-not-a-real-token",
@@ -131,9 +131,11 @@ test("production workflow checks credentials before any Supabase link, db push, 
   assert.ok(verify > 0 && verify < link);
   assert.ok(deployMigrations > verify && deployFunctions > deployMigrations);
   assert.match(workflow, /environment:\s+name: production/);
-  assert.match(workflow, /validate_only:\s+description:/);
-  assert.match(workflow, /default: true/);
-  assert.match(workflow, /if: github\.event_name != 'workflow_dispatch' \|\| !inputs\.validate_only/);
+  assert.match(workflow, /apply_migrations:[\\s\\S]*?default: false/);
+  assert.match(workflow, /deploy_edge_functions:[\\s\\S]*?default: false/);
+  assert.match(workflow, /github\\.event_name == 'workflow_dispatch' && inputs\\.apply_migrations/);
+  assert.match(workflow, /github\\.event_name == 'workflow_dispatch' && inputs\\.deploy_edge_functions/);
+  assert.match(workflow, /supabase db push --dry-run --include-all --db-url/);
   assert.match(workflow, /SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/);
   assert.match(workflow, /SUPABASE_PROJECT_ID: \$\{\{ secrets\.SUPABASE_PROJECT_ID \}\}/);
   assert.match(workflow, /SUPABASE_DB_PASSWORD: \$\{\{ secrets\.SUPABASE_DB_PASSWORD \}\}/);

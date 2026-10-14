@@ -5,7 +5,7 @@ const vm = require("node:vm");
 const test = require("node:test");
 
 const read = (file) =>
-  fs.readFileSync(path.join(__dirname, "../..", file), "utf8");
+  fs.readFileSync(path.join(__dirname, "../..", file), "utf8").replace(/\r\n/g, "\n");
 
 const issuedSyncTag =
   '<!-- admax -->\n' +
@@ -34,6 +34,7 @@ function runtime({
     },
     addEventListener(name, fn) { listeners.set(name, fn); },
     setTimeout(fn) { timers.push(fn); return timers.length; },
+    setInterval() { return 1; },
     history: { pushState() {}, replaceState() {} },
   };
   const document = {
@@ -125,8 +126,8 @@ test("timeline has no application-imposed slot cap", () => {
   assert.match(src, /timelineAdSlotCount\(postCount\)/);
   assert.match(src, /isTimelineAdItem\(index, postCount\)/);
   assert.match(src, /timelinePostIndexForItem\(index, postCount\)/);
-  assert.match(src, /kIsWeb && timelineAdReady/);
-  assert.match(policy, /defaultValue: 2/);
+  assert.match(src, /kIsWeb && timelineAdDisplayReady/);
+  assert.match(policy, /defaultValue: 5/);
   assert.match(policy, /NINJA_ADMAX_POSTS_PER_AD/);
   assert.match(policy, /return \(postCount - 1\) ~\/ postsPerAd;/);
   assert.doesNotMatch(policy, /timelineMaximumAdsPerPage|homeTimelineMaximumAds|maximumSlots/);
@@ -146,21 +147,25 @@ test("two home book-genre separators and repeated timeline slots have unique ind
     "title: '洋書'",
     "home-ad-between-western-popular",
     "title: '人気作品'",
-    "_buildSectionHeader('タイムライン')",
+    "sectionHeading: true",
     "_buildTimeline()",
   ];
-  const indexes = anchors.map((anchor) => home.indexOf(anchor));
+  let previous = -1;
+  const indexes = anchors.map((anchor) => {
+    previous = home.indexOf(anchor, previous + 1);
+    return previous;
+  });
   assert.ok(indexes.every((at) => at >= 0), "all home section anchors exist");
   for (let i = 1; i < indexes.length; i++) {
     assert.ok(indexes[i - 1] < indexes[i], "genre ad follows preceding section");
   }
 
-  assert.match(home, /if \(kIsWeb &&\s+timelineAdReady &&\s+widget\.initialGenre == null &&\s+_controller\.recommendedBooks\.isNotEmpty &&\s+_controller\.westernBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-recommended-western'\),\s+slotIndex: 0,/);
-  assert.match(home, /if \(kIsWeb &&\s+timelineAdReady &&\s+widget\.initialGenre == null &&\s+_controller\.westernBooks\.isNotEmpty &&\s+_controller\.popularBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-western-popular'\),\s+slotIndex: 1,/);
+  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.recommendedBooks\.isNotEmpty &&\s+_controller\.westernBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\(\s*'home-ad-between-recommended-western',?\s*\),\s+slotIndex: 0,/);
+  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.westernBooks\.isNotEmpty &&\s+_controller\.popularBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-western-popular'\),\s+slotIndex: 1,/);
   assert.match(home, /if \(_controller\.searchQuery\.isNotEmpty\)\s+_buildSearchResults\(\)\s+else/);
   assert.match(policy, /homeGenreAdSlotCount = 2/);
   assert.match(policy, /homeTimelineAdSlotStart = homeGenreAdSlotCount/);
-  assert.match(home, /slotIndex: homeTimelineAdSlotStart \+\s+index ~\/ \(timelinePostsPerAd \+ 1\)/);
+  assert.match(home, /slotIndex:\s+homeTimelineAdSlotStart \+\s+index ~\/ \(timelinePostsPerAd \+ 1\)/);
   assert.match(html, /if \(sdkScheduled\) return/);
   assert.doesNotMatch(html, /const maxAdsPerPage/);
 });
@@ -201,6 +206,21 @@ test("ten simultaneous eligible native slots queue ads and share one async SDK",
   assert.equal(r.window.admaxads.length, 11);
   assert.equal(r.requests.length, 2, "SPA SDK reload handles late-mounted slot");
   assert.equal(r.targets[10].getAttribute("data-admax-load"), "sdk-loaded");
+});
+
+test("public timeline mounts ads but post detail pages do not", async () => {
+  for (const pathname of ["/posts", "/posts/"]) {
+    const r = runtime();
+    r.window.location.pathname = pathname;
+    r.emitSlot(2);
+    await r.flush();
+    assert.equal(r.requests.length, 1);
+  }
+  const r = runtime();
+  r.window.location.pathname = "/posts/11111111-1111-4111-8111-111111111111";
+  r.emitSlot(2);
+  await r.flush();
+  assert.equal(r.requests.length, 0);
 });
 
 test("ad-free members and entitlement errors never load SDK", async () => {
