@@ -255,6 +255,10 @@ class RakutenApi {
     final parsedReviewCount = rawReviewCount is num
         ? rawReviewCount.toInt()
         : int.tryParse(rawReviewCount?.toString() ?? '') ?? 0;
+    final rawItemPrice = bookData['itemPrice'];
+    final parsedItemPrice = rawItemPrice is num
+        ? rawItemPrice.toInt()
+        : int.tryParse(rawItemPrice?.toString() ?? '') ?? 0;
 
     String coverUrl = bookData['largeImageUrl'] as String? ?? '';
     if (coverUrl.isNotEmpty) {
@@ -275,6 +279,7 @@ class RakutenApi {
       genre: genre,
       description: description,
       rakutenAffiliateUrl: bookData['affiliateUrl'] as String? ?? '',
+      itemPrice: parsedItemPrice,
     );
   }
 

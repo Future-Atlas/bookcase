@@ -10,6 +10,7 @@ class PostCard extends StatefulWidget {
   final Post post;
   final bool showUserInfo;
   final VoidCallback? onUserTap;
+  final VoidCallback? onBookTap;
   final Future<void> Function(PostReactionType reaction)? onReaction;
   final Future<void> Function()? onWantToRead;
   final ValueChanged<PostReactionType>? onReactionUsers;
@@ -35,6 +36,7 @@ class PostCard extends StatefulWidget {
     required this.post,
     this.showUserInfo = true,
     this.onUserTap,
+    this.onBookTap,
     this.onReaction,
     this.onWantToRead,
     this.onReactionUsers,
@@ -262,18 +264,23 @@ class _PostCardState extends State<PostCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Book Cover
-                ClipRRect(
+                InkWell(
+                  key: ValueKey('post-book-cover-${post.id}'),
+                  onTap: widget.onBookTap,
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    post.bookCoverUrl,
-                    width: 70,
-                    height: 100,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      post.bookCoverUrl,
                       width: 70,
                       height: 100,
-                      color: Colors.grey[300],
-                      child: const Icon(Icons.book, color: Colors.grey),
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        width: 70,
+                        height: 100,
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.book, color: Colors.grey),
+                      ),
                     ),
                   ),
                 ),
@@ -285,12 +292,20 @@ class _PostCardState extends State<PostCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Book Title / Author
-                      Text(
-                        post.bookTitle,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: primaryTextColor,
+                      InkWell(
+                        key: ValueKey('post-book-title-${post.id}'),
+                        onTap: widget.onBookTap,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            post.bookTitle,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: primaryTextColor,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -645,18 +660,23 @@ class _PostCardState extends State<PostCard> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ClipRRect(
+                InkWell(
+                  key: ValueKey('post-book-cover-${post.id}'),
+                  onTap: widget.onBookTap,
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    post.bookCoverUrl,
-                    width: 76,
-                    height: 108,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      post.bookCoverUrl,
                       width: 76,
                       height: 108,
-                      color: Colors.grey[300],
-                      child: const Icon(Icons.book, color: Colors.grey),
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        width: 76,
+                        height: 108,
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.book, color: Colors.grey),
+                      ),
                     ),
                   ),
                 ),
@@ -665,14 +685,22 @@ class _PostCardState extends State<PostCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        post.bookTitle,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: primaryTextColor,
+                      InkWell(
+                        key: ValueKey('post-book-title-${post.id}'),
+                        onTap: widget.onBookTap,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            post.bookTitle,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: primaryTextColor,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 5),
