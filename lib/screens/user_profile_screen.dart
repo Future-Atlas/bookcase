@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/supabase_service.dart';
+import '../api/rakuten_api.dart';
 import '../models/book.dart';
 import '../models/user_profile.dart';
 import '../models/post.dart';
@@ -246,7 +247,9 @@ class _ProfileBookPostsPanelState extends State<_ProfileBookPostsPanel> {
                             listen: false,
                           );
                           final refreshed = await service.fetchRepliesForPosts(
-                            _posts.map((candidate) => candidate.id).toList(growable: false),
+                            _posts
+                                .map((candidate) => candidate.id)
+                                .toList(growable: false),
                           );
                           if (!mounted) return;
                           setState(() => _replies = refreshed);
@@ -1368,6 +1371,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           showUserInfo: false,
           concealSpoiler: !_isOwnProfile,
           borderColor: ProfilePageColors.colorFor(_profile?.pageColorKey),
+          onBookTap: () => _openBookFromPost(post),
           onReaction: _isOwnProfile
               ? null
               : (reaction) => _toggleReaction(post.id, reaction),
@@ -1405,6 +1409,23 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         );
       },
     );
+  }
+
+  Future<void> _openBookFromPost(Post post) async {
+    final resolvedBook = await RakutenApi.fetchBookById(post.bookId);
+    if (!mounted) return;
+    final book =
+        resolvedBook ??
+        Book(
+          id: post.bookId,
+          title: post.bookTitle,
+          author: post.bookAuthor,
+          publisher: '',
+          pubDate: '',
+          isbn: post.bookId,
+          coverUrl: post.bookCoverUrl,
+        );
+    await _showSearchedBookDetailDialog(book);
   }
 
   Widget _buildGridTab(
@@ -1971,8 +1992,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           );
                         },
                       ),
-                      RakutenBookLink(book: book),
-                      const SizedBox(height: 14),
                       Container(
                         padding: const EdgeInsets.all(12),
                         color: const Color(0xFFD8D8D8),
@@ -1994,6 +2013,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           ),
                         ),
                       ),
+                      RakutenBookLink(book: book),
                       const SizedBox(height: 20),
                       _ProfileBookPostsPanel(
                         postsFuture: postsFuture,
