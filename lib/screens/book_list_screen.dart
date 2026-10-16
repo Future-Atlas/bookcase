@@ -117,6 +117,23 @@ class _BookListScreenState extends State<BookListScreen> {
     if (edited && mounted) await _controller.loadData(context);
   }
 
+  Future<void> _openBookFromPost(Post post) async {
+    final resolvedBook = await RakutenApi.fetchBookById(post.bookId);
+    if (!mounted) return;
+    final book =
+        resolvedBook ??
+        Book(
+          id: post.bookId,
+          title: post.bookTitle,
+          author: post.bookAuthor,
+          publisher: '',
+          pubDate: '',
+          isbn: post.bookId,
+          coverUrl: post.bookCoverUrl,
+        );
+    await _showBookDetailDialog(book);
+  }
+
   Future<bool> _ensureAuthenticated() async {
     final service = Provider.of<SupabaseService>(context, listen: false);
     if (service.canWrite) return true;
@@ -660,8 +677,6 @@ class _BookListScreenState extends State<BookListScreen> {
                               );
                             },
                           ),
-                          RakutenBookLink(book: book),
-                          const SizedBox(height: 14),
                           Row(
                             children: [
                               ...List.generate(5, (index) {
@@ -762,6 +777,7 @@ class _BookListScreenState extends State<BookListScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           bookInformation,
+                          RakutenBookLink(book: book),
                           const SizedBox(height: 20),
                           _BookPostsPanel(
                             bookId: book.id,
@@ -1682,6 +1698,7 @@ class _BookListScreenState extends State<BookListScreen> {
             replies: _controller.timelineReplies[post.id] ?? const [],
             concealSpoiler: post.profileId != currentProfileId,
             onUserTap: () => _openUserProfile(post.profileId),
+            onBookTap: () => _openBookFromPost(post),
             onReaction: post.profileId == currentProfileId
                 ? null
                 : (reaction) => _toggleReaction(post.id, reaction),

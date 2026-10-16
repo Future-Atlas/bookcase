@@ -35,7 +35,7 @@ class RakutenBookLink extends StatefulWidget {
 }
 
 class _RakutenBookLinkState extends State<RakutenBookLink> {
-  late Future<Uri?> _destination;
+  late Future<({Uri uri, int itemPrice})?> _destination;
 
   @override
   void initState() {
@@ -48,24 +48,65 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.book.id != widget.book.id ||
         oldWidget.book.isbn != widget.book.isbn ||
-        oldWidget.book.rakutenAffiliateUrl != widget.book.rakutenAffiliateUrl) {
+        oldWidget.book.rakutenAffiliateUrl != widget.book.rakutenAffiliateUrl ||
+        oldWidget.book.itemPrice != widget.book.itemPrice) {
       _destination = _resolve();
     }
   }
 
-  Future<Uri?> _resolve() async {
+  Future<({Uri uri, int itemPrice})?> _resolve() async {
     final provided = RakutenBookLink.validatedDestination(
       widget.book.rakutenAffiliateUrl,
     );
-    if (provided != null) return provided;
+    if (provided != null) {
+      return (uri: provided, itemPrice: widget.book.itemPrice);
+    }
     try {
-      final url = await (widget.lookup ?? RakutenApi.fetchAffiliateUrlForBook)(
-        widget.book,
+      if (widget.lookup != null) {
+        final uri = RakutenBookLink.validatedDestination(
+          await widget.lookup!(widget.book),
+        );
+        return uri == null
+            ? null
+            : (uri: uri, itemPrice: widget.book.itemPrice);
+      }
+
+      final bookId = widget.book.isbn.isNotEmpty
+          ? widget.book.isbn
+          : widget.book.id;
+      final resolvedBook = await RakutenApi.fetchBookById(bookId);
+      final resolvedUri = RakutenBookLink.validatedDestination(
+        resolvedBook?.rakutenAffiliateUrl,
       );
-      return RakutenBookLink.validatedDestination(url);
+      if (resolvedUri != null) {
+        return (
+          uri: resolvedUri,
+          itemPrice: resolvedBook?.itemPrice ?? widget.book.itemPrice,
+        );
+      }
+
+      final fallbackUri = RakutenBookLink.validatedDestination(
+        await RakutenApi.fetchAffiliateUrlForBook(widget.book),
+      );
+      return fallbackUri == null
+          ? null
+          : (uri: fallbackUri, itemPrice: widget.book.itemPrice);
     } catch (_) {
       return null;
     }
+  }
+
+  String _priceLabel(int itemPrice) {
+    if (itemPrice <= 0) return '';
+    final digits = itemPrice.toString();
+    final output = StringBuffer();
+    for (var index = 0; index < digits.length; index++) {
+      if (index > 0 && (digits.length - index) % 3 == 0) {
+        output.write(',');
+      }
+      output.write(digits[index]);
+    }
+    return '（税込${output}円）';
   }
 
   Future<void> _open(Uri uri) async {
@@ -81,42 +122,29 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<Uri?>(
-    future: _destination,
-    builder: (context, snapshot) {
-      final uri = snapshot.data;
-      if (snapshot.connectionState != ConnectionState.done || uri == null) {
-        return const SizedBox.shrink();
-      }
-      return Padding(
-        padding: const EdgeInsets.only(top: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            OutlinedButton.icon(
-              onPressed: () => _open(uri),
+  Widget build(BuildContext context) =>
+      FutureBuilder<({Uri uri, int itemPrice})?>(
+        future: _destination,
+        builder: (context, snapshot) {
+          final destination = snapshot.data;
+          if (snapshot.connectionState != ConnectionState.done ||
+              destination == null) {
+            return const SizedBox.shrink();
+          }
+          final priceLabel = _priceLabel(destination.itemPrice);
+          return Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: OutlinedButton.icon(
+              onPressed: () => _open(destination.uri),
               icon: const Icon(Icons.open_in_new, size: 18),
-              label: const Text('楽天ブックスで購入する'),
+              label: Text('楽天ブックスで購入する$priceLabel'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFFBF0000),
-                backgroundColor: const Color(0xFF2E8B57),
+                backgroundColor: const Color(0xFF77C6A6),
                 side: const BorderSide(color: Color(0xFFBF0000)),
               ),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              '広告・楽天アフィリエイトリンク',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black87, fontSize: 12),
-            ),
-            const Text(
-              'このリンク経由の購入により、Sharemariumに報酬が入る場合があります。',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black54, fontSize: 11),
-            ),
-          ],
-        ),
+          );
+        },
       );
-    },
-  );
 }

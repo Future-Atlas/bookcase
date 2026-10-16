@@ -35,9 +35,10 @@ void main() {
       'affiliateUrl': link,
     });
     expect(parsed.author, '著者');
+    expect(parsed.itemPrice, 0);
     expect(parsed.copyWith(title: '更新').rakutenAffiliateUrl, link);
   });
-  testWidgets('official link displays button and disclosure without lookup', (
+  testWidgets('official link displays purchase button without lookup', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -52,7 +53,22 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('楽天ブックスで購入する'), findsOneWidget);
-    expect(find.text('広告・楽天アフィリエイトリンク'), findsOneWidget);
+    expect(find.text('広告・楽天アフィリエイトリンク'), findsNothing);
+  });
+  testWidgets('purchase button displays the tax-included Rakuten price', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RakutenBookLink(
+            book: book.copyWith(rakutenAffiliateUrl: link, itemPrice: 1234),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('楽天ブックスで購入する（税込1,234円）'), findsOneWidget);
   });
   testWidgets('saved book resolves and missing result hides button', (
     tester,
