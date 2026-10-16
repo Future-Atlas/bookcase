@@ -140,7 +140,7 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
               label: Text('楽天ブックスで購入する$priceLabel'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFFBF0000),
-                backgroundColor: const Color(0xFF2E8B57),
+                backgroundColor: const Color(0xFF77C6A6),
                 side: const BorderSide(color: Color(0xFFBF0000)),
               ),
             ),
