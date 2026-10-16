@@ -49,6 +49,15 @@
         let entitlementRequest = null;
         let entitlementRetryAt = 0;
 
+        function publishEntitlement() {
+          window.dispatchEvent(
+            new CustomEvent("sharemarium:admax-entitlement-changed", {
+              detail:
+                eligibleRoute() && entitlementState === "ads_allowed",
+            }),
+          );
+        }
+
         function eligibleRoute() {
           return (
             window.location.hostname === expectedHost &&
@@ -175,6 +184,13 @@
               for (const slot of renderedSlots.values()) {
                 slot.target.setAttribute("data-admax-load", "sdk-loaded");
               }
+              // The AdMax SDK reads the whole admaxads array every time it is
+              // loaded, but does not clear it afterwards. Keeping processed
+              // entries causes a later SPA slot to render another iframe into
+              // previously completed desktop slots. Treat the array as a
+              // one-shot queue so a late-mounted slot only requests itself.
+              window.admaxads = [];
+              sdkRetryCount = 0;
             };
             document.head.appendChild(script);
           }, 100);
@@ -207,6 +223,7 @@
           const known = renderedSlots.get(index);
           if (known && known.root === root) return;
           await refreshEntitlement();
+          publishEntitlement();
           if (!root.isConnected || !eligibleRoute() ||
               entitlementState !== "ads_allowed" ||
               currentSupabaseAccessToken() !== entitlementToken) {
@@ -246,9 +263,19 @@
         });
 
         function scheduleEntitlementReview() {
-          if (!eligibleRoute()) clearLoadedAdsIfDisallowed();
-          void refreshEntitlement().then(() => {
+          if (!eligibleRoute()) {
             clearLoadedAdsIfDisallowed();
+            publishEntitlement();
+            return;
+          }
+          const review = refreshEntitlement();
+          // Hide the entire Flutter advertising widget while a changed login
+          // state is being checked. This prevents an ad-free user from seeing
+          // an empty labelled frame during the request.
+          publishEntitlement();
+          void review.then(() => {
+            clearLoadedAdsIfDisallowed();
+            publishEntitlement();
             if (eligibleRoute() && entitlementState === "ads_allowed") {
               for (const root of document.querySelectorAll(".sharemarium-admax-timeline-slot")) {
                 void mountSlot(root);
@@ -265,6 +292,10 @@
         window.addEventListener("popstate", scheduleEntitlementReview);
         window.addEventListener("pageshow", scheduleEntitlementReview);
         window.addEventListener("storage", scheduleEntitlementReview);
+        window.addEventListener(
+          "sharemarium:admax-entitlement-request",
+          scheduleEntitlementReview,
+        );
         document.addEventListener("visibilitychange", () => {
           if (!document.hidden) scheduleEntitlementReview();
         });
@@ -281,6 +312,7 @@
         } else {
           watchTimelineDom();
         }
+        window.setTimeout(scheduleEntitlementReview, 0);
       })();
     </script>
     <script type="application/ld+json">
