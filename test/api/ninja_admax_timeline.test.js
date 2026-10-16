@@ -24,7 +24,15 @@ function runtime({
   const listeners = new Map();
   const timers = [];
   const requests = [];
+  const sdkBatches = [];
+  const entitlementEvents = [];
   const targets = [];
+  class CustomEvent {
+    constructor(type, options = {}) {
+      this.type = type;
+      this.detail = options.detail;
+    }
+  }
   const window = {
     location: { hostname: "www.sharemarium.com", pathname: "/", search: "" },
     localStorage: {
@@ -33,6 +41,13 @@ function runtime({
       getItem: () => JSON.stringify({ access_token: token }),
     },
     addEventListener(name, fn) { listeners.set(name, fn); },
+    dispatchEvent(event) {
+      if (event.type === "sharemarium:admax-entitlement-changed") {
+        entitlementEvents.push(event.detail);
+      }
+      listeners.get(event.type)?.(event);
+      return true;
+    },
     setTimeout(fn) { timers.push(fn); return timers.length; },
     setInterval() { return 1; },
     history: { pushState() {}, replaceState() {} },
@@ -42,7 +57,11 @@ function runtime({
     hidden: false,
     body: {},
     head: {
-      appendChild(node) { requests.push(node); if (node.onload) node.onload(); },
+      appendChild(node) {
+        requests.push(node);
+        sdkBatches.push(Array.from(window.admaxads || [], (item) => ({ ...item })));
+        if (node.onload) node.onload();
+      },
     },
     addEventListener(name, fn) { listeners.set(name, fn); },
     getElementById(id) {
@@ -66,7 +85,7 @@ function runtime({
     return { ok: true, json: async () => ({ authenticated: true, adFree }) };
   };
   vm.runInNewContext(markup.slice(start + "    <script>".length, end),
-    { window, document, MutationObserver, fetch, console });
+    { window, document, MutationObserver, CustomEvent, fetch, console });
 
   function emitSlot(index, id = "234edc1d1284546b2d177ac7c5531101", type = "banner") {
     const state = new Map([["data-admax-id", id]]);
@@ -102,7 +121,17 @@ function runtime({
     }
     await new Promise(resolve => setImmediate(resolve));
   }
-  return { window, document, requests, listeners, emitSlot, flush, targets };
+  return {
+    window,
+    document,
+    requests,
+    sdkBatches,
+    entitlementEvents,
+    listeners,
+    emitSlot,
+    flush,
+    targets,
+  };
 }
 
 test("the issued synchronous tag remains verbatim but inert", () => {
@@ -183,29 +212,32 @@ test("ad configuration fails closed without an actual async publisher ID", () =>
   assert.match(widget, /'90px'/);
 });
 
-test("ten simultaneous eligible native slots queue ads and share one async SDK", async () => {
+test("simultaneous eligible native slots queue ads and share one async SDK", async () => {
   const r = runtime();
-  for (let index = 0; index < 10; index++) r.emitSlot(index);
+  for (let index = 0; index < 3; index++) r.emitSlot(index);
   await r.flush();
   assert.equal(r.requests.length, 1);
   assert.equal(r.requests[0].src, "https://adm.shinobi.jp/st/t.js");
   assert.equal(r.requests[0].async, true);
-  const queue = Array.from(r.window.admaxads);
-  assert.equal(queue.length, 10);
-  for (const item of queue) {
+  assert.equal(r.sdkBatches[0].length, 3);
+  for (const item of r.sdkBatches[0]) {
     assert.equal(item.admax_id, "234edc1d1284546b2d177ac7c5531101");
     assert.equal(item.type, "banner");
   }
+  assert.equal(r.window.admaxads.length, 0, "processed entries are discarded");
   for (const target of r.targets) {
     assert.equal(target.getAttribute("data-admax-load"), "sdk-loaded");
   }
 
-  // A later-scrolled slot must not be silently dropped by the old 3-slot cap.
-  r.emitSlot(10);
+  // A later-scrolled slot gets its own request. Previously the stale queue was
+  // replayed here, duplicating iframes in already-rendered desktop slots.
+  r.emitSlot(3);
   await r.flush();
-  assert.equal(r.window.admaxads.length, 11);
+  assert.equal(r.window.admaxads.length, 0);
   assert.equal(r.requests.length, 2, "SPA SDK reload handles late-mounted slot");
-  assert.equal(r.targets[10].getAttribute("data-admax-load"), "sdk-loaded");
+  assert.equal(r.sdkBatches[1].length, 1, "only the new slot is requested");
+  assert.equal(r.sdkBatches[1][0].admax_id, "234edc1d1284546b2d177ac7c5531101");
+  assert.equal(r.targets[3].getAttribute("data-admax-load"), "sdk-loaded");
 });
 
 test("public timeline mounts ads but post detail pages do not", async () => {
@@ -232,7 +264,19 @@ test("ad-free members and entitlement errors never load SDK", async () => {
     r.emitSlot(0);
     await r.flush();
     assert.equal(r.requests.length, 0);
+    assert.equal(r.entitlementEvents.at(-1), false);
   }
+});
+
+test("Flutter hides the complete advertising frame until ads are allowed", async () => {
+  const widget = read("lib/widgets/timeline_ad_slot_web.dart");
+  assert.match(widget, /sharemarium:admax-entitlement-changed/);
+  assert.match(widget, /ValueListenableBuilder<bool>/);
+  assert.match(widget, /if \(!allowed\) return const SizedBox\.shrink\(\)/);
+
+  const r = runtime();
+  await r.flush();
+  assert.equal(r.entitlementEvents.at(-1), true);
 });
 
 test("routes, invalid IDs and other hosts never load SDK", async () => {
