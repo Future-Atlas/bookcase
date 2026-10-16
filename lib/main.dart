@@ -214,13 +214,6 @@ class _MainNavigationShellState extends State<MainNavigationShell>
     return null;
   }
 
-  String? _bookIdFromPath(String path) {
-    if (!path.startsWith('/book/')) return null;
-    final encodedId = path.substring('/book/'.length).split('/').first;
-    if (encodedId.isEmpty) return null;
-    return Uri.decodeComponent(encodedId);
-  }
-
   bool _isOpeningLogin = false;
 
   Uri _normalizedFragmentUri(String fragment) {
@@ -823,9 +816,6 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                             key: const ValueKey('BookListScreen'),
                             onOpenUserProfile: _openUserProfile,
                             initialGenre: _genreFromPath(
-                              _currentAppPathFromUri(Uri.base),
-                            ),
-                            initialBookId: _bookIdFromPath(
                               _currentAppPathFromUri(Uri.base),
                             ),
                           )

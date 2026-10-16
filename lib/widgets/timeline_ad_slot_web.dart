@@ -8,6 +8,25 @@ import 'timeline_ad_policy.dart';
 import '../config/app_environment.dart';
 
 const String _viewTypePrefix = 'sharemarium-ninja-admax-native';
+const String _entitlementChangedEvent =
+    'sharemarium:admax-entitlement-changed';
+const String _entitlementRequestEvent =
+    'sharemarium:admax-entitlement-request';
+
+final ValueNotifier<bool> _adEntitlementAllowed = ValueNotifier<bool>(false);
+bool _entitlementListenerRegistered = false;
+
+void _ensureEntitlementListener() {
+  if (_entitlementListenerRegistered) return;
+  _entitlementListenerRegistered = true;
+  html.window.addEventListener(_entitlementChangedEvent, (event) {
+    final allowed = event is html.CustomEvent && event.detail == true;
+    if (_adEntitlementAllowed.value != allowed) {
+      _adEntitlementAllowed.value = allowed;
+    }
+  });
+  html.window.dispatchEvent(html.Event(_entitlementRequestEvent));
+}
 
 /// Actual DOM slot for the Ninja AdMax asynchronous SPA SDK.
 /// Neither the synchronous /s/ tag nor app-created iframes are used.
@@ -77,41 +96,52 @@ class TimelineAdSlot extends StatelessWidget {
     if (!timelineAdReady || slotIndex < 0) {
       return const SizedBox.shrink();
     }
-    _registerFactory(slotIndex);
+    _ensureEntitlementListener();
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 300) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Semantics(
-            label: '広告',
-            container: true,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFF1D600)),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 12,
-                  horizontal: 4,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('広告', style: TextStyle(fontSize: 12)),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: ninjaAdmaxAsyncType == 'banner' ? 90.0 : 250.0,
-                      child: HtmlElementView(viewType: _viewType(slotIndex)),
+    return ValueListenableBuilder<bool>(
+      valueListenable: _adEntitlementAllowed,
+      builder: (context, allowed, child) {
+        if (!allowed) return const SizedBox.shrink();
+        _registerFactory(slotIndex);
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 300) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Semantics(
+                label: '広告',
+                container: true,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFFF1D600)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 4,
                     ),
-                  ],
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('広告', style: TextStyle(fontSize: 12)),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          height: ninjaAdmaxAsyncType == 'banner'
+                              ? 90.0
+                              : 250.0,
+                          child: HtmlElementView(
+                            viewType: _viewType(slotIndex),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );

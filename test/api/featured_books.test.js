@@ -27,8 +27,10 @@ test("home, admin, SEO, routing and sitemap integrate featured books", () => {
 
 test("direct book paths are handed to Flutter's real book dialog", () => {
   const main = read("lib/main.dart");
+  const routes = read("lib/screens/public_post_routes.dart");
   const screen = read("lib/screens/book_list_screen.dart");
-  assert.match(main, /initialBookId: _bookIdFromPath/);
+  assert.match(routes, /BookListScreen\(initialBookId: segments\[1\]\)/);
+  assert.doesNotMatch(main, /initialBookId: _bookIdFromPath/);
   assert.match(screen, /RakutenApi\.fetchBookById\(initialBookId\)/);
   assert.match(screen, /routeInformationUpdated/);
 });

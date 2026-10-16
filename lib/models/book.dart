@@ -13,6 +13,7 @@ class Book {
   final String genre;
   final String description;
   final String rakutenAffiliateUrl;
+  final int itemPrice;
 
   const Book({
     required this.id,
@@ -27,6 +28,7 @@ class Book {
     this.genre = '',
     this.description = '',
     this.rakutenAffiliateUrl = '',
+    this.itemPrice = 0,
   });
 
   // Factory from NDL JSON (simplified)
@@ -68,6 +70,10 @@ class Book {
     final reviewCount = rawReviewCount is num
         ? rawReviewCount.toInt()
         : int.tryParse(rawReviewCount?.toString() ?? '') ?? 0;
+    final rawItemPrice = json['itemPrice'];
+    final itemPrice = rawItemPrice is num
+        ? rawItemPrice.toInt()
+        : int.tryParse(rawItemPrice?.toString() ?? '') ?? 0;
     final id = isbn.isNotEmpty ? isbn : UniqueKey().toString();
     return Book(
       id: id,
@@ -82,6 +88,7 @@ class Book {
       reviewCount: reviewCount,
       genre: '',
       description: '',
+      itemPrice: itemPrice,
     );
   }
 
@@ -98,6 +105,7 @@ class Book {
     String? genre,
     String? description,
     String? rakutenAffiliateUrl,
+    int? itemPrice,
   }) {
     return Book(
       id: id ?? this.id,
@@ -112,6 +120,7 @@ class Book {
       genre: genre ?? this.genre,
       description: description ?? this.description,
       rakutenAffiliateUrl: rakutenAffiliateUrl ?? this.rakutenAffiliateUrl,
+      itemPrice: itemPrice ?? this.itemPrice,
     );
   }
 }
