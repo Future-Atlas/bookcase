@@ -1,34 +1,7 @@
-const fs = require("node:fs");
-const path = require("node:path");
+const { SOURCES } = require("./_legal_sources");
 
 const SITE_URL = "https://www.sharemarium.com";
 const SITE_NAME = "Sharemarium";
-
-// Keep the crawler representation tied to the exact Flutter legal-document
-// source. The explicit reads also allow Vercel's file tracer to include these
-// Dart sources in the serverless bundle.
-const SOURCES = {
-  privacy: fs.readFileSync(
-    path.join(__dirname, "../lib/screens/privacy_policy_screen.dart"),
-    "utf8",
-  ),
-  terms: fs.readFileSync(
-    path.join(__dirname, "../lib/screens/terms_screen.dart"),
-    "utf8",
-  ),
-  "community-guidelines": fs.readFileSync(
-    path.join(__dirname, "../lib/screens/community_guidelines_screen.dart"),
-    "utf8",
-  ),
-  "infringement-policy": fs.readFileSync(
-    path.join(__dirname, "../lib/screens/infringement_policy_screen.dart"),
-    "utf8",
-  ),
-  "external-transmission": fs.readFileSync(
-    path.join(__dirname, "../lib/screens/external_transmission_screen.dart"),
-    "utf8",
-  ),
-};
 
 const CONFIG = {
   privacy: { marker: "_policyText", label: "プライバシーポリシー" },
