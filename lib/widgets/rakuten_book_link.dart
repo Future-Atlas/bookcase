@@ -106,7 +106,7 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
       }
       output.write(digits[index]);
     }
-    return '（税込${output}円）';
+    return '（税込$output円）';
   }
 
   Future<void> _open(Uri uri) async {
@@ -134,16 +134,27 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
           final priceLabel = _priceLabel(destination.itemPrice);
           return Padding(
             padding: const EdgeInsets.only(top: 10),
-            child: OutlinedButton.icon(
-              onPressed: () => _open(destination.uri),
-              icon: const Icon(Icons.open_in_new, size: 18),
-              label: Text('楽天ブックスで購入する$priceLabel'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFBF0000),
-                backgroundColor: const Color(0xFF77C6A6),
-                side: const BorderSide(color: Color(0xFFBF0000)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '広告・楽天アフィリエイトリンク',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  onPressed: () => _open(destination.uri),
+                  icon: const Icon(Icons.open_in_new, size: 18),
+                  label: Text('楽天ブックスで購入する$priceLabel'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFBF0000),
+                    backgroundColor: const Color(0xFF77C6A6),
+                    side: const BorderSide(color: Color(0xFFBF0000)),
+                  ),
+                ),
+              ],
               ),
-            ),
           );
         },
       );
