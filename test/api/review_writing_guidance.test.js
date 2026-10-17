@@ -30,7 +30,7 @@ test("review composer does not impose an AdSense-oriented minimum length", () =>
 test("review composer explains required fields and confirms completion", () => {
   assert.match(source, /if \(rating <= 0\)/);
   assert.match(source, /評価が付いていないので、投稿できません/);
-  assert.match(source, /感想が未入力なため、投稿できません/);
+  assert.match(source, /感想が未入力なので、投稿できません/);
   assert.match(source, /投稿が完了しました！/);
   assert.doesNotMatch(source, /感想を入力してください/);
   assert.doesNotMatch(source, /レビューを投稿しました/);
