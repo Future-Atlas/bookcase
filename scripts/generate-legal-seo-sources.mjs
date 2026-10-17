@@ -14,7 +14,9 @@ const sources = {
 const contents = Object.fromEntries(
   Object.entries(sources).map(([key, relativePath]) => [
     key,
-    fs.readFileSync(path.join(root, relativePath), "utf8"),
+    fs
+      .readFileSync(path.join(root, relativePath), "utf8")
+      .replace(/\r\n?/g, "\n"),
   ]),
 );
 
