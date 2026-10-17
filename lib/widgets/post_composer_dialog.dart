@@ -220,9 +220,19 @@ Future<bool> showPostComposerDialog({
                     ? null
                     : () async {
                         final review = commentController.text.trim();
+                        if (rating <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('評価が付いていないので、投稿できません'),
+                            ),
+                          );
+                          return;
+                        }
                         if (review.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('感想を入力してください')),
+                            const SnackBar(
+                              content: Text('感想が未入力なため、投稿できません'),
+                            ),
                           );
                           return;
                         }
@@ -275,7 +285,7 @@ Future<bool> showPostComposerDialog({
   commentController.dispose();
   if (posted == true && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(isEditing ? '投稿を編集しました' : 'レビューを投稿しました')),
+      SnackBar(content: Text(isEditing ? '投稿を編集しました' : '投稿が完了しました！')),
     );
   }
   return posted ?? false;
