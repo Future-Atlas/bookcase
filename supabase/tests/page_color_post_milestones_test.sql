@@ -117,6 +117,12 @@ select lives_ok(
   'an already unlocked color remains available after posts are deleted'
 );
 
+select is(
+  (public.current_user_page_color_access()->>'next_milestone')::integer,
+  50,
+  'deleted posts do not make an already-used milestone available again'
+);
+
 reset role;
 
 select is(

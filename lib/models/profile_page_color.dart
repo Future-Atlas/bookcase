@@ -34,11 +34,7 @@ class ProfilePageColors {
     ProfilePageColorOption(key: 'green', label: '緑', color: Color(0xFF00C875)),
     ProfilePageColorOption(key: 'purple', label: '紫', color: Color(0xFFA855F7)),
     ProfilePageColorOption(key: 'gray', label: 'グレー', color: Color(0xFFAAB2BD)),
-    ProfilePageColorOption(
-      key: 'orange',
-      label: 'オレンジ',
-      color: Color(0xFFFF7A1A),
-    ),
+    ProfilePageColorOption(key: 'brown', label: '茶色', color: Color(0xFFC9854B)),
     ProfilePageColorOption(key: 'pink', label: '桃色', color: Color(0xFFFFC1D9)),
     ProfilePageColorOption(
       key: 'light_blue',
@@ -46,9 +42,14 @@ class ProfilePageColors {
       color: Color(0xFF36CFFF),
     ),
     ProfilePageColorOption(
-      key: 'emerald',
-      label: 'エメラルド',
-      color: Color(0xFF20E0D0),
+      key: 'orange',
+      label: 'オレンジ',
+      color: Color(0xFFFF7A1A),
+    ),
+    ProfilePageColorOption(
+      key: 'yellow_green',
+      label: '黄緑',
+      color: Color(0xFF9BD600),
     ),
     ProfilePageColorOption(
       key: 'red_purple',
@@ -56,11 +57,10 @@ class ProfilePageColors {
       color: Color(0xFF882255),
     ),
     ProfilePageColorOption(
-      key: 'yellow_green',
-      label: '黄緑',
-      color: Color(0xFF9BD600),
+      key: 'emerald',
+      label: 'エメラルド',
+      color: Color(0xFF20E0D0),
     ),
-    ProfilePageColorOption(key: 'brown', label: '茶色', color: Color(0xFFC9854B)),
   ];
 
   static bool isValidKey(String? key) =>

@@ -998,12 +998,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                         controller: _tabController,
                         children: [
                           _buildPostsTab(),
-                          _buildGridTab(
-                            _collections,
-                            'My 本棚はありません。',
-                            showDescription: true,
-                            compactThreeColumn: true,
-                          ),
+                          _buildReadBooksTab(),
                           _buildFavoritesTab(),
                           _buildGridTab(
                             _wantToRead,
@@ -1354,60 +1349,111 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Widget _buildPostsTab() {
-    if (_userPosts.isEmpty) {
-      return _buildEmptyState('投稿したレビューはありません。');
-    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildReadCountHeader(),
+        Expanded(
+          child: _userPosts.isEmpty
+              ? _buildEmptyState('投稿したレビューはありません。')
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _userPosts.length,
+                  itemBuilder: (context, index) {
+                    // Hide user info header since profile context is clear
+                    final post = _userPosts[index];
+                    return PostCard(
+                      key: ValueKey(post.id),
+                      post: post,
+                      replies: _postReplies[post.id] ?? const [],
+                      showUserInfo: false,
+                      concealSpoiler: !_isOwnProfile,
+                      borderColor: ProfilePageColors.colorFor(
+                        _profile?.pageColorKey,
+                      ),
+                      onBookTap: () => _openBookFromPost(post),
+                      onReaction: _isOwnProfile
+                          ? null
+                          : (reaction) => _toggleReaction(post.id, reaction),
+                      onWantToRead: _isOwnProfile
+                          ? null
+                          : () => _toggleWantToReadFromPost(post),
+                      onReactionUsers: (reaction) => _openEngagementUsers(
+                        post,
+                        reaction: reaction,
+                      ),
+                      onWantToReadUsers: () =>
+                          _openEngagementUsers(post, wantToRead: true),
+                      onDelete: _isOwnProfile ? () => _deletePost(post) : null,
+                      onEdit: _isOwnProfile ? () => _editPost(post) : null,
+                      onFavorite: _isOwnProfile
+                          ? () => _toggleFavorite(post.bookId, post.bookTitle)
+                          : null,
+                      favoriteLabel: _isFavorited(post.bookId)
+                          ? 'お気に入りから解除'
+                          : 'お気に入りに追加',
+                      onReport: _isOwnProfile
+                          ? null
+                          : () => _reportPost(post.id),
+                      onReply: (parentReply) =>
+                          _replyToPost(post, parentReply),
+                      onReplyReport: _reportReply,
+                      concealReplySpoiler: (reply) {
+                        final profileId = Provider.of<SupabaseService>(
+                          context,
+                          listen: false,
+                        ).activeProfileId;
+                        return profileId.isEmpty ||
+                            reply.profileId != profileId;
+                      },
+                      canReportReply: (reply) {
+                        final profileId = Provider.of<SupabaseService>(
+                          context,
+                          listen: false,
+                        ).activeProfileId;
+                        return profileId.isEmpty ||
+                            reply.profileId != profileId;
+                      },
+                      onReplyUserTap: _openReplyProfile,
+                      onRepliesChanged: _loadProfileData,
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _userPosts.length,
-      itemBuilder: (context, index) {
-        // Hide user info header since profile context is clear
-        final post = _userPosts[index];
-        return PostCard(
-          key: ValueKey(post.id),
-          post: post,
-          replies: _postReplies[post.id] ?? const [],
-          showUserInfo: false,
-          concealSpoiler: !_isOwnProfile,
-          borderColor: ProfilePageColors.colorFor(_profile?.pageColorKey),
-          onBookTap: () => _openBookFromPost(post),
-          onReaction: _isOwnProfile
-              ? null
-              : (reaction) => _toggleReaction(post.id, reaction),
-          onWantToRead: _isOwnProfile
-              ? null
-              : () => _toggleWantToReadFromPost(post),
-          onReactionUsers: (reaction) =>
-              _openEngagementUsers(post, reaction: reaction),
-          onWantToReadUsers: () => _openEngagementUsers(post, wantToRead: true),
-          onDelete: _isOwnProfile ? () => _deletePost(post) : null,
-          onEdit: _isOwnProfile ? () => _editPost(post) : null,
-          onFavorite: _isOwnProfile
-              ? () => _toggleFavorite(post.bookId, post.bookTitle)
-              : null,
-          favoriteLabel: _isFavorited(post.bookId) ? 'お気に入りから解除' : 'お気に入りに追加',
-          onReport: _isOwnProfile ? null : () => _reportPost(post.id),
-          onReply: (parentReply) => _replyToPost(post, parentReply),
-          onReplyReport: _reportReply,
-          concealReplySpoiler: (reply) {
-            final profileId = Provider.of<SupabaseService>(
-              context,
-              listen: false,
-            ).activeProfileId;
-            return profileId.isEmpty || reply.profileId != profileId;
-          },
-          canReportReply: (reply) {
-            final profileId = Provider.of<SupabaseService>(
-              context,
-              listen: false,
-            ).activeProfileId;
-            return profileId.isEmpty || reply.profileId != profileId;
-          },
-          onReplyUserTap: _openReplyProfile,
-          onRepliesChanged: _loadProfileData,
-        );
-      },
+  Widget _buildReadBooksTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildReadCountHeader(),
+        Expanded(
+          child: _buildGridTab(
+            _collections,
+            'My 本棚はありません。',
+            showDescription: true,
+            compactThreeColumn: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReadCountHeader() {
+    final readCount = _profile?.readCount ?? _userPosts.length;
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      child: Text(
+        '$readCount冊　読了',
+        style: const TextStyle(
+          color: Colors.black,
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 

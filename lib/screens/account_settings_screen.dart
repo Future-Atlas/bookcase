@@ -484,23 +484,21 @@ class _PublicAccountSettingsScreenState
   }) async {
     if (_unlockingPageColor) return;
     if (_colorUnlocksRemaining <= 0) {
-      final next = _nextColorUnlockPostCount;
-      final message = next == null
-          ? '投稿実績で解禁できる色はすべて選択済みです。'
-          : '次の色は、投稿が$next件になると解禁できます。';
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ).showSnackBar(SnackBar(content: Text(_pageColorProgressText)));
       return;
     }
 
+    final unlocksAfterSelection = _colorUnlocksRemaining - 1;
     final choice = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text('${option.label}を解禁しますか？'),
         content: Text(
-          '投稿$_pageColorPostCount件の達成特典を使って、この色を恒久的に解禁します。'
-          '残りの解禁可能数は$_colorUnlocksRemaining色です。',
+          '$_pageColorPostCount冊読了の達成特典を使って解禁する色に間違いはありませんか？\n'
+          '特典使用後の解禁可能数は$unlocksAfterSelection色になります。\n'
+          '一度解禁したら、取り消し・色の変更は一切出来ません。',
         ),
         actions: [
           TextButton(
@@ -566,16 +564,16 @@ class _PublicAccountSettingsScreenState
   }
 
   String get _pageColorProgressText {
-    if (_canUseAllPageColors && _colorUnlocksRemaining > 0) {
-      return '現在は全色を選択できます。投稿実績特典であと$_colorUnlocksRemaining色を恒久解禁できます。';
+    if (_colorUnlocksRemaining > 0) {
+      return '$_pageColorPostCount冊読了達成！好きな色を$_colorUnlocksRemaining色解禁できます。';
     }
     if (_canUseAllPageColors) return '現在の利用権限では、すべての色を選択できます。';
-    if (_colorUnlocksRemaining > 0) {
-      return '投稿$_pageColorPostCount件達成。好きな色をあと$_colorUnlocksRemaining色解禁できます。';
-    }
     final next = _nextColorUnlockPostCount;
-    if (next == null) return '投稿実績で解禁できる色は、すべて選択済みです。';
-    return '現在$_pageColorPostCount件。次の色は投稿$next件で解禁できます。';
+    if (next == null) return '読了実績で解禁できる色は、すべて選択済みです。';
+    final booksRemaining = next > _pageColorPostCount
+        ? next - _pageColorPostCount
+        : 0;
+    return '現在$_pageColorPostCount冊読了済み。次の色は、あと$booksRemaining冊読了で解禁されます。';
   }
 
   Widget _buildPageColorPicker() {

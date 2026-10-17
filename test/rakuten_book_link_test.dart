@@ -54,6 +54,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('楽天ブックスで購入する'), findsOneWidget);
     expect(find.text('広告・楽天アフィリエイトリンク'), findsOneWidget);
+    expect(tester.getSize(find.byType(OutlinedButton)).width, 800);
   });
   testWidgets('purchase button displays the tax-included Rakuten price', (
     tester,

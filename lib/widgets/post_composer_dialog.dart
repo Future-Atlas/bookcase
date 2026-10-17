@@ -231,7 +231,7 @@ Future<bool> showPostComposerDialog({
                         if (review.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('感想が未入力なため、投稿できません'),
+                              content: Text('感想が未入力なので、投稿できません'),
                             ),
                           );
                           return;

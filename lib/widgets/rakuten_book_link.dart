@@ -143,18 +143,21 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 6),
-                OutlinedButton.icon(
-                  onPressed: () => _open(destination.uri),
-                  icon: const Icon(Icons.open_in_new, size: 18),
-                  label: Text('楽天ブックスで購入する$priceLabel'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFBF0000),
-                    backgroundColor: const Color(0xFF77C6A6),
-                    side: const BorderSide(color: Color(0xFFBF0000)),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _open(destination.uri),
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: Text('楽天ブックスで購入する$priceLabel'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFBF0000),
+                      backgroundColor: const Color(0xFF77C6A6),
+                      side: const BorderSide(color: Color(0xFFBF0000)),
+                    ),
                   ),
                 ),
               ],
-              ),
+            ),
           );
         },
       );
