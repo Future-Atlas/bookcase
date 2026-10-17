@@ -43,3 +43,15 @@ test('locked feature messages do not advertise unreleased paid plans', () => {
   }
   assert.match(read('lib/widgets/post_reply_actions.dart'), /ご自身の返信の削除/)
 })
+
+test('public legal documents describe only current free and permission-based access', () => {
+  const paths = [
+    'lib/screens/terms_screen.dart',
+    'lib/screens/privacy_policy_screen.dart',
+    'lib/screens/external_transmission_screen.dart',
+  ]
+  for (const path of paths) {
+    assert.doesNotMatch(read(path), /サブスクリプション/, path)
+  }
+  assert.match(read(paths[0]), /有料プラン及び定期購入サービスは提供していません/)
+})

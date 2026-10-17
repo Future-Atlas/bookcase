@@ -38,7 +38,7 @@ void main() {
     expect(parsed.itemPrice, 0);
     expect(parsed.copyWith(title: '更新').rakutenAffiliateUrl, link);
   });
-  testWidgets('official link displays purchase button without lookup', (
+  testWidgets('official link displays affiliate disclosure and purchase button', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -53,7 +53,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('楽天ブックスで購入する'), findsOneWidget);
-    expect(find.text('広告・楽天アフィリエイトリンク'), findsNothing);
+    expect(find.text('広告・楽天アフィリエイトリンク'), findsOneWidget);
   });
   testWidgets('purchase button displays the tax-included Rakuten price', (
     tester,

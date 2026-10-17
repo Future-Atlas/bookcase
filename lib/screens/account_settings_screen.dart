@@ -338,6 +338,12 @@ class _PublicAccountSettingsScreenState
   bool _saving = false;
   bool _updatingAvatar = false;
   bool _canUseAllPageColors = false;
+  bool _unlockingPageColor = false;
+  Set<String> _availablePageColorKeys = {...ProfilePageColors.standardKeys};
+  Set<String> _achievementUnlockedPageColorKeys = {};
+  int _pageColorPostCount = 0;
+  int _colorUnlocksRemaining = 0;
+  int? _nextColorUnlockPostCount = 10;
 
   @override
   void didChangeDependencies() {
@@ -349,10 +355,21 @@ class _PublicAccountSettingsScreenState
     final service = Provider.of<SupabaseService>(context, listen: false);
     final results = await Future.wait<dynamic>([
       service.fetchCurrentSettingsData(),
-      service.canUseAllPageColors(),
+      service.fetchPageColorAccess(),
     ]);
     final data = results[0] as Map<String, dynamic>?;
-    final canUseAllPageColors = results[1] == true;
+    final colorAccess = results[1] as Map<String, dynamic>;
+    final canUseAllPageColors = colorAccess['can_use_all'] == true;
+    final unlockedColors = (colorAccess['unlocked_colors'] as List? ?? const [])
+        .map((value) => value.toString())
+        .where(ProfilePageColors.isValidKey)
+        .toSet();
+    final availableColors = <String>{
+      ...ProfilePageColors.standardKeys,
+      ...unlockedColors,
+      if (canUseAllPageColors)
+        ...ProfilePageColors.options.map((option) => option.key),
+    };
     if (!mounted) return;
     _usernameController.text = data?['username']?.toString() ?? '';
     _userIdController.text = data?['user_id']?.toString() ?? '';
@@ -364,8 +381,20 @@ class _PublicAccountSettingsScreenState
         data?['page_color']?.toString(),
       );
       _canUseAllPageColors = canUseAllPageColors;
+      _availablePageColorKeys = availableColors;
+      _achievementUnlockedPageColorKeys = unlockedColors;
+      _pageColorPostCount = _integerValue(colorAccess['post_count']);
+      _colorUnlocksRemaining = _integerValue(colorAccess['unlocks_remaining']);
+      _nextColorUnlockPostCount = colorAccess['next_milestone'] == null
+          ? null
+          : _integerValue(colorAccess['next_milestone']);
       _loading = false;
     });
+  }
+
+  int _integerValue(Object? value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   @override
@@ -449,6 +478,106 @@ class _PublicAccountSettingsScreenState
     return 'image/jpeg';
   }
 
+  Future<void> _unlockPageColor(
+    ProfilePageColorOption option, {
+    bool allowTemporarySelection = false,
+  }) async {
+    if (_unlockingPageColor) return;
+    if (_colorUnlocksRemaining <= 0) {
+      final next = _nextColorUnlockPostCount;
+      final message = next == null
+          ? '投稿実績で解禁できる色はすべて選択済みです。'
+          : '次の色は、投稿が$next件になると解禁できます。';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('${option.label}を解禁しますか？'),
+        content: Text(
+          '投稿$_pageColorPostCount件の達成特典を使って、この色を恒久的に解禁します。'
+          '残りの解禁可能数は$_colorUnlocksRemaining色です。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('cancel'),
+            child: const Text('キャンセル'),
+          ),
+          if (allowTemporarySelection)
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop('temporary'),
+              child: const Text('解禁せず選択'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop('unlock'),
+            child: const Text('解禁する'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || choice == null || choice == 'cancel') return;
+    if (choice == 'temporary') {
+      setState(() => _pageColorKey = option.key);
+      return;
+    }
+
+    setState(() => _unlockingPageColor = true);
+    final service = Provider.of<SupabaseService>(context, listen: false);
+    final error = await service.unlockPageColor(option.key);
+    if (!mounted) return;
+    if (error != null) {
+      setState(() => _unlockingPageColor = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
+
+    final access = await service.fetchPageColorAccess();
+    if (!mounted) return;
+    final canUseAll = access['can_use_all'] == true;
+    final unlocked = (access['unlocked_colors'] as List? ?? const [])
+        .map((value) => value.toString())
+        .where(ProfilePageColors.isValidKey)
+        .toSet();
+    setState(() {
+      _unlockingPageColor = false;
+      _canUseAllPageColors = canUseAll;
+      _availablePageColorKeys = {
+        ...ProfilePageColors.standardKeys,
+        ...unlocked,
+        if (canUseAll) ...ProfilePageColors.options.map((color) => color.key),
+      };
+      _achievementUnlockedPageColorKeys = unlocked;
+      _pageColorPostCount = _integerValue(access['post_count']);
+      _colorUnlocksRemaining = _integerValue(access['unlocks_remaining']);
+      _nextColorUnlockPostCount = access['next_milestone'] == null
+          ? null
+          : _integerValue(access['next_milestone']);
+      _pageColorKey = option.key;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${option.label}を解禁しました。保存するとページカラーに反映されます。')),
+    );
+  }
+
+  String get _pageColorProgressText {
+    if (_canUseAllPageColors && _colorUnlocksRemaining > 0) {
+      return '現在は全色を選択できます。投稿実績特典であと$_colorUnlocksRemaining色を恒久解禁できます。';
+    }
+    if (_canUseAllPageColors) return '現在の利用権限では、すべての色を選択できます。';
+    if (_colorUnlocksRemaining > 0) {
+      return '投稿$_pageColorPostCount件達成。好きな色をあと$_colorUnlocksRemaining色解禁できます。';
+    }
+    final next = _nextColorUnlockPostCount;
+    if (next == null) return '投稿実績で解禁できる色は、すべて選択済みです。';
+    return '現在$_pageColorPostCount件。次の色は投稿$next件で解禁できます。';
+  }
+
   Widget _buildPageColorPicker() {
     final theme = Theme.of(context);
     return Column(
@@ -466,30 +595,57 @@ class _PublicAccountSettingsScreenState
             color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
           ),
         ),
+        const SizedBox(height: 6),
+        Text(
+          '投稿10件・25件・50件・100件、その後は50件ごとに、好きな色を1色ずつ解禁できます。'
+          '一度解禁した色は、投稿を削除しても利用できます。',
+          style: TextStyle(
+            fontSize: 12,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _pageColorProgressText,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.primary,
+          ),
+        ),
         const SizedBox(height: 14),
         Wrap(
           spacing: 8,
           runSpacing: 12,
           children: ProfilePageColors.options.map((option) {
             final selected = option.key == _pageColorKey;
-            final locked =
-                !_canUseAllPageColors &&
-                !ProfilePageColors.standardKeys.contains(option.key);
+            final locked = !_availablePageColorKeys.contains(option.key);
+            final canUnlock = locked && _colorUnlocksRemaining > 0;
+            final canMakePermanent =
+                _canUseAllPageColors &&
+                !ProfilePageColors.standardKeys.contains(option.key) &&
+                !_achievementUnlockedPageColorKeys.contains(option.key) &&
+                _colorUnlocksRemaining > 0;
             return Semantics(
               button: true,
               selected: selected,
-              enabled: !locked,
+              enabled: !locked || canUnlock,
               label: locked
-                  ? '${option.label}は現在利用できません'
+                  ? canUnlock
+                        ? '${option.label}を投稿実績特典で解禁'
+                        : '${option.label}は現在利用できません'
                   : '${option.label}を選択',
               child: InkWell(
                 borderRadius: BorderRadius.circular(8),
-                onTap: () {
+                onTap: () async {
                   if (locked) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('現在のアカウントではこのページカラーを利用できません。'),
-                      ),
+                    await _unlockPageColor(option);
+                    return;
+                  }
+                  if (canMakePermanent) {
+                    await _unlockPageColor(
+                      option,
+                      allowTemporarySelection: true,
                     );
                     return;
                   }
