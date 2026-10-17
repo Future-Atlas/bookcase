@@ -57,7 +57,7 @@ GitHubの`staging`と`production` Environmentへ次を登録します。
 1. Cloudflare Dashboardでproduction Workerを開く。
 2. **Settings > Domains & Routes > Add > Custom Domain** を開く。
 3. `www.sharemarium.com`を登録する。
-4. 必要に応じて`sharemarium.com`も登録し、アプリ側のcanonicalは引き続き`https://www.sharemarium.com`とする。
+4. `sharemarium.com`も登録する。production Workerは、パスとクエリを維持したまま`https://www.sharemarium.com`へ恒久転送する。
 5. `https://www.sharemarium.com/`、`/book/...`、`/posts`、`/sitemap.xml`、`/api/rakuten`を確認する。
 6. Googleログインとメールログインを確認する。
 7. Search ConsoleのURL検査とサイトマップを確認する。

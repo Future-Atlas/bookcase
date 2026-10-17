@@ -120,6 +120,13 @@ async function routeRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/{2,}/g, "/");
 
+  if (env.APP_ENV === "production" && url.hostname === "sharemarium.com") {
+    const canonical = new URL(request.url);
+    canonical.protocol = "https:";
+    canonical.hostname = "www.sharemarium.com";
+    return Response.redirect(canonical, 308);
+  }
+
   if (env.APP_ENV !== "production" && path === "/robots.txt") {
     return new Response("User-agent: *\nDisallow: /\n", {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
