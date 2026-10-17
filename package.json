@@ -1,9 +1,10 @@
 {
   "scripts": {
-    "test:api": "node --test test/api/*.test.js"
+    "test:api": "node --test test/api/*.test.js",
+    "model:revenue": "node scripts/monetization-scenario.mjs"
   },
   "devDependencies": {
-    "supabase": "2.119.0"
+    "supabase": "2.120.0"
   },
   "dependencies": {
     "@vercel/speed-insights": "^2.0.0"
