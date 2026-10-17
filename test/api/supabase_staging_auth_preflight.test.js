@@ -13,6 +13,7 @@ function goodEnv() {
     SUPABASE_PROJECT_ID: 'wpoigmywpewrrbudqhgh',
     SUPABASE_ACCESS_TOKEN: 'sbp_fake-token-for-unit-tests',
     SUPABASE_DB_PASSWORD: 'fake-password-for-unit-tests',
+    SUPABASE_DB_URL: 'postgresql://postgres.wpoigmywpewrrbudqhgh:fake-password-for-unit-tests@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres',
   };
 }
 
@@ -26,6 +27,7 @@ test('rejects wrong target and missing credentials before any request', async ()
     ['SUPABASE_ACCESS_TOKEN', ''],
     ['SUPABASE_ACCESS_TOKEN', 'sb_publishable_test'],
     ['SUPABASE_DB_PASSWORD', ''],
+    ['SUPABASE_DB_URL', ''],
   ]) {
     let called = false;
     await assert.rejects(

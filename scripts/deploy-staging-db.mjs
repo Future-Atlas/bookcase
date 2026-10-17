@@ -6,6 +6,47 @@ import { pathToFileURL } from 'node:url';
 export const STAGING_PROJECT = 'wpoigmywpewrrbudqhgh';
 export const FUNCTIONS = ['session-guard', 'delete-account', 'admin-delete-account', 'billing-checkout', 'billing-cancel-subscription', 'billing-change-plan', 'billing-webhook'];
 
+export function validateDatabaseUrl(env) {
+  const raw = env.SUPABASE_DB_URL;
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    throw new Error('SUPABASE_DB_URL is missing. Configure the staging Session pooler URL.');
+  }
+  if (raw !== raw.trim()) {
+    throw new Error('SUPABASE_DB_URL must not contain surrounding whitespace.');
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error('SUPABASE_DB_URL is not a valid URL.');
+  }
+
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+    throw new Error('SUPABASE_DB_URL must use the postgres protocol.');
+  }
+  if (parsed.port !== '5432' || !parsed.hostname.endsWith('.pooler.supabase.com')) {
+    throw new Error('SUPABASE_DB_URL must use the Supabase Session pooler on port 5432.');
+  }
+  if (parsed.username !== `postgres.${STAGING_PROJECT}` || parsed.pathname !== '/postgres') {
+    throw new Error('SUPABASE_DB_URL does not target the approved staging project.');
+  }
+  if (parsed.search || parsed.hash) {
+    throw new Error('SUPABASE_DB_URL must not contain query parameters or fragments.');
+  }
+
+  let password;
+  try {
+    password = decodeURIComponent(parsed.password);
+  } catch {
+    throw new Error('SUPABASE_DB_URL contains an invalid encoded password.');
+  }
+  if (!password || password !== env.SUPABASE_DB_PASSWORD) {
+    throw new Error('SUPABASE_DB_URL and SUPABASE_DB_PASSWORD must contain the same staging database password.');
+  }
+  return raw;
+}
+
 export function validateEnvironment(env) {
   if (env.GITHUB_ACTIONS !== 'true' ||
       env.GITHUB_REPOSITORY !== 'Future-Atlas/bookcase' ||
@@ -26,6 +67,7 @@ export function validateEnvironment(env) {
   if (token !== token.trim() || !token.startsWith('sbp_')) {
     throw new Error('SUPABASE_ACCESS_TOKEN must be a Supabase personal access token, without surrounding whitespace.');
   }
+  validateDatabaseUrl(env);
 }
 
 export function validateMigrationNames(names) {
@@ -61,6 +103,7 @@ export function deploy({
 }) {
   if (!['plan', 'apply'].includes(mode)) throw new Error('Choose plan or apply.');
   validateEnvironment(env);
+  const dbUrl = env.SUPABASE_DB_URL;
   const checkTarget = () => {
     validateEnvironment(env);
     if (readLinkedProject().trim() !== STAGING_PROJECT) {
@@ -71,13 +114,16 @@ export function deploy({
   // Password is read from SUPABASE_DB_PASSWORD, never passed as a CLI argument.
   run(['link', '--project-ref', STAGING_PROJECT, '--yes']);
   checkTarget();
+  // Use the IPv4-capable Session pooler explicitly. GitHub-hosted runners
+  // cannot reliably reach Supabase's IPv6-only direct database endpoint.
+  run(['migration', 'list', '--db-url', dbUrl]);
   // include-all also handles an older migration added after newer migrations.
-  run(['db', 'push', '--linked', '--include-all', '--dry-run']);
+  run(['db', 'push', '--db-url', dbUrl, '--include-all', '--dry-run']);
   if (mode === 'plan') return;
 
   checkTarget();
   // Never reset a linked/cloud database. Only apply pending migrations.
-  run(['db', 'push', '--linked', '--include-all', '--yes']);
+  run(['db', 'push', '--db-url', dbUrl, '--include-all', '--yes']);
   for (const name of FUNCTIONS) {
     checkTarget();
     run(['functions', 'deploy', name, '--project-ref', STAGING_PROJECT, '--yes']);
