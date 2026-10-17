@@ -768,6 +768,57 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>> fetchPageColorAccess() async {
+    final fallback = <String, dynamic>{
+      'can_use_all': false,
+      'post_count': 0,
+      'earned_unlocks': 0,
+      'unlocked_colors': <String>[],
+      'unlocks_remaining': 0,
+      'next_milestone': 10,
+    };
+    if (!_isInitialized || _client == null || activeProfileId.isEmpty) {
+      return fallback;
+    }
+    try {
+      final value = await _client!.rpc('current_user_page_color_access');
+      if (value is Map) return Map<String, dynamic>.from(value);
+    } catch (e) {
+      debugPrint('Error fetching page-color progress: $e');
+      if (await canUseAllPageColors()) {
+        return {...fallback, 'can_use_all': true};
+      }
+    }
+    return fallback;
+  }
+
+  Future<String?> unlockPageColor(String pageColorKey) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) {
+      return 'ログイン状態を確認できませんでした。';
+    }
+    final normalized = ProfilePageColors.normalizeKey(pageColorKey);
+    if (normalized != pageColorKey ||
+        ProfilePageColors.standardKeys.contains(normalized)) {
+      return '解禁するページカラーを確認してください。';
+    }
+    try {
+      await _client!.rpc(
+        'unlock_current_user_page_color',
+        params: {'p_page_color': normalized},
+      );
+      return null;
+    } on PostgrestException catch (e) {
+      if (e.message.contains('page_color_unlock_not_earned')) {
+        return '次の投稿件数の達成後に、新しい色を解禁できます。';
+      }
+      if (e.code == '23514') return '解禁するページカラーを確認してください。';
+      return 'ページカラーを解禁できませんでした。';
+    } catch (e) {
+      debugPrint('Error unlocking page color: $e');
+      return 'ページカラーを解禁できませんでした。';
+    }
+  }
+
   Future<String?> updatePublicProfile({
     required String username,
     required String userId,
@@ -817,7 +868,8 @@ class SupabaseService extends ChangeNotifier {
       notifyListeners();
       return null;
     } on PostgrestException catch (e) {
-      if (e.message.contains('page_color_subscription_required')) {
+      if (e.message.contains('page_color_subscription_required') ||
+          e.message.contains('page_color_access_required')) {
         return '現在のアカウントではこのページカラーを利用できません。';
       }
       if (e.message.contains('USER_ID_IMMUTABLE')) {
