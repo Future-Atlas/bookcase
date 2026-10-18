@@ -50,8 +50,6 @@ app.*.map.json
 env.json
 node_modules/
 .vercel
-.wrangler/
-.dev.vars*
 .env*
 
 # Android release signing secrets
