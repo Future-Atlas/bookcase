@@ -1,16 +1,29 @@
 name: Deploy Flutter Web to Cloudflare Workers (Staging)
 
 on:
+  push:
+    branches:
+      - develop
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-staging-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    if: ${{ github.repository == 'Future-Atlas/bookcase' && github.ref == 'refs/heads/develop' }}
     runs-on: ubuntu-latest
     environment:
       name: staging
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2

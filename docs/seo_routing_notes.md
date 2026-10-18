@@ -1,8 +1,8 @@
 # SEO URL / app route consistency notes
 
 Sharemarium uses Flutter for the human-facing web app and server-rendered
-SEO handlers for crawler-friendly HTML. Cloudflare Workers is the new production
-hosting target; Vercel Serverless Functions remain for staging and manual fallback.
+SEO handlers for crawler-friendly HTML. Cloudflare Workers is the primary host
+for production and staging; Vercel Serverless Functions remain as manual fallback.
 
 ## Canonical public route families
 
@@ -30,8 +30,8 @@ crawler -> SSR
 human   -> Flutter
 ```
 
-`vercel.json` applies the post SSR rewrites on Vercel staging/fallback when the
-request User-Agent matches a supported crawler. The production Cloudflare Worker
+`vercel.json` applies the post SSR rewrites on Vercel manual fallback when the
+request User-Agent matches a supported crawler. The Cloudflare Worker
 mirrors this behavior in `cloudflare/worker.mjs`:
 
 - crawler `/posts` -> `/api/posts-seo`
@@ -48,8 +48,8 @@ public data; this split is an alternate rendering strategy rather than separate
 content.
 
 Crawler SSR handlers read `SUPABASE_URL` and `SUPABASE_ANON_KEY` from the server
-runtime (Cloudflare Worker secrets in production; Vercel runtime variables in
-staging/fallback). These are separate from values supplied to Flutter via
+runtime (Cloudflare Worker secrets in both production and staging; Vercel
+runtime variables in manually deployed fallback environments). These are separate from values supplied to Flutter via
 `--dart-define`. The legacy `VERCEL_ENV` variable is used as a compatibility flag
 inside shared handlers; it does not mean production is hosted on Vercel.
 
@@ -61,8 +61,8 @@ types:
 - default browser User-Agent: expect the Flutter post index and working post detail navigation
 - crawler User-Agent such as Googlebot: expect SSR HTML, HTTP 200, and a healthy `X-Posts-Diagnostics` value
 
-When Preview deployment protection is enabled, use an authenticated Vercel
-Preview session for browser verification. A Vercel login page that happens to
+When Vercel Preview deployment protection is enabled, use an authenticated Vercel
+Preview session only for fallback verification. A Vercel login page that happens to
 return HTTP 200 is not a successful SSR/content check.
 
 Production uses the same human/crawler routing model on the canonical Sharemarium
