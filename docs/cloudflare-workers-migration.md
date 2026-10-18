@@ -125,3 +125,11 @@ Cloudflare公式`wrangler-action`は`secrets:`のアップロード処理を`com
 - production: `environment: production`と`command: deploy --env production`
 
 **初回デプロイの失敗原因として特定できた設定不備**ですが、過去の失敗ログを確認していないため、他の失敗原因が併存する可能性はあります。API Token/Account IDなどの値の表示・確認・比較は実施しません。修正後はCloudflare Workerの配信結果とスモークテストの成否で判定してください。
+
+## ステージング公開後のSmoke Test診断
+
+Workerのアップロードが成功しても、公開URLの自動判定・HTTPステータス・Content-Type・noindexのいずれかが原因でSmoke Testが失敗することがあります。
+
+`SMOKE_DIAGNOSTIC_FILE`を指定したステージングGitHub Actionsは、失敗時に`cloudflare-staging-smoke-diagnostic`を1日間だけ保存します。内容は固定の検査名、HTTPステータス、失敗種別のみで、URL、レスポンス本文・ヘッダー、生エラー、Secret値は記録しません。
+
+`wrangler.jsonc`は`staging`と`production`の両方で`workers_dev: true`を明示し、独自ドメイン接続前に各Workerを公開URLで確認できる構成にします。
