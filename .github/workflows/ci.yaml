@@ -58,3 +58,13 @@ jobs:
         # are not installed by npm ci; auto mode lets Deno resolve them for
         # this isolated type-check without changing runtime configuration.
         run: deno check --node-modules-dir=auto supabase/functions/delete-account/index.ts supabase/functions/billing-checkout/index.ts supabase/functions/billing-cancel-subscription/index.ts supabase/functions/billing-change-plan/index.ts supabase/functions/billing-webhook/index.ts
+
+  cloudflare_production:
+    # Only merge/push to main can deploy; all Flutter/API/Deno CI checks
+    # must succeed first. Production and staging remain separate Workers.
+    needs: flutter
+    if: ${{ github.repository == 'Future-Atlas/bookcase' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy-cloudflare-production.yaml
+    secrets: inherit
