@@ -184,7 +184,11 @@ class RakutenApi {
       String genreId = '001';
       String keyword = '';
 
-      if (selectedGenre.contains('話題の本') || selectedGenre.contains('おすすめ')) {
+      if (selectedGenre.contains('新着')) {
+        genreId = '001';
+        sort ??= '-releaseDate';
+      } else if (selectedGenre.contains('話題の本') ||
+          selectedGenre.contains('おすすめ')) {
         genreId = '001004';
         sort ??= '-releaseDate';
       } else if (selectedGenre.contains('ビジネス') ||

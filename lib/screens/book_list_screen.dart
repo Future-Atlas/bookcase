@@ -22,6 +22,7 @@ import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
 import '../widgets/rakuten_book_link.dart';
 import '../widgets/public_posts_link.dart';
+import '../utils/book_carousel_auto_advance.dart';
 import 'report_post_dialog.dart';
 import 'user_profile_screen.dart';
 import 'post_engagement_users_screen.dart';
@@ -48,7 +49,37 @@ class _BookListScreenState extends State<BookListScreen> {
   late final BookListController _controller;
   final ScrollController _timelineScrollController = ScrollController();
   final Set<String> _pendingReactionPostIds = <String>{};
+  final GlobalKey<_PagedBookScrollerState> _featuredScrollerKey = GlobalKey();
+  final GlobalKey<_PagedBookScrollerState> _popularScrollerKey = GlobalKey();
+  final GlobalKey<_PagedBookScrollerState> _newArrivalsScrollerKey =
+      GlobalKey();
+  final GlobalKey<_PagedBookScrollerState> _westernScrollerKey = GlobalKey();
   String? _openingBookId;
+
+  Iterable<GlobalKey<_PagedBookScrollerState>> get _homeScrollerKeys => [
+    _featuredScrollerKey,
+    _popularScrollerKey,
+    _newArrivalsScrollerKey,
+    _westernScrollerKey,
+  ];
+
+  void _registerHomeInteraction() {
+    for (final key in _homeScrollerKeys) {
+      key.currentState?.registerUserInteraction();
+    }
+  }
+
+  void _pauseHomeCarouselsForBookDetail() {
+    for (final key in _homeScrollerKeys) {
+      key.currentState?.pauseForBookDetail();
+    }
+  }
+
+  void _resumeHomeCarouselsAfterBookDetail() {
+    for (final key in _homeScrollerKeys) {
+      key.currentState?.resumeAfterBookDetail();
+    }
+  }
 
   @override
   void initState() {
@@ -395,410 +426,420 @@ class _BookListScreenState extends State<BookListScreen> {
       _replaceBrowserPath(bookPath);
     }
 
-    await showDialog(
-      context: context,
-      builder: (context) {
-        final hasCover = book.coverUrl.trim().isNotEmpty;
-        final service = Provider.of<SupabaseService>(context, listen: false);
-        final isReadFuture = service.isBookReadByCurrentUser(bookId: book.id);
-        final isFavoriteFuture = service.isBookFavoritedByCurrentUser(book.id);
-        final isWantedFuture = service.isBookWantedByCurrentUser(book.id);
+    _pauseHomeCarouselsForBookDetail();
+    try {
+      await showDialog(
+        context: context,
+        builder: (context) {
+          final hasCover = book.coverUrl.trim().isNotEmpty;
+          final service = Provider.of<SupabaseService>(context, listen: false);
+          final isReadFuture = service.isBookReadByCurrentUser(bookId: book.id);
+          final isFavoriteFuture = service.isBookFavoritedByCurrentUser(
+            book.id,
+          );
+          final isWantedFuture = service.isBookWantedByCurrentUser(book.id);
 
-        return Dialog(
-          backgroundColor: const Color(0xFFE6E6E6),
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 24,
-          ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 920,
-              maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+          return Dialog(
+            backgroundColor: const Color(0xFFE6E6E6),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 24,
             ),
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: DefaultTextStyle.merge(
-                  style: const TextStyle(color: Color(0xFF1E1E1E)),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isNarrow = constraints.maxWidth < 560;
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 920,
+                maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+              ),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: DefaultTextStyle.merge(
+                    style: const TextStyle(color: Color(0xFF1E1E1E)),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isNarrow = constraints.maxWidth < 560;
 
-                      final coverBlock = SizedBox(
-                        width: isNarrow ? double.infinity : 220,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: isNarrow ? double.infinity : 200,
-                              height: isNarrow ? 240 : 300,
-                              color: Colors.grey[400],
-                              child: hasCover
-                                  ? Image.network(
-                                      book.coverUrl,
-                                      fit: BoxFit.cover,
-                                      alignment: isNarrow
-                                          ? Alignment.topCenter
-                                          : Alignment.center,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                            return _buildMissingCoverFallback(
-                                              book,
-                                            );
-                                          },
-                                    )
-                                  : _buildMissingCoverFallback(book),
-                            ),
-                            const SizedBox(height: 12),
-                            if (!hasCover) ...[
-                              Text(
-                                book.title,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E1E1E),
-                                ),
+                        final coverBlock = SizedBox(
+                          width: isNarrow ? double.infinity : 220,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: isNarrow ? double.infinity : 200,
+                                height: isNarrow ? 240 : 300,
+                                color: Colors.grey[400],
+                                child: hasCover
+                                    ? Image.network(
+                                        book.coverUrl,
+                                        fit: BoxFit.cover,
+                                        alignment: isNarrow
+                                            ? Alignment.topCenter
+                                            : Alignment.center,
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
+                                              return _buildMissingCoverFallback(
+                                                book,
+                                              );
+                                            },
+                                      )
+                                    : _buildMissingCoverFallback(book),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                book.author,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[700],
+                              const SizedBox(height: 12),
+                              if (!hasCover) ...[
+                                Text(
+                                  book.title,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E1E1E),
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  book.author,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
-                        ),
-                      );
+                          ),
+                        );
 
-                      final detailBlock = Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          FutureBuilder<bool>(
-                            future: isReadFuture,
-                            builder: (context, snapshot) {
-                              final isRead = snapshot.data ?? false;
-                              final isChecking =
-                                  snapshot.connectionState ==
-                                  ConnectionState.waiting;
-                              return Row(
-                                children: [
-                                  Expanded(
-                                    child: SizedBox(
-                                      height: 64,
-                                      child: ElevatedButton(
-                                        onPressed: isRead || isChecking
-                                            ? null
-                                            : () async {
-                                                if (!mounted) return;
-                                                Navigator.of(
-                                                  this.context,
-                                                ).pop();
-                                                _showPostComposerDialog(book);
-                                              },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.black,
-                                          foregroundColor: const Color(
-                                            0xFFFF1F1F,
-                                          ),
-                                          disabledBackgroundColor: Colors.black,
-                                          disabledForegroundColor: isRead
-                                              ? const Color(0xFF00BFFF)
-                                              : Colors.grey,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              18,
+                        final detailBlock = Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            FutureBuilder<bool>(
+                              future: isReadFuture,
+                              builder: (context, snapshot) {
+                                final isRead = snapshot.data ?? false;
+                                final isChecking =
+                                    snapshot.connectionState ==
+                                    ConnectionState.waiting;
+                                return Row(
+                                  children: [
+                                    Expanded(
+                                      child: SizedBox(
+                                        height: 64,
+                                        child: ElevatedButton(
+                                          onPressed: isRead || isChecking
+                                              ? null
+                                              : () async {
+                                                  if (!mounted) return;
+                                                  Navigator.of(
+                                                    this.context,
+                                                  ).pop();
+                                                  _showPostComposerDialog(book);
+                                                },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.black,
+                                            foregroundColor: const Color(
+                                              0xFFFF1F1F,
+                                            ),
+                                            disabledBackgroundColor:
+                                                Colors.black,
+                                            disabledForegroundColor: isRead
+                                                ? const Color(0xFF00BFFF)
+                                                : Colors.grey,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
                                             ),
                                           ),
-                                        ),
-                                        child: BookActionLabel(
-                                          bookId: book.id,
-                                          label: isRead ? '読了済み' : '読了',
-                                          color: isRead
-                                              ? const Color(0xFF00BFFF)
-                                              : const Color(0xFFFF1F1F),
-                                          wantToRead: false,
-                                          style: const TextStyle(
-                                            fontSize: 26,
-                                            fontWeight: FontWeight.bold,
+                                          child: BookActionLabel(
+                                            bookId: book.id,
+                                            label: isRead ? '読了済み' : '読了',
+                                            color: isRead
+                                                ? const Color(0xFF00BFFF)
+                                                : const Color(0xFFFF1F1F),
+                                            wantToRead: false,
+                                            style: const TextStyle(
+                                              fontSize: 26,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: FutureBuilder<bool>(
-                                      future: isWantedFuture,
-                                      builder: (context, wantedSnapshot) {
-                                        final wanted =
-                                            wantedSnapshot.data ?? false;
-                                        final checking =
-                                            wantedSnapshot.connectionState ==
-                                            ConnectionState.waiting;
-                                        return SizedBox(
-                                          height: 64,
-                                          child: ElevatedButton(
-                                            onPressed: checking
-                                                ? null
-                                                : () async {
-                                                    if (!await _ensureAuthenticated() ||
-                                                        !mounted) {
-                                                      return;
-                                                    }
-                                                    final result = await service
-                                                        .toggleWantToRead(
-                                                          book: book,
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: FutureBuilder<bool>(
+                                        future: isWantedFuture,
+                                        builder: (context, wantedSnapshot) {
+                                          final wanted =
+                                              wantedSnapshot.data ?? false;
+                                          final checking =
+                                              wantedSnapshot.connectionState ==
+                                              ConnectionState.waiting;
+                                          return SizedBox(
+                                            height: 64,
+                                            child: ElevatedButton(
+                                              onPressed: checking
+                                                  ? null
+                                                  : () async {
+                                                      if (!await _ensureAuthenticated() ||
+                                                          !mounted) {
+                                                        return;
+                                                      }
+                                                      final result =
+                                                          await service
+                                                              .toggleWantToRead(
+                                                                book: book,
+                                                              );
+                                                      if (!mounted) return;
+                                                      if (result ==
+                                                          WantToReadToggleResult
+                                                              .subscriptionRequired) {
+                                                        await showSubscriptionLockedDialog(
+                                                          context: this.context,
+                                                          featureLabel:
+                                                              '「読みたい！」',
                                                         );
-                                                    if (!mounted) return;
-                                                    if (result ==
-                                                        WantToReadToggleResult
-                                                            .subscriptionRequired) {
-                                                      await showSubscriptionLockedDialog(
-                                                        context: this.context,
-                                                        featureLabel: '「読みたい！」',
-                                                      );
-                                                      return;
-                                                    }
-                                                    if (context.mounted &&
-                                                        !result
-                                                            .shouldRestoreOptimisticState) {
-                                                      Navigator.of(
-                                                        context,
-                                                      ).pop();
-                                                    }
-                                                    ScaffoldMessenger.of(
-                                                      this.context,
-                                                    ).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(
-                                                          result.message,
+                                                        return;
+                                                      }
+                                                      if (context.mounted &&
+                                                          !result
+                                                              .shouldRestoreOptimisticState) {
+                                                        Navigator.of(
+                                                          context,
+                                                        ).pop();
+                                                      }
+                                                      ScaffoldMessenger.of(
+                                                        this.context,
+                                                      ).showSnackBar(
+                                                        SnackBar(
+                                                          content: Text(
+                                                            result.message,
+                                                          ),
                                                         ),
-                                                      ),
-                                                    );
-                                                  },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.black,
-                                              foregroundColor: Colors.amber,
-                                              disabledBackgroundColor:
-                                                  Colors.black,
-                                              disabledForegroundColor:
-                                                  Colors.amber.shade200,
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(18),
+                                                      );
+                                                    },
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.black,
+                                                foregroundColor: Colors.amber,
+                                                disabledBackgroundColor:
+                                                    Colors.black,
+                                                disabledForegroundColor:
+                                                    Colors.amber.shade200,
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(18),
+                                                ),
+                                              ),
+                                              child: BookActionLabel(
+                                                bookId: book.id,
+                                                label: wanted
+                                                    ? '読みたい！済み'
+                                                    : '読みたい！',
+                                                color: Colors.amber,
+                                                wantToRead: true,
+                                                style: const TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                               ),
                                             ),
-                                            child: BookActionLabel(
-                                              bookId: book.id,
-                                              label: wanted
-                                                  ? '読みたい！済み'
-                                                  : '読みたい！',
-                                              color: Colors.amber,
-                                              wantToRead: true,
-                                              style: const TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      },
+                                          );
+                                        },
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          FutureBuilder<bool>(
-                            future: isFavoriteFuture,
-                            builder: (context, snapshot) {
-                              final isFavorite = snapshot.data ?? false;
-                              final isLoading =
-                                  snapshot.connectionState ==
-                                  ConnectionState.waiting;
-                              return Align(
-                                alignment: Alignment.center,
-                                child: OutlinedButton.icon(
-                                  onPressed: isLoading
-                                      ? null
-                                      : () async {
-                                          // Temporarily disable auth check for
-                                          // public browsing mode.
-                                          // if (!service.isAuthenticated) {
-                                          //   Navigator.of(context).pop();
-                                          //   final authenticated =
-                                          //       await _ensureAuthenticated();
-                                          //   if (authenticated && mounted) {
-                                          //     _showBookDetailDialog(book);
-                                          //   }
-                                          //   return;
-                                          // }
+                                  ],
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 10),
+                            FutureBuilder<bool>(
+                              future: isFavoriteFuture,
+                              builder: (context, snapshot) {
+                                final isFavorite = snapshot.data ?? false;
+                                final isLoading =
+                                    snapshot.connectionState ==
+                                    ConnectionState.waiting;
+                                return Align(
+                                  alignment: Alignment.center,
+                                  child: OutlinedButton.icon(
+                                    onPressed: isLoading
+                                        ? null
+                                        : () async {
+                                            // Temporarily disable auth check for
+                                            // public browsing mode.
+                                            // if (!service.isAuthenticated) {
+                                            //   Navigator.of(context).pop();
+                                            //   final authenticated =
+                                            //       await _ensureAuthenticated();
+                                            //   if (authenticated && mounted) {
+                                            //     _showBookDetailDialog(book);
+                                            //   }
+                                            //   return;
+                                            // }
 
-                                          final result = await service
-                                              .toggleFavorite(book.id);
-                                          if (!mounted) return;
-                                          if (result ==
-                                              FavoriteToggleResult
-                                                  .standardLimitReached) {
-                                            final replaced =
-                                                await _replaceFavoriteAtLimit(
-                                                  targetBookId: book.id,
-                                                  targetBookTitle: book.title,
-                                                );
-                                            if (replaced && context.mounted) {
+                                            final result = await service
+                                                .toggleFavorite(book.id);
+                                            if (!mounted) return;
+                                            if (result ==
+                                                FavoriteToggleResult
+                                                    .standardLimitReached) {
+                                              final replaced =
+                                                  await _replaceFavoriteAtLimit(
+                                                    targetBookId: book.id,
+                                                    targetBookTitle: book.title,
+                                                  );
+                                              if (replaced && context.mounted) {
+                                                Navigator.of(context).pop();
+                                              }
+                                              return;
+                                            }
+                                            if (context.mounted &&
+                                                (result ==
+                                                        FavoriteToggleResult
+                                                            .added ||
+                                                    result ==
+                                                        FavoriteToggleResult
+                                                            .removed)) {
                                               Navigator.of(context).pop();
                                             }
-                                            return;
-                                          }
-                                          if (context.mounted &&
-                                              (result ==
-                                                      FavoriteToggleResult
-                                                          .added ||
-                                                  result ==
-                                                      FavoriteToggleResult
-                                                          .removed)) {
-                                            Navigator.of(context).pop();
-                                          }
-                                          _showFavoriteResult(result);
-                                        },
-                                  icon: Icon(
-                                    isFavorite
-                                        ? Icons.favorite
-                                        : Icons.favorite_border,
-                                    color: const Color(0xFFD00303),
+                                            _showFavoriteResult(result);
+                                          },
+                                    icon: Icon(
+                                      isFavorite
+                                          ? Icons.favorite
+                                          : Icons.favorite_border,
+                                      color: const Color(0xFFD00303),
+                                    ),
+                                    label: Text(
+                                      isFavorite ? 'お気に入り解除' : 'お気に入りに登録',
+                                    ),
                                   ),
-                                  label: Text(
-                                    isFavorite ? 'お気に入り解除' : 'お気に入りに登録',
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          Row(
-                            children: [
-                              ...List.generate(5, (index) {
-                                final isFilled = index < book.ratingAvg.floor();
-                                return Icon(
-                                  isFilled ? Icons.star : Icons.star_border,
-                                  color: const Color(0xFFE0B400),
-                                  size: isNarrow ? 30 : 42,
                                 );
-                              }),
-                              SizedBox(width: isNarrow ? 8 : 12),
-                              Text(
-                                book.ratingAvg.toStringAsFixed(1),
-                                style: TextStyle(
-                                  color: Color(0xFFE0B400),
-                                  fontSize: isNarrow ? 20 : 52 / 2,
-                                  fontWeight: FontWeight.w500,
+                              },
+                            ),
+                            Row(
+                              children: [
+                                ...List.generate(5, (index) {
+                                  final isFilled =
+                                      index < book.ratingAvg.floor();
+                                  return Icon(
+                                    isFilled ? Icons.star : Icons.star_border,
+                                    color: const Color(0xFFE0B400),
+                                    size: isNarrow ? 30 : 42,
+                                  );
+                                }),
+                                SizedBox(width: isNarrow ? 8 : 12),
+                                Text(
+                                  book.ratingAvg.toStringAsFixed(1),
+                                  style: TextStyle(
+                                    color: Color(0xFFE0B400),
+                                    fontSize: isNarrow ? 20 : 52 / 2,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              book.title.trim().isEmpty ? 'タイトル不明' : book.title,
+                              style: const TextStyle(
+                                color: Color(0xFF1E1E1E),
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                height: 1.35,
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            book.title.trim().isEmpty ? 'タイトル不明' : book.title,
-                            style: const TextStyle(
-                              color: Color(0xFF1E1E1E),
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              height: 1.35,
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            book.author.trim().isEmpty ? '著者不明' : book.author,
-                            style: TextStyle(
-                              color: Colors.grey[800],
-                              fontSize: 14,
-                              height: 1.4,
+                            const SizedBox(height: 6),
+                            Text(
+                              book.author.trim().isEmpty ? '著者不明' : book.author,
+                              style: TextStyle(
+                                color: Colors.grey[800],
+                                fontSize: 14,
+                                height: 1.4,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            book.publisher.trim().isEmpty
-                                ? '出版社不明'
-                                : book.publisher,
-                            style: TextStyle(
-                              color: Colors.grey[700],
-                              fontSize: 13,
-                              height: 1.4,
+                            const SizedBox(height: 3),
+                            Text(
+                              book.publisher.trim().isEmpty
+                                  ? '出版社不明'
+                                  : book.publisher,
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 13,
+                                height: 1.4,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            color: const Color(0xFFD8D8D8),
-                            child: SizedBox(
-                              height: isNarrow ? 170 : 230,
-                              child: Scrollbar(
-                                thumbVisibility: true,
-                                child: SingleChildScrollView(
-                                  child: Text(
-                                    book.description.trim().isNotEmpty
-                                        ? book.description
-                                        : 'あらすじ情報はまだ登録されていません。',
-                                    style: const TextStyle(
-                                      color: Color(0xFF1E1E1E),
-                                      fontSize: 26 / 2,
-                                      height: 1.5,
+                            const SizedBox(height: 12),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              color: const Color(0xFFD8D8D8),
+                              child: SizedBox(
+                                height: isNarrow ? 170 : 230,
+                                child: Scrollbar(
+                                  thumbVisibility: true,
+                                  child: SingleChildScrollView(
+                                    child: Text(
+                                      book.description.trim().isNotEmpty
+                                          ? book.description
+                                          : 'あらすじ情報はまだ登録されていません。',
+                                      style: const TextStyle(
+                                        color: Color(0xFF1E1E1E),
+                                        fontSize: 26 / 2,
+                                        height: 1.5,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      );
+                          ],
+                        );
 
-                      final bookInformation = isNarrow
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                coverBlock,
-                                const SizedBox(height: 12),
-                                detailBlock,
-                              ],
-                            )
-                          : Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                coverBlock,
-                                const SizedBox(width: 20),
-                                Expanded(child: detailBlock),
-                              ],
-                            );
+                        final bookInformation = isNarrow
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  coverBlock,
+                                  const SizedBox(height: 12),
+                                  detailBlock,
+                                ],
+                              )
+                            : Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  coverBlock,
+                                  const SizedBox(width: 20),
+                                  Expanded(child: detailBlock),
+                                ],
+                              );
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          bookInformation,
-                          RakutenBookLink(book: book),
-                          const SizedBox(height: 20),
-                          _BookPostsPanel(
-                            bookId: book.id,
-                            onUserTap: _openUserProfile,
-                            onReaction: (post, reaction) =>
-                                _toggleReaction(post.id, reaction),
-                            onReport: (post) => _reportPost(post.id),
-                            onReply: _replyToPost,
-                            onReplyReport: _reportReply,
-                          ),
-                        ],
-                      );
-                    },
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            bookInformation,
+                            RakutenBookLink(book: book),
+                            const SizedBox(height: 20),
+                            _BookPostsPanel(
+                              bookId: book.id,
+                              onUserTap: _openUserProfile,
+                              onReaction: (post, reaction) =>
+                                  _toggleReaction(post.id, reaction),
+                              onReport: (post) => _reportPost(post.id),
+                              onReply: _replyToPost,
+                              onReplyReport: _reportReply,
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
+    } finally {
+      _resumeHomeCarouselsAfterBookDetail();
+    }
 
     if (!mounted || !kIsWeb) return;
     if (_currentAppPath() == bookPath) {
@@ -861,115 +902,121 @@ class _BookListScreenState extends State<BookListScreen> {
           child: RefreshIndicator(
             onRefresh: () => _controller.loadData(context),
             color: const Color(0xFFD00303),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTopHeroImage(),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSearchBar(),
-                        if (widget.initialGenre == null &&
-                            _controller.searchQuery.isEmpty)
-                          _buildServiceIntroduction(),
-                        if (_controller.searchQuery.isNotEmpty)
-                          _buildSearchResults()
-                        else ...[
-                          if ((widget.initialGenre == null &&
-                                  (_controller.isLoadingFeatured ||
-                                      _controller.featuredBooks.isNotEmpty)) ||
-                              widget.initialGenre == 'featured')
-                            _buildFeaturedBooksSection(),
-                          if (widget.initialGenre == null ||
-                              widget.initialGenre == 'recommended')
-                            _buildGenreSection(
-                              title: 'おすすめの本',
-                              bookList: _controller.recommendedBooks,
-                              pageNumber: _controller.recommendedPage,
-                              onLoadMore: _controller.loadMoreRecommended,
-                              onLoadPrevious:
-                                  _controller.loadPreviousRecommended,
-                              canLoadPrevious:
-                                  _controller.canLoadPreviousRecommended,
-                              isLoadingMore:
-                                  _controller.isLoadingMoreRecommended,
-                              hasMore: _controller.hasMoreRecommended,
-                              isLoadingInitial:
-                                  _controller.isLoadingRecommended,
-                            ),
-                          // Only place the genre ad between real book rows.
-                          if (kIsWeb &&
-                              timelineAdDisplayReady &&
-                              widget.initialGenre == null &&
-                              _controller.recommendedBooks.isNotEmpty &&
-                              _controller.westernBooks.isNotEmpty)
-                            const TimelineAdSlot(
-                              key: ValueKey(
-                                'home-ad-between-recommended-western',
+            child: Listener(
+              onPointerDown: (_) => _registerHomeInteraction(),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildTopHeroImage(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSearchBar(),
+                          if (widget.initialGenre == null &&
+                              _controller.searchQuery.isEmpty)
+                            _buildServiceIntroduction(),
+                          if (_controller.searchQuery.isNotEmpty)
+                            _buildSearchResults()
+                          else ...[
+                            if ((widget.initialGenre == null &&
+                                    (_controller.isLoadingFeatured ||
+                                        _controller
+                                            .featuredBooks
+                                            .isNotEmpty)) ||
+                                widget.initialGenre == 'featured')
+                              _buildFeaturedBooksSection(),
+                            if (widget.initialGenre == null ||
+                                widget.initialGenre == 'popular')
+                              _buildGenreSection(
+                                title: '人気作品',
+                                scrollerKey: _popularScrollerKey,
+                                bookList: _controller.popularBooks,
+                                pageNumber: _controller.popularPage,
+                                onLoadMore: _controller.loadMorePopular,
+                                onLoadPrevious: _controller.loadPreviousPopular,
+                                canLoadPrevious:
+                                    _controller.canLoadPreviousPopular,
+                                isLoadingMore: _controller.isLoadingMorePopular,
+                                hasMore: _controller.hasMorePopular,
+                                isLoadingInitial: _controller.isLoadingPopular,
                               ),
-                              slotIndex: 0,
-                            ),
-                          if (widget.initialGenre == null ||
-                              widget.initialGenre == 'western')
-                            _buildGenreSection(
-                              title: '洋書',
-                              bookList: _controller.westernBooks,
-                              pageNumber: _controller.westernPage,
-                              onLoadMore: _controller.loadMoreWestern,
-                              onLoadPrevious: _controller.loadPreviousWestern,
-                              canLoadPrevious:
-                                  _controller.canLoadPreviousWestern,
-                              isLoadingMore: _controller.isLoadingMoreWestern,
-                              hasMore: _controller.hasMoreWestern,
-                              isLoadingInitial: _controller.isLoadingWestern,
-                            ),
-                          if (kIsWeb &&
-                              timelineAdDisplayReady &&
-                              widget.initialGenre == null &&
-                              _controller.westernBooks.isNotEmpty &&
-                              _controller.popularBooks.isNotEmpty)
-                            const TimelineAdSlot(
-                              key: ValueKey('home-ad-between-western-popular'),
-                              slotIndex: 1,
-                            ),
-                          if (widget.initialGenre == null ||
-                              widget.initialGenre == 'popular')
-                            _buildGenreSection(
-                              title: '人気作品',
-                              bookList: _controller.popularBooks,
-                              pageNumber: _controller.popularPage,
-                              onLoadMore: _controller.loadMorePopular,
-                              onLoadPrevious: _controller.loadPreviousPopular,
-                              canLoadPrevious:
-                                  _controller.canLoadPreviousPopular,
-                              isLoadingMore: _controller.isLoadingMorePopular,
-                              hasMore: _controller.hasMorePopular,
-                              isLoadingInitial: _controller.isLoadingPopular,
-                            ),
-                          if (widget.initialGenre == null) ...[
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: PublicPostsLink(
-                                sectionHeading: true,
-                                foregroundColor: ProfilePageColors.colorFor(
-                                  context
-                                      .watch<SupabaseService>()
-                                      .activePageColorKey,
+                            // Only place the genre ad between real book rows.
+                            if (kIsWeb &&
+                                timelineAdDisplayReady &&
+                                widget.initialGenre == null &&
+                                _controller.popularBooks.isNotEmpty &&
+                                _controller.recommendedBooks.isNotEmpty)
+                              const TimelineAdSlot(
+                                key: ValueKey('home-ad-between-popular-new'),
+                                slotIndex: 0,
+                              ),
+                            if (widget.initialGenre == null ||
+                                widget.initialGenre == 'recommended')
+                              _buildGenreSection(
+                                title: '新着',
+                                scrollerKey: _newArrivalsScrollerKey,
+                                bookList: _controller.recommendedBooks,
+                                pageNumber: _controller.recommendedPage,
+                                onLoadMore: _controller.loadMoreRecommended,
+                                onLoadPrevious:
+                                    _controller.loadPreviousRecommended,
+                                canLoadPrevious:
+                                    _controller.canLoadPreviousRecommended,
+                                isLoadingMore:
+                                    _controller.isLoadingMoreRecommended,
+                                hasMore: _controller.hasMoreRecommended,
+                                isLoadingInitial:
+                                    _controller.isLoadingRecommended,
+                              ),
+                            if (kIsWeb &&
+                                timelineAdDisplayReady &&
+                                widget.initialGenre == null &&
+                                _controller.recommendedBooks.isNotEmpty &&
+                                _controller.westernBooks.isNotEmpty)
+                              const TimelineAdSlot(
+                                key: ValueKey('home-ad-between-new-western'),
+                                slotIndex: 1,
+                              ),
+                            if (widget.initialGenre == null ||
+                                widget.initialGenre == 'western')
+                              _buildGenreSection(
+                                title: '洋書',
+                                scrollerKey: _westernScrollerKey,
+                                bookList: _controller.westernBooks,
+                                pageNumber: _controller.westernPage,
+                                onLoadMore: _controller.loadMoreWestern,
+                                onLoadPrevious: _controller.loadPreviousWestern,
+                                canLoadPrevious:
+                                    _controller.canLoadPreviousWestern,
+                                isLoadingMore: _controller.isLoadingMoreWestern,
+                                hasMore: _controller.hasMoreWestern,
+                                isLoadingInitial: _controller.isLoadingWestern,
+                              ),
+                            if (widget.initialGenre == null) ...[
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: PublicPostsLink(
+                                  sectionHeading: true,
+                                  foregroundColor: ProfilePageColors.colorFor(
+                                    context
+                                        .watch<SupabaseService>()
+                                        .activePageColorKey,
+                                  ),
                                 ),
                               ),
-                            ),
-                            _buildTimeline(),
+                              _buildTimeline(),
+                            ],
                           ],
+                          _buildFooter(),
                         ],
-                        _buildFooter(),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -1207,6 +1254,7 @@ class _BookListScreenState extends State<BookListScreen> {
 
   Widget _buildGenreSection({
     required String title,
+    required GlobalKey<_PagedBookScrollerState> scrollerKey,
     required List<Book> bookList,
     required int pageNumber,
     required Future<void> Function() onLoadMore,
@@ -1225,6 +1273,7 @@ class _BookListScreenState extends State<BookListScreen> {
         ),
         _buildBookCarousel(
           bookList,
+          scrollerKey: scrollerKey,
           pageNumber: pageNumber,
           isLoadingInitial: isLoadingInitial,
           onLoadMore: onLoadMore,
@@ -1283,6 +1332,7 @@ class _BookListScreenState extends State<BookListScreen> {
         else
           _buildBookCarousel(
             _controller.featuredBooks,
+            scrollerKey: _featuredScrollerKey,
             pageNumber: 1,
             isLoadingInitial: _controller.isLoadingFeatured,
             onLoadMore: () async {},
@@ -1333,6 +1383,7 @@ class _BookListScreenState extends State<BookListScreen> {
 
   Widget _buildBookCarousel(
     List<Book> bookList, {
+    required GlobalKey<_PagedBookScrollerState> scrollerKey,
     required int pageNumber,
     required bool isLoadingInitial,
     required Future<void> Function() onLoadMore,
@@ -1427,6 +1478,7 @@ class _BookListScreenState extends State<BookListScreen> {
             ),
           Expanded(
             child: _PagedBookScroller(
+              key: scrollerKey,
               books: bookList,
               pageNumber: pageNumber,
               canLoadPrevious: canLoadPrevious,
@@ -2064,6 +2116,7 @@ class _BookPostsPanelState extends State<_BookPostsPanel> {
 
 class _PagedBookScroller extends StatefulWidget {
   const _PagedBookScroller({
+    super.key,
     required this.books,
     required this.pageNumber,
     required this.canLoadPrevious,
@@ -2081,7 +2134,7 @@ class _PagedBookScroller extends StatefulWidget {
   final bool isLoadingMore;
   final Future<void> Function() onLoadNext;
   final VoidCallback onLoadPrevious;
-  final ValueChanged<Book> onBookTap;
+  final Future<void> Function(Book) onBookTap;
 
   @override
   State<_PagedBookScroller> createState() => _PagedBookScrollerState();
@@ -2089,10 +2142,25 @@ class _PagedBookScroller extends StatefulWidget {
 
 class _PagedBookScrollerState extends State<_PagedBookScroller> {
   final ScrollController _scrollController = ScrollController();
+  late final BookCarouselAutoAdvance _autoAdvance;
   bool _pageChangePending = false;
   bool _landAtEndAfterChange = false;
   bool _isRepositioningAfterPageChange = false;
+  bool _isAutoScrolling = false;
   double _overscrollDistance = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _autoAdvance = BookCarouselAutoAdvance(onAdvance: _advanceAutomatically)
+      ..start();
+  }
+
+  void registerUserInteraction() => _autoAdvance.registerUserInteraction();
+
+  void pauseForBookDetail() => _autoAdvance.pauseForBookDetail();
+
+  void resumeAfterBookDetail() => _autoAdvance.resumeAfterBookDetail();
 
   @override
   void didUpdateWidget(covariant _PagedBookScroller oldWidget) {
@@ -2123,8 +2191,66 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
 
   @override
   void dispose() {
+    _autoAdvance.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _advanceAutomatically() async {
+    if (!mounted ||
+        widget.isLoadingMore ||
+        _pageChangePending ||
+        !_scrollController.hasClients ||
+        !_isVisibleOnScreen()) {
+      return;
+    }
+
+    final position = _scrollController.position;
+    if (position.extentAfter > 1) {
+      final step = (position.viewportDimension * 0.42).clamp(150.0, 230.0);
+      final target = (position.pixels + step).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      _isAutoScrolling = true;
+      try {
+        await _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 650),
+          curve: Curves.easeInOutCubic,
+        );
+      } finally {
+        _isAutoScrolling = false;
+      }
+      return;
+    }
+
+    if (widget.hasMore) {
+      await _loadNextPage();
+      return;
+    }
+
+    if (position.extentBefore > 1) {
+      _isAutoScrolling = true;
+      try {
+        await _scrollController.animateTo(
+          position.minScrollExtent,
+          duration: const Duration(milliseconds: 650),
+          curve: Curves.easeInOutCubic,
+        );
+      } finally {
+        _isAutoScrolling = false;
+      }
+    }
+  }
+
+  bool _isVisibleOnScreen() {
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return false;
+    final topLeft = renderObject.localToGlobal(Offset.zero);
+    final bottom = topLeft.dy + renderObject.size.height;
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+    return bottom > 0 && topLeft.dy < viewportHeight;
   }
 
   Future<void> _loadNextPage() async {
@@ -2167,7 +2293,8 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
         _loadPreviousPage();
       }
     } else if (notification is ScrollEndNotification &&
-        !_isRepositioningAfterPageChange) {
+        !_isRepositioningAfterPageChange &&
+        !_isAutoScrolling) {
       if (notification.metrics.extentAfter <= 0.5 &&
           notification.metrics.extentBefore > 0.5) {
         _loadNextPage();
@@ -2193,7 +2320,14 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
       itemBuilder: (context, index) => BookCard(
         book: widget.books[index],
         marginRight: index == widget.books.length - 1 ? 0 : 12,
-        onTap: () => widget.onBookTap(widget.books[index]),
+        onTap: () async {
+          pauseForBookDetail();
+          try {
+            await widget.onBookTap(widget.books[index]);
+          } finally {
+            resumeAfterBookDetail();
+          }
+        },
       ),
     );
 
@@ -2203,11 +2337,14 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: AbsorbPointer(
-                  absorbing: widget.isLoadingMore,
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: _handleScrollNotification,
-                    child: list,
+                child: Listener(
+                  onPointerDown: (_) => registerUserInteraction(),
+                  child: AbsorbPointer(
+                    absorbing: widget.isLoadingMore,
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: _handleScrollNotification,
+                      child: list,
+                    ),
                   ),
                 ),
               ),

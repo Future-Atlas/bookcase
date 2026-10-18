@@ -199,7 +199,7 @@ class BookRepository {
     );
   }
 
-  /// 📌 1. トップ画面の各セクション（おすすめ・洋書・人気）の追加読み込み用
+  /// 📌 1. トップ画面の各セクション（人気・新着・洋書）の追加読み込み用
   /// ここでは最初から表紙画像が確実に手に入る楽天APIをページ指定で動かします。
   Future<List<Book>> fetchBooksByGenre(String genre, {int page = 1}) async {
     try {
@@ -209,6 +209,7 @@ class BookRepository {
       await Future.delayed(const Duration(seconds: 1));
 
       // 楽天APIの searchBySelectedGenre を直接呼び出す
+      final isNewArrivals = genre.contains('新着');
       final isRecommended = genre.contains('話題の本') || genre.contains('おすすめ');
       final rakutenBooks = await RakutenApi.searchBySelectedGenre(
         selectedGenre: genre,
@@ -222,6 +223,9 @@ class BookRepository {
           if (reviews != 0) return reviews;
           return b.ratingAvg.compareTo(a.ratingAvg);
         });
+      }
+      if (isNewArrivals) {
+        return filtered.take(9).toList(growable: false);
       }
       return _randomRankedSelection(filtered, count: 9);
     } catch (_) {

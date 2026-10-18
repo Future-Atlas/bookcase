@@ -296,7 +296,7 @@ class BookListController extends ChangeNotifier {
 
     try {
       recommendedBooks = await repository.fetchBooksByGenre(
-        '話題の本',
+        '新着',
         page: recommendedPage,
       );
       _recommendedPageCache[recommendedPage] = recommendedBooks;
@@ -381,7 +381,7 @@ class BookListController extends ChangeNotifier {
 
     try {
       final newBooks = await _repository.fetchBooksByGenre(
-        '話題の本',
+        '新着',
         page: nextPage,
       );
 
