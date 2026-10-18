@@ -1,6 +1,7 @@
 name: Deploy Flutter Web to Cloudflare Workers (Production)
 
 on:
+  workflow_call:
   workflow_dispatch:
     inputs:
       confirmation:
@@ -16,7 +17,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ github.repository == 'Future-Atlas/bookcase' && github.ref == 'refs/heads/main' && inputs.confirmation == 'DEPLOY' }}
+    if: ${{ github.repository == 'Future-Atlas/bookcase' && github.ref == 'refs/heads/main' && ((github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && inputs.confirmation == 'DEPLOY')) }}
     runs-on: ubuntu-latest
     environment:
       name: production
