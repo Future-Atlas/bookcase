@@ -1,6 +1,7 @@
 name: One-time dispatch of Cloudflare production Worker
 
-# Temporary, deliberately narrow release bridge. Delete this file after dispatch.
+# Temporary release bridge. This second push is intentional after the file was registered on main.
+# Delete this file immediately after successful dispatch.
 # This job never receives Cloudflare tokens or production application Secrets.
 on:
   push:
@@ -15,7 +16,7 @@ permissions:
 
 jobs:
   request_production_deploy:
-    if: ${{ github.repository == 'Future-Atlas/bookcase' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release(cloudflare): trigger production Worker once') }}
+    if: ${{ github.repository == 'Future-Atlas/bookcase' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release(cloudflare): dispatch production Worker after registration') }}
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch the protected production workflow
