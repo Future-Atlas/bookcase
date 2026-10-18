@@ -93,3 +93,15 @@ test("staging smoke uses Vercel env auth with the full preview URL", () => {
   assert.match(script, /\/flutter_bootstrap\.js/);
   assert.match(script, /\/api\/home-ad-eligibility/);
 });
+
+
+test("Vercel production workflow is manual fallback only after Cloudflare migration", () => {
+  const workflow = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy.yaml"), "utf8");
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /\n\s*push:/);
+  assert.match(workflow, /inputs\.confirmation == 'ROLLBACK'/);
+  assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
+  assert.match(workflow, /SMOKE_BASE_URL: \$\{\{ steps\.deploy_fallback\.outputs\.url \}\}/);
+  assert.doesNotMatch(workflow, /--token=/);
+  assert.match(workflow, /vercel deploy --prebuilt --prod/);
+});
