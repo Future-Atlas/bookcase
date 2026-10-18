@@ -134,3 +134,15 @@ test("Wrangler action uploads secrets to the same Cloudflare Worker environment 
     assert.ok(workflow.includes(expected), `wrangler-action must scope secrets to ${environment}`);
   }
 });
+
+test("Cloudflare staging fails early for missing secret names without logging values", () => {
+  const workflow = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-staging.yaml"), "utf8");
+  const preflight = workflow.indexOf("Check required staging Secret names without printing values");
+  const build = workflow.indexOf("Build Flutter Web (Cloudflare staging)");
+  const deploy = workflow.indexOf("Deploy staging Worker");
+  assert.ok(preflight > 0 && preflight < build && build < deploy, "staging preflight must run before build and deploy");
+  assert.match(workflow, /Missing staging Secret name/);
+  assert.match(workflow, /RAKUTEN_AFFILIATE_ID/);
+  assert.match(workflow, /CLOUDFLARE_ACCOUNT_ID/);
+  assert.match(workflow, /environment: staging/);
+});
