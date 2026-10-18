@@ -120,7 +120,7 @@ test("production workers.dev robots.txt blocks crawlers", async () => {
     env,
   );
   assert.equal(response.status, 200);
-  assert.equal(await response.text(), "User-agent: *\\nDisallow: /\\n");
+  assert.equal(await response.text(), "User-agent: *\nDisallow: /\n");
   assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
   assert.equal(requests.length, 0);
 });
