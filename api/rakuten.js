@@ -111,7 +111,7 @@ function createHandler({ request = requestRakuten, env = process.env } = {}) {
       "public, s-maxage=120, stale-while-revalidate=300",
     );
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.setHeader("X-Rakuten-Proxy-Transport", "node-http");
+    res.setHeader("X-Rakuten-Proxy-Transport", "fetch");
     return res.status(response.status).send(body);
   } catch (error) {
     return res.status(502).json({
