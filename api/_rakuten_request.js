@@ -1,29 +1,56 @@
-async function requestRakuten(
+const http = require("node:http");
+const https = require("node:https");
+
+class RakutenResponse {
+  constructor(status, body) {
+    this.status = status;
+    this.ok = status >= 200 && status < 300;
+    this._body = body;
+  }
+
+  async text() {
+    return this._body;
+  }
+}
+
+function requestRakuten(
   url,
   { origin, userAgent, timeoutMs = 15000 } = {},
 ) {
+  const target = new URL(url);
+  const transport = target.protocol === "http:" ? http : https;
   const requestOrigin = new URL(String(origin || "").trim()).origin;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Origin: requestOrigin,
-        Referer: `${requestOrigin}/`,
-        "User-Agent": userAgent,
+
+  return new Promise((resolve, reject) => {
+    const request = transport.request(
+      target,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Origin: requestOrigin,
+          "User-Agent": userAgent,
+        },
       },
-      signal: controller.signal,
+      (response) => {
+        const chunks = [];
+
+        response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        response.on("error", reject);
+        response.on("end", () => {
+          const status = response.statusCode || 502;
+          const body = Buffer.concat(chunks).toString("utf8");
+          resolve(new RakutenResponse(status, body));
+        });
+      },
+    );
+
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error("Rakuten API request timed out."));
     });
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      throw new Error("Rakuten API request timed out.");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
+    request.on("error", reject);
+    request.end();
+  });
 }
 
 module.exports = { requestRakuten };
