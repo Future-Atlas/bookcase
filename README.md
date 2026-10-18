@@ -71,7 +71,6 @@ therefore available to the browser build where applicable.
 | `SUPABASE_URL` | Environment-specific Supabase project URL |
 | `SUPABASE_ANON_KEY` | Environment-specific Supabase publishable/anon key |
 | `SUPABASE_REDIRECT_URL` | OAuth redirect URL |
-| `AMAZON_ASSOCIATE_TAG` | Amazon associate tag used by the Flutter build |
 | `RAKUTEN_PROXY_BASE_URL` | Optional base URL for native builds to call the deployed Rakuten API proxy |
 
 ### Server-side SEO/API runtime values
