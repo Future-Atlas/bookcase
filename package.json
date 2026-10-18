@@ -1,15 +1,10 @@
 {
   "scripts": {
     "test:api": "node --test test/api/*.test.js",
-    "generate:legal-seo": "node scripts/generate-legal-seo-sources.mjs",
-    "prepare:cloudflare": "npm run generate:legal-seo && node scripts/prepare-cloudflare-build.mjs",
-    "test:cloudflare": "npm run generate:legal-seo && node --test test/cloudflare/*.test.mjs",
-    "build:cloudflare": "npm run prepare:cloudflare && wrangler deploy --dry-run --env staging",
     "model:revenue": "node scripts/monetization-scenario.mjs"
   },
   "devDependencies": {
-    "supabase": "2.120.0",
-    "wrangler": "4.151.1"
+    "supabase": "2.120.0"
   },
   "dependencies": {
     "@vercel/speed-insights": "^2.0.0"
