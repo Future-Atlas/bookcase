@@ -35,10 +35,9 @@ jobs:
           SUPABASE_REDIRECT_URL: ${{ secrets.SUPABASE_REDIRECT_URL }}
           RAKUTEN_APP_ID: ${{ secrets.RAKUTEN_APP_ID }}
           RAKUTEN_ACCESS_KEY: ${{ secrets.RAKUTEN_ACCESS_KEY }}
-          RAKUTEN_AFFILIATE_ID: ${{ secrets.RAKUTEN_AFFILIATE_ID }}
         run: |
           set -euo pipefail
-          required=(CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_REDIRECT_URL RAKUTEN_APP_ID RAKUTEN_ACCESS_KEY RAKUTEN_AFFILIATE_ID)
+          required=(CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_REDIRECT_URL RAKUTEN_APP_ID RAKUTEN_ACCESS_KEY)
           missing=()
           for name in "${required[@]}"; do
             if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
@@ -105,7 +104,7 @@ jobs:
             SUPABASE_ANON_KEY
             RAKUTEN_APP_ID
             RAKUTEN_ACCESS_KEY
-            RAKUTEN_AFFILIATE_ID
+            ${{ secrets.RAKUTEN_AFFILIATE_ID != '' && 'RAKUTEN_AFFILIATE_ID' || '' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
