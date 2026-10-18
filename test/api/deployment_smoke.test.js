@@ -147,6 +147,23 @@ test("Cloudflare staging fails early for missing secret names without logging va
   assert.match(workflow, /environment: staging/);
 });
 
+test("Optional affiliate attribution does not block Cloudflare Worker deployment", () => {
+  const staging = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-staging.yaml"), "utf8");
+  const production = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-production.yaml"), "utf8");
+  const stagingRequired = staging.match(/required=\(([^)]*)\)/)?.[1];
+  const productionRequired = production.match(/for key in ([^;]+); do/)?.[1];
+  assert.ok(stagingRequired && productionRequired, "must be able to parse required secret name lists");
+  for (const names of [stagingRequired, productionRequired]) {
+    assert.doesNotMatch(names, /RAKUTEN_AFFILIATE_ID/, "affiliate attribution must be optional");
+    assert.match(names, /CLOUDFLARE_API_TOKEN/);
+    assert.match(names, /CLOUDFLARE_ACCOUNT_ID/);
+  }
+  for (const workflow of [staging, production]) {
+    assert.match(workflow, /secrets\.RAKUTEN_AFFILIATE_ID != '' && 'RAKUTEN_AFFILIATE_ID' \|\| ''/);
+    assert.match(workflow, /RAKUTEN_AFFILIATE_ID: \$\{\{ secrets\.RAKUTEN_AFFILIATE_ID \}\}/);
+    assert.match(workflow, /environment: (staging|production)/);
+  }
+});
 test("Staging diagnosis exports only missing secret NAMES in a short-lived artifact", () => {
   const workflow = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-staging.yaml"), "utf8");
   assert.match(workflow, /printf '%s\\n' "\$\{missing\[@\]\}"/);

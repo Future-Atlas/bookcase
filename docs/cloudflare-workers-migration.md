@@ -29,9 +29,9 @@ GitHubの`staging`と`production` Environmentへ次を登録します。
 | `SUPABASE_REDIRECT_URL` | ログイン後に戻す対象環境URL |
 | `RAKUTEN_APP_ID` | 楽天アプリID |
 | `RAKUTEN_ACCESS_KEY` | 楽天アクセスキー |
-| `RAKUTEN_AFFILIATE_ID` | 楽天アフィリエイトID |
+| `RAKUTEN_AFFILIATE_ID` | 任意。未設定でもWorkersデプロイや基本の書籍検索・APIは動作する（アフィリエイト属性のみ付与しない） |
 
-機密値を`wrangler.jsonc`へ直接書かないでください。GitHub Actionsは、上記の値を暗号化されたWorker Secretsとして登録します。
+機密値を`wrangler.jsonc`へ直接書かないでください。GitHub Actionsは必須値を暗号化されたWorker Secretsとして登録し、任意の`RAKUTEN_AFFILIATE_ID`は設定されている場合に限りアップロードします。未設定の任意項目を理由にデプロイを止めません。
 
 ## 検証環境
 
