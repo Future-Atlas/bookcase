@@ -124,3 +124,16 @@ test("production workers.dev robots.txt blocks crawlers", async () => {
   assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
   assert.equal(requests.length, 0);
 });
+
+
+test("Production deployment is main-only, manual, and checks required secrets", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/deploy-cloudflare-production.yaml", import.meta.url), "utf8");
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /\n\s*push:/);
+  assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
+  assert.match(workflow, /inputs\.confirmation == 'DEPLOY'/);
+  assert.match(workflow, /Fail closed when required production secrets are missing/);
+  for (const key of ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "SUPABASE_URL", "RAKUTEN_ACCESS_KEY"]) {
+    assert.ok(workflow.includes(`secrets.${key}`), `production must validate ${key}`);
+  }
+});
