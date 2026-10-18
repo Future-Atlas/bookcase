@@ -105,3 +105,15 @@ test("Vercel production workflow is manual fallback only after Cloudflare migrat
   assert.doesNotMatch(workflow, /--token=/);
   assert.match(workflow, /vercel deploy --prebuilt --prod/);
 });
+
+test("Wrangler secret uploads must use the matching Worker environment", () => {
+  for (const name of ["staging", "production"]) {
+    const path = `deploy-cloudflare-${name}.yaml`;
+    const workflow = fs.readFileSync(
+      require("node:path").resolve(__dirname, "../../.github/workflows", path),
+      "utf8"
+    );
+    const target = `          wranglerVersion: "4.151.1"\n          environment: ${name}\n          command: deploy --env ${name}`;
+    assert.ok(workflow.includes(target), `Wrong Worker scope for ${name}`);
+  }
+});
