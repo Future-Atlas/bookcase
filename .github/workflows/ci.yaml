@@ -63,7 +63,8 @@ jobs:
     # The existing CI is registered on main, unlike a newly added workflow.
     # Exact one-shot release commit only; remove this job after dispatch.
     needs: flutter
-    if: ${{ github.repository == 'Future-Atlas/bookcase' && github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release(cloudflare): dispatch production from CI once') }}
+    if: >-
+      ${{ github.repository == 'Future-Atlas/bookcase' && github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release(cloudflare): dispatch production from CI once') }}
     runs-on: ubuntu-latest
     permissions:
       actions: write
