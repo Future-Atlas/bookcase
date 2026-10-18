@@ -7,15 +7,45 @@ on:
         description: "Type DEPLOY to create/update the production Worker"
         required: true
 
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
-    if: ${{ inputs.confirmation == 'DEPLOY' }}
+    if: ${{ github.repository == 'Future-Atlas/bookcase' && github.ref == 'refs/heads/main' && inputs.confirmation == 'DEPLOY' }}
     runs-on: ubuntu-latest
     environment:
       name: production
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Fail closed when required production secrets are missing
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_REDIRECT_URL: ${{ secrets.SUPABASE_REDIRECT_URL }}
+          RAKUTEN_APP_ID: ${{ secrets.RAKUTEN_APP_ID }}
+          RAKUTEN_ACCESS_KEY: ${{ secrets.RAKUTEN_ACCESS_KEY }}
+          RAKUTEN_AFFILIATE_ID: ${{ secrets.RAKUTEN_AFFILIATE_ID }}
+        run: |
+          set -euo pipefail
+          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_REDIRECT_URL RAKUTEN_APP_ID RAKUTEN_ACCESS_KEY RAKUTEN_AFFILIATE_ID; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::Required production secret $key is not configured."
+              exit 1
+            fi
+          done
+          echo 'Production Cloudflare preflight: all required secret names are populated.'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
