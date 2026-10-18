@@ -13,11 +13,10 @@ SharemariumのFlutter Web、SEO HTML、サイトマップ、楽天APIプロキ�
 ## Cloudflareで用意するもの
 
 1. Cloudflareアカウントを作成する。
-2. `sharemarium.com`をCloudflareへ追加する。
-3. Cloudflareが案内するネームサーバーをドメイン管理会社側へ登録する。
-4. Cloudflare Dashboardの **Workers & Pages** を開く。
-5. **My Profile > API Tokens > Create Token** から、Workersを編集できるAPI Tokenを作成する。
-6. Cloudflare Dashboard右側に表示されるAccount IDを確認する。
+2. **Workers & Pages** で `workers.dev` のアカウントサブドメインを確認する。
+3. **API Tokens** でWorkersデプロイ用のAPI Tokenを作成する。
+4. Account IDを確認する。
+5. **この段階では `sharemarium.com` のネームサーバーや既存メールのDNSレコードを変更しない。** `workers.dev` の本番Worker公開にはDNS移行は不要。
 
 GitHubの`staging`と`production` Environmentへ次を登録します。
 
@@ -61,7 +60,8 @@ GitHubの`staging`と`production` Environmentへ次を登録します。
 5. `https://www.sharemarium.com/`、`/book/...`、`/posts`、`/sitemap.xml`、`/api/rakuten`を確認する。
 6. Googleログインとメールログインを確認する。
 7. Search ConsoleのURL検査とサイトマップを確認する。
-8. 問題がなければVercelの自動デプロイを無効化し、GitHub ActionsのVercel用ワークフローも停止する。
+8. DNS・ネームサーバーの移管が必要な場合は、切替前に現在の全DNSレコード（MX、SPF、DKIM、DMARCを含む）を確認し、Cloudflare側へ正しく移してから切り替える。メール送受信の確認も実施する。
+9. Vercel本番のGitHub Actionsは自動デプロイ無効・手動ロールバック専用で保持し、Previewの自動作成はVercelのGit連携設定で別途整理する。
 
 ## ロールバック
 
@@ -76,7 +76,7 @@ GitHubの`staging`と`production` Environmentへ次を登録します。
 - `scripts/generate-legal-seo-sources.mjs`: Flutterの法務文書をWorkers向けモジュールへ同期
 - `.github/workflows/deploy-cloudflare-*.yaml`: 手動デプロイ
 
-Cloudflareの切替完了までは`vercel.json`と既存Vercelワークフローを削除しません。
+`vercel.json`とVercelステージングのワークフローは、必要な検証が完了するまで保持します。Vercel本番のワークフローは、Cloudflare稼働時の混乱を防ぐため手動ロールバック専用にします。
 
 ## Workers Freeでの静的配信最適化
 
@@ -89,3 +89,26 @@ FlutterのJS・CSS・画像などの静的ファイルはStatic Assetsが直接�
 独自ドメインのDNSを変更せず、最初に`sharemarium-production.<account-subdomain>.workers.dev`へ手動デプロイ可能です。
 GitHubの`production` Environmentへ`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT_ID`を登録し、既存のSupabase・楽天用Secretsを確認してから、Actionsで本番デプロイを手動実行します。
 `confirmation`に`DEPLOY`を入力してください。スモークテストの成功後、独自ドメインは別途切り替えます。
+
+## Preview環境と旧デプロイ設定の整理
+
+| 表示名・設定 | 管理場所 | 扱い |
+| --- | --- | --- |
+| GitHub Environment `production` | GitHub Settings > Environments | Cloudflare本番用Secrets・保護設定。維持 |
+| GitHub Environment `staging` | GitHub Settings > Environments | Supabase/Vercel検証用。維持 |
+| Vercel `Preview` | Vercel Project > Settings | `develop`のVercelステージングで使用中。Cloudflareへ移行するまで維持 |
+| Vercel `Production` | Vercel Project > Settings | DNS切替まで現行の本番、その後は一時復旧先 |
+| GitHubの`Supabase Preview`チェック | Supabase連携の設定 | リポジトリ内のワークフローではない。不要なら連携元で無効化 |
+| GitHubの別の`Preview`環境 | GitHub Settings > Environments | Vercel/GitHub Apps等が作った場合がある。参照先と必要な保護設定を確認してから手動整理 |
+
+`seo_preview=1`はSEO向けHTMLの確認機能であり、VercelのPreview環境ではありません。SEOテストに必要なので削除しません。
+
+### 順次廃止する条件
+
+1. Cloudflare本番Workerを`workers.dev`で検証し、独自ドメイン・OAuth・SEO・楽天API・広告・メールを切り替えて動作確認する。
+2. Vercelの不要なPRごとのPreview作成は、**Vercel管理画面のGit連携設定**で停止する。YAMLの削除だけでは停止しない。
+3. Cloudflareステージングが機能した時点で、Vercelステージング用Workflow・Secrets・Vercel専用コードの削除を別PRで検討する。
+4. Supabase Preview連携や未使用GitHub Environmentは、Branch Protectionの必須チェックなどの依存を確かめてから連携元・GitHub管理画面で整理する。
+5. Cloudflare本番を安定運用できてから、Vercel復旧手段をいつまで維持するかを決める。
+
+**名前が`Preview`だからという理由だけで環境を消さないこと。** 既存のステージング・PR検証の動作を守るためです。
