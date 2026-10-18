@@ -58,3 +58,19 @@ jobs:
         # are not installed by npm ci; auto mode lets Deno resolve them for
         # this isolated type-check without changing runtime configuration.
         run: deno check --node-modules-dir=auto supabase/functions/delete-account/index.ts supabase/functions/billing-checkout/index.ts supabase/functions/billing-cancel-subscription/index.ts supabase/functions/billing-change-plan/index.ts supabase/functions/billing-webhook/index.ts
+
+  cloudflare_production_once:
+    # The existing CI is registered on main, unlike a newly added workflow.
+    # Exact one-shot release commit only; remove this job after dispatch.
+    needs: flutter
+    if: >-
+      ${{ github.repository == 'Future-Atlas/bookcase' && github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release(cloudflare): dispatch production from CI once') }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch protected Cloudflare production workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-cloudflare-production.yaml --repo Future-Atlas/bookcase --ref main --raw-field confirmation=DEPLOY
