@@ -114,3 +114,14 @@ GitHubの`production` Environmentへ`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT
 5. Cloudflare本番を安定運用できてから、Vercel復旧手段をいつまで維持するかを決める。
 
 **名前が`Preview`だからという理由だけで環境を消さないこと。** 既存のステージング・PR検証の動作を守るためです。
+
+## Wrangler Actionの環境指定（Cloudflare staging初回失敗の修正）
+
+GitHub Actionsの`jobs.deploy.environment.name`はGitHub EnvironmentのSecrets参照先を選びます。これはCloudflare WorkerのSecretsアップロード先を設定するものではありません。
+
+Cloudflare公式`wrangler-action`は`secrets:`のアップロード処理を`command: deploy --env ...`より前に行うため、`with.environment`も明示する必要があります。設定がないと、`wrangler.jsonc`のトップレベルWorker `sharemarium`がSecretsの送信先に選ばれ、目的の`sharemarium-staging`/`sharemarium-production`と一致しません。
+
+- staging: `environment: staging`と`command: deploy --env staging`
+- production: `environment: production`と`command: deploy --env production`
+
+**初回デプロイの失敗原因として特定できた設定不備**ですが、過去の失敗ログを確認していないため、他の失敗原因が併存する可能性はあります。API Token/Account IDなどの値の表示・確認・比較は実施しません。修正後はCloudflare Workerの配信結果とスモークテストの成否で判定してください。
