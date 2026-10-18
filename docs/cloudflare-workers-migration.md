@@ -45,8 +45,8 @@ GitHubの`staging`と`production` Environmentへ次を登録します。
 
 ## 本番Workerの事前作成
 
-1. GitHub Actionsで **Deploy Flutter Web to Cloudflare Workers (Production)** を選ぶ。
-2. `confirmation`へ`DEPLOY`と入力して実行する。
+1. GitHub Actionsで **Deploy Flutter Web to Cloudflare Workers (Production)** を選び、ブランチを必ず`main`にする。リポジトリのデフォルトブランチは`develop`なので、手動ワークフローが一覧に表示されるよう、Cloudflareワークフローファイルを`main`だけでなく`develop`にも反映する。
+2. `confirmation`へ`DEPLOY`と入力して実行する。CloudflareアカウントID・デプロイトークン・Supabase・楽天の必須Secretsが未設定ならデプロイ前に失敗する。
 3. これによりproduction Workerは作成されるが、公式ドメインのDNSはまだ変わらない。
 4. ActionsのSmoke testが成功することを確認する。
 5. Worker URLで公開画面とAPIを確認する。Worker URL自体は`noindex`です。
@@ -61,7 +61,7 @@ GitHubの`staging`と`production` Environmentへ次を登録します。
 6. Googleログインとメールログインを確認する。
 7. Search ConsoleのURL検査とサイトマップを確認する。
 8. DNS・ネームサーバーの移管が必要な場合は、切替前に現在の全DNSレコード（MX、SPF、DKIM、DMARCを含む）を確認し、Cloudflare側へ正しく移してから切り替える。メール送受信の確認も実施する。
-9. Vercel本番のGitHub Actionsは自動デプロイ無効・手動ロールバック専用で保持し、Previewの自動作成はVercelのGit連携設定で別途整理する。
+9. Vercel本番のGitHub Actionsは自動デプロイ無効・手動ロールバック専用で保持する。ただし**Vercel本体のGit連携も別途自動Production/Previewデプロイを行う場合がある**。Cloudflareへのドメイン切替後、VercelのSettings > Gitで自動デプロイを止めるかGit連携を解除する（ステージングへの影響を先に確認）。
 
 ## ロールバック
 
