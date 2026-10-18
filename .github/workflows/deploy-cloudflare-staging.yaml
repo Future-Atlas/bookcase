@@ -116,4 +116,14 @@ jobs:
         env:
           SMOKE_BASE_URL: ${{ steps.deploy.outputs.deployment-url }}
           EXPECT_NOINDEX: "true"
+          SMOKE_DIAGNOSTIC_FILE: ${{ runner.temp }}/cloudflare-staging-smoke-diagnostic.json
         run: node scripts/cloudflare-smoke.mjs
+
+      - name: Upload safe smoke failure classification
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-staging-smoke-diagnostic
+          path: ${{ runner.temp }}/cloudflare-staging-smoke-diagnostic.json
+          if-no-files-found: ignore
+          retention-days: 1
