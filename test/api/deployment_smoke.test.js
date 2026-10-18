@@ -130,7 +130,7 @@ test("Wrangler action uploads secrets to the same Cloudflare Worker environment 
   for (const [workflow, environment] of [[staging, "staging"], [production, "production"]]) {
     // GitHub job.environment only selects the GitHub secrets scope.
     // The action's with.environment is separately required for wrangler secret bulk --env.
-    const expected = new RegExp("wranglerVersion: \\"4\\.151\\.1\\"\\n\\s+environment: " + environment + "\\n\\s+command: deploy --env " + environment);
-    assert.match(workflow, expected);
+    const expected = `          wranglerVersion: "4.151.1"\n          environment: ${environment}\n          command: deploy --env ${environment}`;
+    assert.ok(workflow.includes(expected), `wrangler-action must scope secrets to ${environment}`);
   }
 });
