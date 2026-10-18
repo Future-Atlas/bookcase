@@ -78,13 +78,20 @@ test("staging sends a noindex response header", () => {
   ]);
 });
 
-test("production smoke checks the final indexed www host", () => {
+test("canonical production smoke default stays www but Vercel fallback uses its own URL", () => {
   assert.match(
     read("scripts/production-smoke.mjs"),
     /DEFAULT_BASE_URL = "https:\/\/www\.sharemarium\.com"/,
   );
+  const vercelRollback = read(".github/workflows/deploy.yaml");
   assert.match(
-    read(".github/workflows/deploy.yaml"),
+    vercelRollback,
+    /SMOKE_BASE_URL: \$\{\{ steps\.deploy_fallback\.outputs\.url \}\}/,
+  );
+  assert.doesNotMatch(
+    vercelRollback,
     /SMOKE_BASE_URL: https:\/\/www\.sharemarium\.com/,
   );
+  const cloudflareDeploy = read(".github/workflows/deploy-cloudflare-production.yaml");
+  assert.match(cloudflareDeploy, /EXPECT_NOINDEX: "true"/);
 });

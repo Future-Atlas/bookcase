@@ -1,13 +1,26 @@
-name: Deploy Flutter Web to Vercel
+name: Manual Vercel Production Fallback
 
+# The canonical production host will be Cloudflare Workers.
+# Keep Vercel only as an explicit, protected rollback path.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type ROLLBACK to deploy this main commit to Vercel
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-production-fallback
+  cancel-in-progress: false
+
 
 jobs:
   deploy:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'ROLLBACK' }}
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -45,18 +58,28 @@ jobs:
         run: npm install --global vercel@58.7.1
 
       - name: Verify Vercel Project Access
-        run: vercel project inspect "$VERCEL_PROJECT_ID" --scope="$VERCEL_SCOPE" --token="$VERCEL_TOKEN"
+        run: vercel project inspect "$VERCEL_PROJECT_ID" --scope="$VERCEL_SCOPE"
 
       - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=production --scope="$VERCEL_SCOPE" --token="$VERCEL_TOKEN"
+        run: vercel pull --yes --environment=production --scope="$VERCEL_SCOPE"
 
       - name: Build Vercel Prebuilt Output
-        run: vercel build --prod --scope="$VERCEL_SCOPE" --token="$VERCEL_TOKEN"
+        run: vercel build --prod --scope="$VERCEL_SCOPE"
 
-      - name: Deploy to Vercel
-        run: vercel deploy --prebuilt --prod --scope="$VERCEL_SCOPE" --token="$VERCEL_TOKEN"
+      - name: Deploy Vercel fallback without changing DNS
+        id: deploy_fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployment_url="$(vercel deploy --prebuilt --prod --scope="$VERCEL_SCOPE")"
+          deployment_url="$(printf '%s\n' "$deployment_url" | tail -n 1 | tr -d '\r')"
+          if [[ ! "$deployment_url" =~ ^https://[^[:space:]]+\.vercel\.app/?$ ]]; then
+            echo "::error::Unexpected Vercel deployment URL format."
+            exit 1
+          fi
+          printf 'url=%s\n' "$deployment_url" >> "$GITHUB_OUTPUT"
 
-      - name: Smoke test production
+      - name: Smoke test Vercel fallback URL
         env:
-          SMOKE_BASE_URL: https://www.sharemarium.com
+          SMOKE_BASE_URL: ${{ steps.deploy_fallback.outputs.url }}
         run: node scripts/production-smoke.mjs
