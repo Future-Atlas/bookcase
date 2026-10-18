@@ -35,13 +35,14 @@ GitHubの`staging`と`production` Environmentへ次を登録します。
 
 ## 検証環境
 
-1. GitHub Actionsで **Deploy Flutter Web to Cloudflare Workers (Staging)** を手動実行する。
+1. `develop`へのpushで **Deploy Flutter Web to Cloudflare Workers (Staging)** が自動実行される（`develop`で手動再実行も可能）。
 2. 実行結果に表示された`sharemarium-staging.<subdomain>.workers.dev`を開く。
 3. ホーム、ログイン以外の公開画面、書籍検索、書籍詳細、タイムライン、楽天リンクを確認する。
 4. `/sitemap.xml`がXMLを返すことを確認する。
 5. Googlebot User-Agentで`/posts`と`/privacy`がHTMLを返すことを確認する。
 6. workers.dev版には`X-Robots-Tag: noindex, nofollow`が付くことを確認する。
-7. ログイン検証を行う場合は、検証Workerへ`staging.sharemarium.com`等のCustom Domainを接続し、Supabase AuthenticationのRedirect URLとGoogle OAuthの許可URIも同じURLへ更新する。
+7. ログイン検証を行う場合は、検証Workerへ`staging.sharemarium.com`等のCustom Domainを接続し、Supabase AuthenticationのRedirect URLとGoogle OAuthの許可URIを合わせる。`workers.dev`で公開しても**既存の`staging.sharemarium.com`が自動的に切り替わることはない**。
+8. GitHub ActionsでのVercelステージングは`develop`・確認欄`ROLLBACK`の**手動フォールバックのみ**とする。VercelのネイティブGit連携は別設定なので、自動Previewが不要ならVercel管理画面で整理する。
 
 ## 本番Workerの事前作成
 
@@ -74,9 +75,10 @@ GitHubの`staging`と`production` Environmentへ次を登録します。
 - `api/*.js`: SEO・サイトマップ・楽天・広告判定の既存ロジック
 - `wrangler.jsonc`: staging／production Worker設定
 - `scripts/generate-legal-seo-sources.mjs`: Flutterの法務文書をWorkers向けモジュールへ同期
-- `.github/workflows/deploy-cloudflare-*.yaml`: 手動デプロイ
+- `.github/workflows/deploy-cloudflare-production.yaml`: 手動本番デプロイ
+- `.github/workflows/deploy-cloudflare-staging.yaml`: `develop`へのpushで自動ステージングデプロイ（手動再実行も可能）
 
-`vercel.json`とVercelステージングのワークフローは、必要な検証が完了するまで保持します。Vercel本番のワークフローは、Cloudflare稼働時の混乱を防ぐため手動ロールバック専用にします。
+`vercel.json`とVercelの2つのワークフローは、ステージング・本番それぞれの**手動フォールバック専用**として保持します。GitHub Actions経由のVercel自動デプロイは停止しますが、VercelのネイティブGit連携の自動デプロイは別途管理が必要です。
 
 ## Workers Freeでの静的配信最適化
 
@@ -95,8 +97,8 @@ GitHubの`production` Environmentへ`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT
 | 表示名・設定 | 管理場所 | 扱い |
 | --- | --- | --- |
 | GitHub Environment `production` | GitHub Settings > Environments | Cloudflare本番用Secrets・保護設定。維持 |
-| GitHub Environment `staging` | GitHub Settings > Environments | Supabase/Vercel検証用。維持 |
-| Vercel `Preview` | Vercel Project > Settings | `develop`のVercelステージングで使用中。Cloudflareへ移行するまで維持 |
+| GitHub Environment `staging` | GitHub Settings > Environments | CloudflareステージングとSupabaseのSecrets。Vercelフォールバック用にも維持 |
+| Vercel `Preview` | Vercel Project > Settings | ステージングの手動フォールバック。Vercel Git連携が有効ならPRのPreview作成は引き続き発生し得る |
 | Vercel `Production` | Vercel Project > Settings | DNS切替まで現行の本番、その後は一時復旧先 |
 | GitHubの`Supabase Preview`チェック | Supabase連携の設定 | リポジトリ内のワークフローではない。不要なら連携元で無効化 |
 | GitHubの別の`Preview`環境 | GitHub Settings > Environments | Vercel/GitHub Apps等が作った場合がある。参照先と必要な保護設定を確認してから手動整理 |
@@ -107,7 +109,7 @@ GitHubの`production` Environmentへ`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT
 
 1. Cloudflare本番Workerを`workers.dev`で検証し、独自ドメイン・OAuth・SEO・楽天API・広告・メールを切り替えて動作確認する。
 2. Vercelの不要なPRごとのPreview作成は、**Vercel管理画面のGit連携設定**で停止する。YAMLの削除だけでは停止しない。
-3. Cloudflareステージングが機能した時点で、Vercelステージング用Workflow・Secrets・Vercel専用コードの削除を別PRで検討する。
+3. Cloudflareステージングが機能しても、Vercelステージングの手動フォールバック用Workflow・Secrets・`vercel.json`は残す。フォールバック自体を廃止する判断をした場合にだけ、別PRで整理する。
 4. Supabase Preview連携や未使用GitHub Environmentは、Branch Protectionの必須チェックなどの依存を確かめてから連携元・GitHub管理画面で整理する。
 5. Cloudflare本番を安定運用できてから、Vercel復旧手段をいつまで維持するかを決める。
 

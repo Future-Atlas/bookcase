@@ -4,7 +4,7 @@ Amazon向け購入ボタンを楽天アフィリエイトへ置き換えた。�
 
 ## 有効化
 1. 楽天アフィリエイトで公開サイトの登録・必要な手続きを行い、自分のアフィリエイトIDを取得する。
-2. Cloudflare本番用はGitHubの`production` Environment Secretsに`RAKUTEN_AFFILIATE_ID`を登録し、デプロイ時にWorker Secretへ設定する。Vercelステージング/手動ロールバックに必要なRuntime Variablesは別途維持する。楽天APIのアプリIDやアクセスキーとは別の値。
+2. Cloudflare本番・ステージング用はGitHubの`production`・`staging`各Environment Secretsに`RAKUTEN_AFFILIATE_ID`を登録し、デプロイ時にそれぞれのWorker Secretへ設定する。Vercelの手動フォールバック用Runtime Variablesは別途維持する。楽天APIのアプリIDやアクセスキーとは別の値。
 3. GitHub Actionsから新しくデプロイする。既存の `RAKUTEN_APP_ID` / `RAKUTEN_ACCESS_KEY` は維持する。GitHubの `AMAZON_ASSOCIATE_TAG` は不要。
 4. 書籍詳細で「楽天ブックスで購入する」と広告表記を確認し、リンクが該当の本を指すことを確認する。動作確認目的の自己購入はしない。
 

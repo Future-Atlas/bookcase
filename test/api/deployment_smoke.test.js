@@ -40,7 +40,7 @@ test("unknown smoke profiles fail closed", async () => {
   );
 });
 
-test("staging deployment uploads Flutter output and API source instead of a preview prebuild", () => {
+test("manual Vercel staging fallback uploads Flutter output and API source instead of a preview prebuild", () => {
   const root = path.resolve(__dirname, "../..");
   const workflow = fs.readFileSync(
     path.join(root, ".github/workflows/deploy-staging.yaml"),
@@ -104,4 +104,22 @@ test("Vercel production workflow is manual fallback only after Cloudflare migrat
   assert.match(workflow, /SMOKE_BASE_URL: \$\{\{ steps\.deploy_fallback\.outputs\.url \}\}/);
   assert.doesNotMatch(workflow, /--token=/);
   assert.match(workflow, /vercel deploy --prebuilt --prod/);
+});
+
+test("Cloudflare is the default staging deploy while Vercel remains a manual fallback", () => {
+  const cloudflare = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-staging.yaml"), "utf8");
+  const vercel = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-staging.yaml"), "utf8");
+  assert.match(cloudflare, /on:\n  push:\n    branches:\n      - develop/);
+  assert.match(cloudflare, /workflow_dispatch:/);
+  assert.match(cloudflare, /github\.ref == 'refs\/heads\/develop'/);
+  assert.match(cloudflare, /name: staging/);
+  assert.match(cloudflare, /command: deploy --env staging/);
+  assert.match(cloudflare, /EXPECT_NOINDEX: "true"/);
+  assert.match(cloudflare, /SMOKE_BASE_URL: \$\{\{ steps\.deploy\.outputs\.deployment-url \}\}/);
+  assert.match(vercel, /workflow_dispatch:/);
+  assert.doesNotMatch(vercel, /\n\s*push:/);
+  assert.match(vercel, /inputs\.confirmation == 'ROLLBACK'/);
+  assert.match(vercel, /github\.ref == 'refs\/heads\/develop'/);
+  assert.match(vercel, /vercel deploy \. --force/);
+  assert.doesNotMatch(vercel, /vercel deploy .*--prod/);
 });

@@ -1,13 +1,25 @@
-name: Deploy Flutter Web to Vercel (Staging)
+name: Manual Vercel Staging Fallback
 
+# Cloudflare Workers is the default staging deploy target.
+# Use this only to create a Vercel Preview when a manual fallback is needed.
 on:
-  push:
-    branches:
-      - develop
   workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type ROLLBACK to deploy develop to Vercel Preview
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-staging-fallback
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    if: ${{ github.repository == 'Future-Atlas/bookcase' && github.ref == 'refs/heads/develop' && inputs.confirmation == 'ROLLBACK' }}
     runs-on: ubuntu-latest
     environment:
       name: staging
@@ -18,6 +30,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
