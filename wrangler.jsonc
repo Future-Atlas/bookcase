@@ -38,6 +38,7 @@
   "env": {
     "staging": {
       "name": "sharemarium-staging",
+      "workers_dev": true,
       "vars": {
         "APP_ENV": "staging",
         "VERCEL_ENV": "preview",
@@ -47,6 +48,7 @@
     },
     "production": {
       "name": "sharemarium-production",
+      "workers_dev": true,
       "vars": {
         "APP_ENV": "production",
         "VERCEL_ENV": "production",
