@@ -38,3 +38,11 @@ test("service introduction is limited to the real home screen", () => {
     /if \(widget\.initialGenre == null &&\s+_controller\.searchQuery\.isEmpty\)\s+_buildServiceIntroduction\(\)/,
   );
 });
+
+test("service introduction starts collapsed and can be expanded or collapsed", () => {
+  assert.match(source, /bool _isServiceIntroductionExpanded = false;/);
+  assert.match(source, /ValueKey\('service-introduction-toggle'\)/);
+  assert.match(source, /Icons\.keyboard_arrow_down/);
+  assert.match(source, /Icons\.keyboard_arrow_up/);
+  assert.match(source, /if \(_isServiceIntroductionExpanded\) \.\.\.\[/);
+});

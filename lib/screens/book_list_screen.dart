@@ -55,6 +55,7 @@ class _BookListScreenState extends State<BookListScreen> {
       GlobalKey();
   final GlobalKey<_PagedBookScrollerState> _westernScrollerKey = GlobalKey();
   String? _openingBookId;
+  bool _isServiceIntroductionExpanded = false;
 
   Iterable<GlobalKey<_PagedBookScrollerState>> get _homeScrollerKeys => [
     _featuredScrollerKey,
@@ -1153,61 +1154,84 @@ class _BookListScreenState extends State<BookListScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Sharemariumでできること',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Sharemariumは、読んだ本の感想を自分の言葉で記録し、ほかの読者のレビューから新しい本や視点に出会うための読書レビューSNSです。',
-            style: TextStyle(color: textColor, height: 1.65),
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
+          Row(
             children: [
-              _buildServicePoint(
-                icon: Icons.rate_review_outlined,
-                title: '読書体験をレビューとして残す',
-                description:
-                    '読んだ本を評価するだけでなく、印象に残った点や読後の考えを文章で記録できます。読んだ本を記録して、あなただけの本棚を作りましょう！',
-              ),
-              _buildServicePoint(
-                icon: Icons.people_outline,
-                title: '他の読者の感想に触れる',
-                description:
-                    '他ユーザーのレビューやリアクションを通じて、同じ作品を読んだ人の、自分と異なる感想に触れることができます。',
-              ),
-              _buildServicePoint(
-                icon: Icons.menu_book_outlined,
-                title: '次に読む本を見つける',
-                description:
-                    '「タイトル・著者・出版社」で検索することができます。気になる書籍のレビューを読んで、次に読む本を決めましょう！',
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              PublicPostsLink(
-                foregroundColor: ProfilePageColors.colorFor(
-                  context.watch<SupabaseService>().activePageColorKey,
+              const Expanded(
+                child: Text(
+                  'Sharemariumでできること',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                 ),
               ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pushNamed('/about'),
-                child: const Text('サービス・運営方針について'),
+              IconButton(
+                key: const ValueKey('service-introduction-toggle'),
+                tooltip: _isServiceIntroductionExpanded ? '閉じる' : '開く',
+                onPressed: () {
+                  setState(() {
+                    _isServiceIntroductionExpanded =
+                        !_isServiceIntroductionExpanded;
+                  });
+                },
+                icon: Icon(
+                  _isServiceIntroductionExpanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'あなたの感想や交流が、Sharemariumを作ります。',
-            style: TextStyle(color: mutedColor, fontSize: 12, height: 1.5),
-          ),
+          if (_isServiceIntroductionExpanded) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Sharemariumは、読んだ本の感想を自分の言葉で記録し、ほかの読者のレビューから新しい本や視点に出会うための読書レビューSNSです。',
+              style: TextStyle(color: textColor, height: 1.65),
+            ),
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _buildServicePoint(
+                  icon: Icons.rate_review_outlined,
+                  title: '読書体験をレビューとして残す',
+                  description:
+                      '読んだ本を評価するだけでなく、印象に残った点や読後の考えを文章で記録できます。読んだ本を記録して、あなただけの本棚を作りましょう！',
+                ),
+                _buildServicePoint(
+                  icon: Icons.people_outline,
+                  title: '他の読者の感想に触れる',
+                  description:
+                      '他ユーザーのレビューやリアクションを通じて、同じ作品を読んだ人の、自分と異なる感想に触れることができます。',
+                ),
+                _buildServicePoint(
+                  icon: Icons.menu_book_outlined,
+                  title: '次に読む本を見つける',
+                  description:
+                      '「タイトル・著者・出版社」で検索することができます。気になる書籍のレビューを読んで、次に読む本を決めましょう！',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                PublicPostsLink(
+                  foregroundColor: ProfilePageColors.colorFor(
+                    context.watch<SupabaseService>().activePageColorKey,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pushNamed('/about'),
+                  child: const Text('サービス・運営方針について'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'あなたの感想や交流が、Sharemariumを作ります。',
+              style: TextStyle(color: mutedColor, fontSize: 12, height: 1.5),
+            ),
+          ],
         ],
       ),
     );
