@@ -8,11 +8,13 @@ class PublicPostsLink extends StatelessWidget {
   const PublicPostsLink({
     super.key,
     this.compact = false,
+    this.dense = false,
     this.sectionHeading = false,
     this.foregroundColor,
   });
 
   final bool compact;
+  final bool dense;
   final bool sectionHeading;
   final Color? foregroundColor;
 
@@ -30,16 +32,19 @@ class PublicPostsLink extends StatelessWidget {
           onPressed: () => _openPosts(context),
           style: TextButton.styleFrom(
             foregroundColor: foregroundColor,
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            minimumSize: const Size(0, 40),
+            padding: EdgeInsets.symmetric(horizontal: dense ? 0 : 2),
+            minimumSize: Size(0, dense ? 34 : 40),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
-          child: const FittedBox(
+          child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               'タイムライン',
               maxLines: 1,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                fontSize: dense ? 10 : 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ),

@@ -1,17 +1,65 @@
 name: Deploy Flutter Web to Cloudflare Workers (Staging)
 
 on:
+  push:
+    branches:
+      - develop
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-staging-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    if: ${{ github.repository == 'Future-Atlas/bookcase' && github.ref == 'refs/heads/develop' }}
     runs-on: ubuntu-latest
     environment:
       name: staging
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
+      - name: Check required staging Secret names without printing values
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_REDIRECT_URL: ${{ secrets.SUPABASE_REDIRECT_URL }}
+          RAKUTEN_APP_ID: ${{ secrets.RAKUTEN_APP_ID }}
+          RAKUTEN_ACCESS_KEY: ${{ secrets.RAKUTEN_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          required=(CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_REDIRECT_URL RAKUTEN_APP_ID RAKUTEN_ACCESS_KEY)
+          missing=()
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            # Diagnostic contains ONLY whitelisted Secret NAMES, never the values.
+            printf '%s\n' "${missing[@]}" > "$RUNNER_TEMP/cloudflare-staging-missing-secret-names.txt"
+            for name in "${missing[@]}"; do
+              echo "::error title=Missing staging Secret name::$name"
+            done
+            exit 1
+          fi
+          echo 'All required staging Secret names are present; no values were printed.'
+
+      - name: Upload nonsecret missing-name diagnostic
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-staging-missing-secret-names
+          path: ${{ runner.temp }}/cloudflare-staging-missing-secret-names.txt
+          if-no-files-found: ignore
+          retention-days: 1
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -56,7 +104,7 @@ jobs:
             SUPABASE_ANON_KEY
             RAKUTEN_APP_ID
             RAKUTEN_ACCESS_KEY
-            RAKUTEN_AFFILIATE_ID
+            ${{ secrets.RAKUTEN_AFFILIATE_ID != '' && 'RAKUTEN_AFFILIATE_ID' || '' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -68,4 +116,14 @@ jobs:
         env:
           SMOKE_BASE_URL: ${{ steps.deploy.outputs.deployment-url }}
           EXPECT_NOINDEX: "true"
+          SMOKE_DIAGNOSTIC_FILE: ${{ runner.temp }}/cloudflare-staging-smoke-diagnostic.json
         run: node scripts/cloudflare-smoke.mjs
+
+      - name: Upload safe smoke failure classification
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-staging-smoke-diagnostic
+          path: ${{ runner.temp }}/cloudflare-staging-smoke-diagnostic.json
+          if-no-files-found: ignore
+          retention-days: 1

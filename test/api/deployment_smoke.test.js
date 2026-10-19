@@ -40,7 +40,7 @@ test("unknown smoke profiles fail closed", async () => {
   );
 });
 
-test("staging deployment uploads Flutter output and API source instead of a preview prebuild", () => {
+test("manual Vercel staging fallback uploads Flutter output and API source instead of a preview prebuild", () => {
   const root = path.resolve(__dirname, "../..");
   const workflow = fs.readFileSync(
     path.join(root, ".github/workflows/deploy-staging.yaml"),
@@ -106,14 +106,98 @@ test("Vercel production workflow is manual fallback only after Cloudflare migrat
   assert.match(workflow, /vercel deploy --prebuilt --prod/);
 });
 
-test("Wrangler secret uploads must use the matching Worker environment", () => {
-  for (const name of ["staging", "production"]) {
-    const path = `deploy-cloudflare-${name}.yaml`;
-    const workflow = fs.readFileSync(
-      require("node:path").resolve(__dirname, "../../.github/workflows", path),
-      "utf8"
-    );
-    const target = `          wranglerVersion: "4.151.1"\n          environment: ${name}\n          command: deploy --env ${name}`;
-    assert.ok(workflow.includes(target), `Wrong Worker scope for ${name}`);
+test("Cloudflare is the default staging deploy while Vercel remains a manual fallback", () => {
+  const cloudflare = fs
+    .readFileSync(
+      path.resolve(
+        __dirname,
+        "../../.github/workflows/deploy-cloudflare-staging.yaml",
+      ),
+      "utf8",
+    )
+    .replace(/\r\n/g, "\n");
+  const vercel = fs
+    .readFileSync(
+      path.resolve(__dirname, "../../.github/workflows/deploy-staging.yaml"),
+      "utf8",
+    )
+    .replace(/\r\n/g, "\n");
+  assert.match(cloudflare, /on:\n  push:\n    branches:\n      - develop/);
+  assert.match(cloudflare, /workflow_dispatch:/);
+  assert.match(cloudflare, /github\.ref == 'refs\/heads\/develop'/);
+  assert.match(cloudflare, /name: staging/);
+  assert.match(cloudflare, /command: deploy --env staging/);
+  assert.match(cloudflare, /EXPECT_NOINDEX: "true"/);
+  assert.match(cloudflare, /SMOKE_BASE_URL: \$\{\{ steps\.deploy\.outputs\.deployment-url \}\}/);
+  assert.match(vercel, /workflow_dispatch:/);
+  assert.doesNotMatch(vercel, /\n\s*push:/);
+  assert.match(vercel, /inputs\.confirmation == 'ROLLBACK'/);
+  assert.match(vercel, /github\.ref == 'refs\/heads\/develop'/);
+  assert.match(vercel, /vercel deploy \. --force/);
+  assert.doesNotMatch(vercel, /vercel deploy .*--prod/);
+});
+
+test("Wrangler action uploads secrets to the same Cloudflare Worker environment as deploy", () => {
+  const staging = fs
+    .readFileSync(
+      path.resolve(
+        __dirname,
+        "../../.github/workflows/deploy-cloudflare-staging.yaml",
+      ),
+      "utf8",
+    )
+    .replace(/\r\n/g, "\n");
+  const production = fs
+    .readFileSync(
+      path.resolve(
+        __dirname,
+        "../../.github/workflows/deploy-cloudflare-production.yaml",
+      ),
+      "utf8",
+    )
+    .replace(/\r\n/g, "\n");
+  for (const [workflow, environment] of [[staging, "staging"], [production, "production"]]) {
+    // GitHub job.environment only selects the GitHub secrets scope.
+    // The action's with.environment is separately required for wrangler secret bulk --env.
+    const expected = `          wranglerVersion: "4.151.1"\n          environment: ${environment}\n          command: deploy --env ${environment}`;
+    assert.ok(workflow.includes(expected), `wrangler-action must scope secrets to ${environment}`);
   }
+});
+
+test("Cloudflare staging fails early for missing secret names without logging values", () => {
+  const workflow = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-staging.yaml"), "utf8");
+  const preflight = workflow.indexOf("Check required staging Secret names without printing values");
+  const build = workflow.indexOf("Build Flutter Web (Cloudflare staging)");
+  const deploy = workflow.indexOf("Deploy staging Worker");
+  assert.ok(preflight > 0 && preflight < build && build < deploy, "staging preflight must run before build and deploy");
+  assert.match(workflow, /Missing staging Secret name/);
+  assert.match(workflow, /RAKUTEN_AFFILIATE_ID/);
+  assert.match(workflow, /CLOUDFLARE_ACCOUNT_ID/);
+  assert.match(workflow, /environment: staging/);
+});
+
+test("Optional affiliate attribution does not block Cloudflare Worker deployment", () => {
+  const staging = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-staging.yaml"), "utf8");
+  const production = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-production.yaml"), "utf8");
+  const stagingRequired = staging.match(/required=\(([^)]*)\)/)?.[1];
+  const productionRequired = production.match(/for key in ([^;]+); do/)?.[1];
+  assert.ok(stagingRequired && productionRequired, "must be able to parse required secret name lists");
+  for (const names of [stagingRequired, productionRequired]) {
+    assert.doesNotMatch(names, /RAKUTEN_AFFILIATE_ID/, "affiliate attribution must be optional");
+    assert.match(names, /CLOUDFLARE_API_TOKEN/);
+    assert.match(names, /CLOUDFLARE_ACCOUNT_ID/);
+  }
+  for (const workflow of [staging, production]) {
+    assert.match(workflow, /secrets\.RAKUTEN_AFFILIATE_ID != '' && 'RAKUTEN_AFFILIATE_ID' \|\| ''/);
+    assert.match(workflow, /RAKUTEN_AFFILIATE_ID: \$\{\{ secrets\.RAKUTEN_AFFILIATE_ID \}\}/);
+    assert.match(workflow, /environment: (staging|production)/);
+  }
+});
+test("Staging diagnosis exports only missing secret NAMES in a short-lived artifact", () => {
+  const workflow = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-staging.yaml"), "utf8");
+  assert.match(workflow, /printf '%s\\n' "\$\{missing\[@\]\}"/);
+  assert.match(workflow, /cloudflare-staging-missing-secret-names\.txt/);
+  assert.match(workflow, /uses: actions\/upload-artifact@v4/);
+  assert.match(workflow, /retention-days: 1/);
+  assert.doesNotMatch(workflow, /printf.*\$\{!name\}/);
 });

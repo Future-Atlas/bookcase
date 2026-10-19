@@ -4,7 +4,9 @@ const path = require("node:path");
 const test = require("node:test");
 
 const read = (name) =>
-  fs.readFileSync(path.join(__dirname, "../..", name), "utf8");
+  fs
+    .readFileSync(path.join(__dirname, "../..", name), "utf8")
+    .replace(/\r\n/g, "\n");
 
 test("Flutter version stays aligned across local, CI, Android and release builds", () => {
   const target = "3.47.7";

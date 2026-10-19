@@ -137,3 +137,23 @@ test("Production deployment is main-only, manual, and checks required secrets", 
     assert.ok(workflow.includes(`secrets.${key}`), `production must validate ${key}`);
   }
 });
+
+test("named Cloudflare Workers environments explicitly publish workers.dev routes", () => {
+  const config = JSON.parse(readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8"));
+  assert.equal(config.env.staging.name, "sharemarium-staging");
+  assert.equal(config.env.production.name, "sharemarium-production");
+  assert.equal(config.env.staging.workers_dev, true);
+  assert.equal(config.env.production.workers_dev, true);
+});
+
+test("Cloudflare staging smoke diagnostics disclose only classification codes", () => {
+  const script = readFileSync(new URL("../../scripts/cloudflare-smoke.mjs", import.meta.url), "utf8");
+  const workflow = readFileSync(new URL("../../.github/workflows/deploy-cloudflare-staging.yaml", import.meta.url), "utf8");
+  assert.match(script, /SMOKE_DIAGNOSTIC_FILE/);
+  assert.match(script, /function record\(checkName, outcome, httpStatus\)/);
+  assert.doesNotMatch(script, /response\.text\(/);
+  assert.doesNotMatch(script, /JSON\.stringify\(response/);
+  assert.match(workflow, /cloudflare-staging-smoke-diagnostic\.json/);
+  assert.match(workflow, /name: cloudflare-staging-smoke-diagnostic/);
+  assert.match(workflow, /retention-days: 1/);
+});

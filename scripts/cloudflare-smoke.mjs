@@ -1,34 +1,69 @@
+import { writeFileSync } from "node:fs";
+
 const baseUrl = String(process.env.SMOKE_BASE_URL || "").replace(/\/+$/, "");
 const expectNoindex = process.env.EXPECT_NOINDEX === "true";
+const diagnosticPath = process.env.SMOKE_DIAGNOSTIC_FILE || "";
+const diagnostics = [];
 
-if (!baseUrl.startsWith("https://")) {
-  throw new Error("SMOKE_BASE_URL must be an https URL");
+// This file contains only predetermined check labels, outcome codes, and HTTP status.
+// Never record URL strings, response headers, bodies, exception messages, or credentials.
+function record(checkName, outcome, httpStatus) {
+  const entry = { check: checkName, outcome };
+  if (Number.isInteger(httpStatus)) entry.http_status = httpStatus;
+  diagnostics.push(entry);
+  if (diagnosticPath) writeFileSync(diagnosticPath, `${JSON.stringify(diagnostics, null, 2)}\n`, "utf8");
 }
 
-async function check(pathname, { bot = false, contentType } = {}) {
-  const response = await fetch(`${baseUrl}${pathname}`, {
-    redirect: "manual",
-    headers: bot ? { "User-Agent": "Googlebot/2.1" } : {},
-  });
+function validateBaseUrl() {
+  try {
+    const parsed = new URL(baseUrl);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash ||
+      parsed.origin !== baseUrl
+    ) throw new Error("invalid");
+  } catch {
+    record("base_url", baseUrl ? "invalid" : "missing");
+    throw new Error("Cloudflare smoke base URL is missing or invalid");
+  }
+  record("base_url", "ok");
+}
+
+async function check(name, pathname, { bot = false, contentType } = {}) {
+  let response;
+  try {
+    response = await fetch(`${baseUrl}${pathname}`, {
+      redirect: "manual",
+      headers: bot ? { "User-Agent": "Googlebot/2.1" } : {},
+    });
+  } catch {
+    record(name, "network_error");
+    throw new Error(`Cloudflare smoke check ${name} failed: network_error`);
+  }
   if (response.status !== 200) {
-    throw new Error(`${pathname} returned ${response.status}`);
+    record(name, "http_status", response.status);
+    throw new Error(`Cloudflare smoke check ${name} returned HTTP ${response.status}`);
   }
   if (contentType && !String(response.headers.get("content-type")).includes(contentType)) {
-    throw new Error(`${pathname} did not return ${contentType}`);
+    record(name, "content_type_mismatch", response.status);
+    throw new Error(`Cloudflare smoke check ${name} has unexpected content type`);
   }
-  if (expectNoindex) {
-    const robots = String(response.headers.get("x-robots-tag") || "");
-    if (!robots.includes("noindex")) {
-      throw new Error(`${pathname} is missing the staging noindex header`);
-    }
+  if (expectNoindex && !String(response.headers.get("x-robots-tag") || "").includes("noindex")) {
+    record(name, "missing_noindex", response.status);
+    throw new Error(`Cloudflare smoke check ${name} lacks noindex`);
   }
-  return response;
+  record(name, "ok", response.status);
 }
 
-await check("/", { contentType: "text/html" });
-await check("/api/home-ad-eligibility", { contentType: "application/json" });
-await check("/sitemap.xml", { contentType: "application/xml" });
-await check("/privacy?seo_preview=1", { contentType: "text/html" });
-await check("/posts", { bot: true, contentType: "text/html" });
+validateBaseUrl();
+await check("home", "/", { contentType: "text/html" });
+await check("api", "/api/home-ad-eligibility", { contentType: "application/json" });
+await check("sitemap", "/sitemap.xml", { contentType: "application/xml" });
+await check("privacy", "/privacy?seo_preview=1", { contentType: "text/html" });
+await check("posts_crawler", "/posts", { bot: true, contentType: "text/html" });
 
-console.log(`Cloudflare smoke checks passed: ${baseUrl}`);
+console.log("Cloudflare smoke checks passed.");

@@ -171,11 +171,11 @@ test("two home book-genre separators and repeated timeline slots have unique ind
   const html = read("web/index.html");
 
   const anchors = [
-    "title: 'おすすめの本'",
-    "home-ad-between-recommended-western",
-    "title: '洋書'",
-    "home-ad-between-western-popular",
     "title: '人気作品'",
+    "home-ad-between-popular-new",
+    "title: '新着'",
+    "home-ad-between-new-western",
+    "title: '洋書'",
     "sectionHeading: true",
     "_buildTimeline()",
   ];
@@ -189,8 +189,8 @@ test("two home book-genre separators and repeated timeline slots have unique ind
     assert.ok(indexes[i - 1] < indexes[i], "genre ad follows preceding section");
   }
 
-  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.recommendedBooks\.isNotEmpty &&\s+_controller\.westernBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\(\s*'home-ad-between-recommended-western',?\s*\),\s+slotIndex: 0,/);
-  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.westernBooks\.isNotEmpty &&\s+_controller\.popularBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-western-popular'\),\s+slotIndex: 1,/);
+  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.popularBooks\.isNotEmpty &&\s+_controller\.recommendedBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-popular-new'\),\s+slotIndex: 0,/);
+  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.recommendedBooks\.isNotEmpty &&\s+_controller\.westernBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-new-western'\),\s+slotIndex: 1,/);
   assert.match(home, /if \(_controller\.searchQuery\.isNotEmpty\)\s+_buildSearchResults\(\)\s+else/);
   assert.match(policy, /homeGenreAdSlotCount = 2/);
   assert.match(policy, /homeTimelineAdSlotStart = homeGenreAdSlotCount/);

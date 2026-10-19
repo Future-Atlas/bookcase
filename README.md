@@ -2,8 +2,8 @@
 
 Sharemarium is a Flutter Web first book review and reading management app.
 It uses Supabase for auth, database, storage, and Edge Functions. Cloudflare Workers
-is the new production hosting target for Flutter Web and SEO/API, while Vercel
-remains a staging host and optional manual production rollback.
+is the primary hosting target for production and staging Flutter Web and SEO/API.
+Vercel remains available only through manual fallback deployment workflows.
 
 ## Current Scope
 
@@ -21,7 +21,7 @@ remains a staging host and optional manual production rollback.
 - supabase_flutter ^2.18.0
 - provider ^6.1.2
 - google_fonts ^9.0.0
-- Wrangler is pinned for Cloudflare deployments; Vercel CLI remains pinned for staging and the manual production fallback
+- Wrangler is pinned for Cloudflare production/staging deployments; Vercel CLI is retained only for manual fallback deployments
 - Supabase CLI 2.115.0 in validation/deployment workflows; npm development dependency 2.120.0 (independent pins)
 
 ## Local Development
@@ -75,8 +75,8 @@ therefore available to the browser build where applicable.
 
 ### Server-side SEO/API runtime values
 
-Cloudflare production receives these as encrypted Worker secrets via GitHub Actions.
-Vercel staging/fallback functions retain separate Vercel runtime variables.
+Cloudflare production and staging receive these as encrypted Worker secrets via GitHub Actions.
+Vercel manual fallback functions retain separate Vercel runtime variables.
 Neither set is interchangeable with Flutter build-time GitHub Secrets.
 
 | Variable | Purpose |
@@ -98,9 +98,9 @@ GitHub Environments keep production and staging credentials separate.
 | --- | --- |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID for Workers deployment |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare Workers deployment API token (keep secret) |
-| `VERCEL_ORG_ID` | Vercel organization ID for staging/manual fallback |
-| `VERCEL_PROJECT_ID` | Vercel project ID for staging/manual fallback |
-| `VERCEL_TOKEN` | Vercel deploy token for staging/manual fallback |
+| `VERCEL_ORG_ID` | Vercel organization ID for manual fallback |
+| `VERCEL_PROJECT_ID` | Vercel project ID for manual fallback |
+| `VERCEL_TOKEN` | Vercel deploy token for manual fallback |
 | `SUPABASE_ACCESS_TOKEN` | Supabase deploy token |
 | `SUPABASE_PROJECT_ID` | Environment-specific Supabase project ref |
 | `SUPABASE_DB_PASSWORD` | Environment-specific database password for migration deploys |
@@ -123,16 +123,16 @@ main     -> production
 GitHub Environments are used to separate credentials:
 
 - `production`: Cloudflare Workers + production Supabase credentials; optional Vercel rollback credentials
-- `staging`: staging Supabase/Vercel credentials; optional Cloudflare staging credentials
+- `staging`: Cloudflare Workers + staging Supabase credentials; optional Vercel fallback credentials
 
 Web deployment workflows:
 
 - `.github/workflows/deploy-cloudflare-production.yaml`: manual `main` -> Cloudflare production Worker; requires `DEPLOY`, does **not** change DNS
-- `.github/workflows/deploy-cloudflare-staging.yaml`: manual `develop` -> Cloudflare staging Worker
+- `.github/workflows/deploy-cloudflare-staging.yaml`: **automatic `develop` -> Cloudflare staging Worker** on push, also supports manual dispatch on `develop`
 - `.github/workflows/deploy.yaml`: **manual Vercel production rollback only**, requires `ROLLBACK` on `main`, never triggers on pushes
-- `.github/workflows/deploy-staging.yaml`: `develop` -> Vercel Preview/Staging, retained during transition
+- `.github/workflows/deploy-staging.yaml`: **manual Vercel staging fallback only**, requires `ROLLBACK` on `develop`, never triggers on pushes
 
-Vercel's built-in `Preview` deployment environment currently powers Vercel staging; it is **not** another production branch. The `Supabase Preview` GitHub check comes from an external integration, not GitHub Actions YAML. Removing workflow files does not delete Vercel Preview, GitHub Deployment Environments, or third-party checks. Keep GitHub Environments `production` and `staging` for credentials and approvals. The canonical public domain remains on Vercel until the Cloudflare domain cutover is complete.
+Vercel's built-in `Preview` environment is now a fallback path rather than the default GitHub Actions staging target. However, Vercel's native Git integration can still create Preview deployments or project checks independently; disable or scope that integration in the Vercel dashboard only after confirming it is no longer needed. The `Supabase Preview` GitHub check is a separate external integration. Removing workflow files does not delete Vercel Preview, GitHub Deployment Environments, or third-party checks. Keep GitHub Environments `production` and `staging` for credentials and approvals. The canonical domains remain on their existing hosting targets until DNS/custom-domain cutovers are performed separately.
 
 See [Cloudflare Workers migration and Preview cleanup](docs/cloudflare-workers-migration.md).
 
