@@ -25,6 +25,7 @@ import 'screens/account_suspension_gate.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/public_post_routes.dart';
 import 'widgets/public_posts_link.dart';
+import 'utils/initial_public_route.dart';
 
 enum _HeaderMenuAction { home, myPage, settings, help, moderation, logout }
 
@@ -63,6 +64,7 @@ class MyApp extends StatelessWidget {
 
     return MaterialApp(
       title: 'Sharemarium',
+      initialRoute: initialPublicRoute(Uri.base),
       debugShowCheckedModeBanner: false,
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         dragDevices: {

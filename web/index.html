@@ -14,6 +14,7 @@
     <base href="$FLUTTER_BASE_HREF" />
 
     <meta charset="UTF-8" />
+    <meta name="google" content="notranslate" />
     <meta content="IE=Edge" http-equiv="X-UA-Compatible" />
     <meta
       name="description"
@@ -61,7 +62,8 @@
         function eligibleRoute() {
           return (
             window.location.hostname === expectedHost &&
-            ["/", "/posts", "/posts/"].includes(window.location.pathname) &&
+            (["/", "/posts", "/posts/"].includes(window.location.pathname) ||
+              /^\/book\/(\d{13}|\d{9}[\dXx])\/?$/.test(window.location.pathname)) &&
             !window.location.search.includes("seo_preview=")
           );
         }
