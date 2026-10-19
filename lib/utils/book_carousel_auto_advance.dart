@@ -10,8 +10,8 @@ typedef AutoAdvanceCallback = void Function();
 class BookCarouselAutoAdvance {
   BookCarouselAutoAdvance({
     required this.onAdvance,
-    this.advanceInterval = const Duration(seconds: 5),
-    this.resumeDelay = const Duration(seconds: 30),
+    this.advanceInterval = const Duration(milliseconds: 1500),
+    this.resumeDelay = const Duration(seconds: 10),
   });
 
   final AutoAdvanceCallback onAdvance;
@@ -22,6 +22,8 @@ class BookCarouselAutoAdvance {
   Timer? _resumeTimer;
   bool _detailOpen = false;
   bool _disposed = false;
+  bool get isPaused =>
+      _detailOpen || _resumeTimer?.isActive == true || _disposed;
 
   void start() {
     if (_disposed || _detailOpen) return;

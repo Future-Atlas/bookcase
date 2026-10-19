@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,31 +58,6 @@ class _BookListScreenState extends State<BookListScreen> {
   final GlobalKey<_PagedBookScrollerState> _westernScrollerKey = GlobalKey();
   String? _openingBookId;
   bool _isServiceIntroductionExpanded = false;
-
-  Iterable<GlobalKey<_PagedBookScrollerState>> get _homeScrollerKeys => [
-    _featuredScrollerKey,
-    _popularScrollerKey,
-    _newArrivalsScrollerKey,
-    _westernScrollerKey,
-  ];
-
-  void _registerHomeInteraction() {
-    for (final key in _homeScrollerKeys) {
-      key.currentState?.registerUserInteraction();
-    }
-  }
-
-  void _pauseHomeCarouselsForBookDetail() {
-    for (final key in _homeScrollerKeys) {
-      key.currentState?.pauseForBookDetail();
-    }
-  }
-
-  void _resumeHomeCarouselsAfterBookDetail() {
-    for (final key in _homeScrollerKeys) {
-      key.currentState?.resumeAfterBookDetail();
-    }
-  }
 
   @override
   void initState() {
@@ -427,7 +404,6 @@ class _BookListScreenState extends State<BookListScreen> {
       _replaceBrowserPath(bookPath);
     }
 
-    _pauseHomeCarouselsForBookDetail();
     try {
       await showDialog(
         context: context,
@@ -839,16 +815,13 @@ class _BookListScreenState extends State<BookListScreen> {
         },
       );
     } finally {
-      _resumeHomeCarouselsAfterBookDetail();
-    }
-
-    if (!mounted || !kIsWeb) return;
-    if (_currentAppPath() == bookPath) {
-      _replaceBrowserPath(
-        openedFromDirectUrl || previousPath.startsWith('/book/')
-            ? '/'
-            : previousPath,
-      );
+      if (mounted && kIsWeb && _currentAppPath() == bookPath) {
+        _replaceBrowserPath(
+          openedFromDirectUrl || previousPath.startsWith('/book/')
+              ? '/'
+              : previousPath,
+        );
+      }
     }
   }
 
@@ -904,7 +877,6 @@ class _BookListScreenState extends State<BookListScreen> {
             onRefresh: () => _controller.loadData(context),
             color: const Color(0xFFD00303),
             child: Listener(
-              onPointerDown: (_) => _registerHomeInteraction(),
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
@@ -1498,7 +1470,12 @@ class _BookListScreenState extends State<BookListScreen> {
             _buildCarouselPageButton(
               direction: AxisDirection.left,
               tooltip: '前の9冊に戻る',
-              onPressed: isLoadingMore ? null : onLoadPrevious,
+              onPressed: isLoadingMore
+                  ? null
+                  : () {
+                      scrollerKey.currentState?.registerUserInteraction();
+                      onLoadPrevious();
+                    },
             ),
           Expanded(
             child: _PagedBookScroller(
@@ -1517,7 +1494,12 @@ class _BookListScreenState extends State<BookListScreen> {
             _buildCarouselPageButton(
               direction: AxisDirection.right,
               tooltip: '次の9冊を読み込む',
-              onPressed: isLoadingMore ? null : () => onLoadMore(),
+              onPressed: isLoadingMore
+                  ? null
+                  : () {
+                      scrollerKey.currentState?.registerUserInteraction();
+                      onLoadMore();
+                    },
             ),
         ],
       ),
@@ -2171,16 +2153,24 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
   bool _landAtEndAfterChange = false;
   bool _isRepositioningAfterPageChange = false;
   bool _isAutoScrolling = false;
+  bool _appending = false;
+  late List<Book> _buffer;
   double _overscrollDistance = 0;
 
   @override
   void initState() {
     super.initState();
+    _buffer = List.of(widget.books);
     _autoAdvance = BookCarouselAutoAdvance(onAdvance: _advanceAutomatically)
       ..start();
   }
 
-  void registerUserInteraction() => _autoAdvance.registerUserInteraction();
+  void registerUserInteraction() {
+    _autoAdvance.registerUserInteraction();
+    if (_isAutoScrolling && _scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.offset);
+    }
+  }
 
   void pauseForBookDetail() => _autoAdvance.pauseForBookDetail();
 
@@ -2191,6 +2181,12 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.pageNumber != widget.pageNumber) {
       _pageChangePending = false;
+      if (_appending) {
+        final ids = _buffer.map((book) => book.id).toSet();
+        _buffer.addAll(widget.books.where((book) => ids.add(book.id)));
+        return;
+      }
+      _buffer = List.of(widget.books);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_scrollController.hasClients) return;
         final target = _landAtEndAfterChange
@@ -2210,6 +2206,8 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
       });
     } else if (oldWidget.isLoadingMore && !widget.isLoadingMore) {
       _pageChangePending = false;
+    } else if (!identical(oldWidget.books, widget.books) && !_appending) {
+      _buffer = List.of(widget.books);
     }
   }
 
@@ -2222,38 +2220,41 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
 
   Future<void> _advanceAutomatically() async {
     if (!mounted ||
-        widget.isLoadingMore ||
-        _pageChangePending ||
+        (widget.isLoadingMore && !_appending) ||
+        (_pageChangePending && !_appending) ||
+        _isAutoScrolling ||
+        ModalRoute.of(context)?.isCurrent != true ||
         !_scrollController.hasClients ||
         !_isVisibleOnScreen()) {
       return;
     }
 
-    final position = _scrollController.position;
-    if (position.extentAfter > 1) {
-      final step = (position.viewportDimension * 0.42).clamp(150.0, 230.0);
-      final target = (position.pixels + step).clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
-      );
-      _isAutoScrolling = true;
-      try {
-        await _scrollController.animateTo(
-          target,
-          duration: const Duration(milliseconds: 650),
-          curve: Curves.easeInOutCubic,
-        );
-      } finally {
-        _isAutoScrolling = false;
+    if (await _moveOneBook()) {
+      // Keep the 1.5-second visual cadence independent from network latency.
+      // Loading the next nine books continues in the background while the
+      // already buffered books keep moving.
+      unawaited(_prefetchNextPageIfNeeded());
+      return;
+    }
+
+    // Do not wrap back to the beginning while the next batch is still in
+    // flight. The following timer tick continues as soon as cards are added.
+    if (_appending) return;
+
+    // A very wide viewport can initially fit all nine books. In that case a
+    // new batch is needed before there is any horizontal distance to move.
+    if (widget.hasMore && !_appending) {
+      await _prefetchNextPageIfNeeded(force: true);
+      if (mounted &&
+          !_autoAdvance.isPaused &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          _isVisibleOnScreen()) {
+        await _moveOneBook();
       }
       return;
     }
 
-    if (widget.hasMore) {
-      await _loadNextPage();
-      return;
-    }
-
+    final position = _scrollController.position;
     if (position.extentBefore > 1) {
       _isAutoScrolling = true;
       try {
@@ -2265,6 +2266,50 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
       } finally {
         _isAutoScrolling = false;
       }
+    }
+  }
+
+  Future<bool> _moveOneBook() async {
+    if (!mounted || !_scrollController.hasClients) return false;
+    final position = _scrollController.position;
+    if (position.extentAfter <= 1) return false;
+
+    const step = 150.0; // 138px cover plus 12px spacing.
+    final target = ((position.pixels / step).floor() * step + step).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    _isAutoScrolling = true;
+    try {
+      await _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 650),
+        curve: Curves.easeInOutCubic,
+      );
+    } finally {
+      _isAutoScrolling = false;
+    }
+    return true;
+  }
+
+  Future<void> _prefetchNextPageIfNeeded({bool force = false}) async {
+    if (!mounted ||
+        _appending ||
+        !widget.hasMore ||
+        !_scrollController.hasClients) {
+      return;
+    }
+    const step = 150.0;
+    final firstVisible = (_scrollController.position.pixels / step).floor();
+    if (!force && _buffer.length - firstVisible > 9) return;
+
+    _appending = true;
+    try {
+      await _loadNextPage();
+      // didUpdateWidget consumes the new page on the next frame.
+      await WidgetsBinding.instance.endOfFrame;
+    } finally {
+      _appending = false;
     }
   }
 
@@ -2340,14 +2385,14 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
-      itemCount: widget.books.length,
+      itemCount: _buffer.length,
       itemBuilder: (context, index) => BookCard(
-        book: widget.books[index],
-        marginRight: index == widget.books.length - 1 ? 0 : 12,
+        book: _buffer[index],
+        marginRight: index == _buffer.length - 1 ? 0 : 12,
         onTap: () async {
           pauseForBookDetail();
           try {
-            await widget.onBookTap(widget.books[index]);
+            await widget.onBookTap(_buffer[index]);
           } finally {
             resumeAfterBookDetail();
           }
@@ -2363,8 +2408,10 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
               Positioned.fill(
                 child: Listener(
                   onPointerDown: (_) => registerUserInteraction(),
+                  onPointerMove: (_) => registerUserInteraction(),
+                  onPointerSignal: (_) => registerUserInteraction(),
                   child: AbsorbPointer(
-                    absorbing: widget.isLoadingMore,
+                    absorbing: widget.isLoadingMore && !_appending,
                     child: NotificationListener<ScrollNotification>(
                       onNotification: _handleScrollNotification,
                       child: list,
@@ -2372,7 +2419,7 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
                   ),
                 ),
               ),
-              if (widget.isLoadingMore)
+              if (widget.isLoadingMore && !_appending)
                 Positioned.fill(
                   child: ColoredBox(
                     color: Theme.of(

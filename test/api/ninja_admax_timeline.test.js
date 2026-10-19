@@ -146,6 +146,16 @@ test("the issued synchronous tag remains verbatim but inert", () => {
     /IFrameElement|HtmlIFrameElement|srcdoc/);
 });
 
+test("clean book deep links retain ad eligibility without bypassing ad-free users", async () => {
+  for (const adFree of [false, true]) {
+    const app = runtime({ token: 'test-token', adFree });
+    app.window.location.pathname = '/book/9784101269313';
+    app.emitSlot(0);
+    await app.flush();
+    assert.equal(app.requests.length, adFree ? 0 : 1);
+  }
+});
+
 test("timeline has no application-imposed slot cap", () => {
   const src = read("lib/screens/book_list_screen.dart");
   const policy = read("lib/widgets/timeline_ad_policy.dart");
