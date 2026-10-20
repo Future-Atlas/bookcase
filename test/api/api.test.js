@@ -351,7 +351,9 @@ test("browser loads Ninja AdMax only after an actual timeline slot mounts", () =
   );
 
   assert.match(html, /sharemarium:admax-slot-ready/);
-  assert.ok(html.includes('["/", "/posts", "/posts/"].includes(window.location.pathname)'));
+  assert.match(html, /const path = currentAppPath\(\)/);
+  assert.ok(html.includes('["/", "/posts", "/posts/"].includes(path)'));
+  assert.match(html, /!adFreePaths\.has\(path\)/);
   assert.match(html, /window\.location\.hostname === expectedHost/);
   assert.match(html, /root\.isConnected/);
   assert.match(html, /\/api\/ad-entitlement/);

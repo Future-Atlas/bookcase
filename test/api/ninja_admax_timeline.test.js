@@ -265,6 +265,42 @@ test("public timeline mounts ads but post detail pages do not", async () => {
   assert.equal(r.requests.length, 0);
 });
 
+test("legal and operator hash routes never load or retain advertising", async () => {
+  for (const path of [
+    "/privacy",
+    "/terms",
+    "/community-guidelines",
+    "/infringement-policy",
+    "/external-transmission",
+    "/contact",
+    "/about",
+  ]) {
+    const r = runtime();
+    r.window.location.hash = `#${path}`;
+    r.emitSlot(0);
+    await r.flush();
+    assert.equal(r.requests.length, 0, `${path} must remain ad-free`);
+  }
+  const html = read("web/index.html");
+  assert.match(html, /window\.addEventListener\("hashchange", scheduleEntitlementReview\)/);
+});
+
+test("only home inline ads are dismissible and bottom popup has a separate close control", () => {
+  const home = read("lib/screens/book_list_screen.dart");
+  const search = read("lib/widgets/book_search_results.dart");
+  const slot = read("lib/widgets/timeline_ad_slot_web.dart");
+  const html = read("web/index.html");
+
+  assert.equal((home.match(/dismissible: true/g) || []).length, 2);
+  assert.doesNotMatch(search, /dismissible: true/);
+  assert.match(slot, /this\.dismissible = false/);
+  assert.match(slot, /if \(widget\.dismissible\)/);
+  assert.match(html, /sharemarium-bottom-popup-ad-dismissed/);
+  assert.match(html, /width: "36px"/);
+  assert.match(html, /height: "36px"/);
+  assert.match(html, /画面下部の広告を閉じる/);
+});
+
 test("ad-free members and entitlement errors never load SDK", async () => {
   for (const options of [
     { token: "user", adFree: true },
