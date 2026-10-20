@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sharemarium/utils/book_carousel_auto_advance.dart';
 
@@ -72,5 +74,23 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(advances, 1);
     controller.dispose();
+  });
+
+  test('page scrolling is not treated as a carousel interaction', () {
+    final source = File('lib/screens/book_list_screen.dart').readAsStringSync();
+    expect(
+      source,
+      isNot(contains('onPointerDown: (_) => registerUserInteraction()')),
+    );
+    expect(
+      source,
+      isNot(contains('onPointerMove: (_) => registerUserInteraction()')),
+    );
+    expect(
+      source,
+      isNot(contains('onPointerSignal: (_) => registerUserInteraction()')),
+    );
+    expect(source, contains('notification.metrics.axis != Axis.horizontal'));
+    expect(source, contains('notification.dragDetails != null'));
   });
 }
