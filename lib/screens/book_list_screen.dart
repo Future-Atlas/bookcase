@@ -2343,6 +2343,15 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
 
   bool _handleScrollNotification(ScrollNotification notification) {
     if (notification.metrics.axis != Axis.horizontal) return false;
+    final isUserDriven =
+        (notification is ScrollStartNotification &&
+            notification.dragDetails != null) ||
+        (notification is ScrollUpdateNotification &&
+            notification.dragDetails != null) ||
+        notification is OverscrollNotification;
+    if (isUserDriven && !_isAutoScrolling && !_isRepositioningAfterPageChange) {
+      registerUserInteraction();
+    }
     if (notification is ScrollStartNotification) {
       _overscrollDistance = 0;
     } else if (notification is OverscrollNotification) {
@@ -2408,16 +2417,11 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: Listener(
-                  onPointerDown: (_) => registerUserInteraction(),
-                  onPointerMove: (_) => registerUserInteraction(),
-                  onPointerSignal: (_) => registerUserInteraction(),
-                  child: AbsorbPointer(
-                    absorbing: widget.isLoadingMore && !_appending,
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: _handleScrollNotification,
-                      child: list,
-                    ),
+                child: AbsorbPointer(
+                  absorbing: widget.isLoadingMore && !_appending,
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: _handleScrollNotification,
+                    child: list,
                   ),
                 ),
               ),
