@@ -926,6 +926,7 @@ class _BookListScreenState extends State<BookListScreen> {
                               const TimelineAdSlot(
                                 key: ValueKey('home-ad-between-popular-new'),
                                 slotIndex: 0,
+                                dismissible: true,
                               ),
                             if (widget.initialGenre == null ||
                                 widget.initialGenre == 'recommended')
@@ -953,6 +954,7 @@ class _BookListScreenState extends State<BookListScreen> {
                               const TimelineAdSlot(
                                 key: ValueKey('home-ad-between-new-western'),
                                 slotIndex: 1,
+                                dismissible: true,
                               ),
                             if (widget.initialGenre == null ||
                                 widget.initialGenre == 'western')
