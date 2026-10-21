@@ -835,20 +835,6 @@ $$;
 ALTER FUNCTION "public"."has_privacy_password"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."increment_read_count"("user_id" "uuid") RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    AS $$
-BEGIN
-    UPDATE public.profiles
-    SET read_count = read_count + 1
-    WHERE id = user_id;
-END;
-$$;
-
-
-ALTER FUNCTION "public"."increment_read_count"("user_id" "uuid") OWNER TO "postgres";
-
-
 CREATE OR REPLACE FUNCTION "public"."initialize_privacy_password"("p_password" "text") RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public', 'extensions'
@@ -4218,6 +4204,14 @@ CREATE INDEX "blocks_blocked_idx" ON "public"."blocks" USING "btree" ("blocked_i
 
 
 
+CREATE INDEX "contact_requests_anonymous_email_created_at_idx" ON "public"."contact_requests" USING "btree" ("lower"("btrim"("email")), "created_at" DESC) WHERE ("profile_id" IS NULL);
+
+
+
+CREATE INDEX "contact_requests_profile_created_at_idx" ON "public"."contact_requests" USING "btree" ("profile_id", "created_at" DESC) WHERE ("profile_id" IS NOT NULL);
+
+
+
 CREATE INDEX "follows_follower_status_idx" ON "public"."follows" USING "btree" ("follower_id", "status");
 
 
@@ -4315,6 +4309,10 @@ CREATE OR REPLACE TRIGGER "record_denial_before_auth_user_delete" BEFORE DELETE 
 
 
 CREATE OR REPLACE TRIGGER "classify_post_age_restriction_trigger" BEFORE INSERT OR UPDATE OF "book_title", "book_author", "book_publisher", "book_description", "comment" ON "public"."posts" FOR EACH ROW EXECUTE FUNCTION "public"."classify_post_age_restriction"();
+
+
+
+CREATE OR REPLACE TRIGGER "enforce_contact_request_rate_limit_before_insert" BEFORE INSERT ON "public"."contact_requests" FOR EACH ROW EXECUTE FUNCTION "private"."enforce_contact_request_rate_limit"();
 
 
 

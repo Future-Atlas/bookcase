@@ -61,6 +61,43 @@ test("production workers.dev hostname remains excluded from indexing", async () 
   assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
 });
 
+test("production custom domain adds browser security headers", async () => {
+  const { env } = environment({ appEnv: "production" });
+  const response = await worker.fetch(
+    new Request("https://www.sharemarium.com/"),
+    env,
+  );
+
+  assert.equal(
+    response.headers.get("strict-transport-security"),
+    "max-age=31536000",
+  );
+  assert.equal(response.headers.get("x-frame-options"), "DENY");
+  assert.equal(
+    response.headers.get("referrer-policy"),
+    "strict-origin-when-cross-origin",
+  );
+  assert.match(
+    response.headers.get("content-security-policy-report-only") || "",
+    /frame-ancestors 'none'/,
+  );
+});
+
+test("HTTP requests are permanently redirected to HTTPS", async () => {
+  const { env, requests } = environment({ appEnv: "production" });
+  const response = await worker.fetch(
+    new Request("http://www.sharemarium.com/book/9784101269313?q=1"),
+    env,
+  );
+
+  assert.equal(response.status, 308);
+  assert.equal(
+    response.headers.get("location"),
+    "https://www.sharemarium.com/book/9784101269313?q=1",
+  );
+  assert.equal(requests.length, 0);
+});
+
 test("legacy profile route keeps the identifier when redirecting", async () => {
   const { env } = environment({ appEnv: "production" });
   const response = await worker.fetch(
