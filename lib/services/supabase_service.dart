@@ -1598,6 +1598,14 @@ class SupabaseService extends ChangeNotifier {
         ),
       });
       return null;
+    } on PostgrestException catch (e) {
+      if (e.message.contains('CONTACT_RATE_LIMIT_EXCEEDED')) {
+        return '申し訳ございません。システム上、24時間以内に送信できるお問い合わせは5件までです。\n'
+            '運営チームが順次対応しておりますので、しばらくお待ちください。\n'
+            '追加のお問い合わせがある場合は、お手数ですが24時間経過後にお送りください。';
+      }
+      debugPrint('Contact request database error: $e');
+      return 'お問い合わせを送信できませんでした。データベース更新後にもう一度お試しください。';
     } catch (e) {
       debugPrint('Error submitting contact request: $e');
       return 'お問い合わせを送信できませんでした。データベース更新後にもう一度お試しください。';

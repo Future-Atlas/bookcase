@@ -117,6 +117,13 @@ class _ContactScreenState extends State<ContactScreen> {
                     '個人情報の開示等、権利侵害、通報、アカウント、料金・返金、不正利用に関するご連絡もこちらから送信できます。',
                     style: TextStyle(height: 1.6),
                   ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    '運営チームが順次対応いたしますので、送信後はしばらくお待ちください。\n'
+                    '内容や混雑状況により、運営チームからの返信に時間がかかる場合があります。あらかじめご了承ください。\n'
+                    'システム上、24時間以内に送信できるお問い合わせは5件までです。',
+                    style: TextStyle(height: 1.6),
+                  ),
                   const SizedBox(height: 20),
                   DropdownButtonFormField<String>(
                     initialValue: _category,
