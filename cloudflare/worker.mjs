@@ -15,6 +15,21 @@ const SEO_PATH_PATTERN =
   /^\/(?:featured-books|genre\/.*|book\/.*|user\/.*|users\/.*|profile\/.*|privacy|terms|community-guidelines|infringement-policy|external-transmission|contact|about)$/;
 const LEGAL_PATH_PATTERN =
   /^\/(privacy|terms|community-guidelines|infringement-policy|external-transmission)$/;
+const CSP_REPORT_ONLY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://adm.shinobi.jp",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https: wss:",
+  "frame-src https:",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+].join("; ");
 
 class VercelResponseAdapter {
   constructor() {
@@ -105,7 +120,17 @@ function redirect(request, pathname, status = 308) {
 function withEnvironmentHeaders(response, env, request) {
   const headers = new Headers(response.headers);
   headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "DENY");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set(
+    "Permissions-Policy",
+    "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+  );
+  headers.set("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY);
   const hostname = new URL(request.url).hostname;
+  if (env.APP_ENV === "production" && hostname === "www.sharemarium.com") {
+    headers.set("Strict-Transport-Security", "max-age=31536000");
+  }
   if (env.APP_ENV !== "production" || hostname.endsWith(".workers.dev")) {
     headers.set("X-Robots-Tag", "noindex, nofollow");
   }
@@ -181,6 +206,11 @@ async function routeRequest(request, env) {
 export default {
   async fetch(request, env) {
     try {
+      const url = new URL(request.url);
+      if (url.protocol === "http:") {
+        url.protocol = "https:";
+        return Response.redirect(url.toString(), 308);
+      }
       return withEnvironmentHeaders(
         await routeRequest(request, env),
         env,
