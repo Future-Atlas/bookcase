@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
+import '../config/feature_flags.dart';
 import '../widgets/book_search_results.dart';
 import '../widgets/rakuten_credit.dart';
 import '../models/profile_page_color.dart';
@@ -437,7 +438,9 @@ class _BookListScreenState extends State<BookListScreen> {
           final isFavoriteFuture = service.isBookFavoritedByCurrentUser(
             book.id,
           );
-          final isWantedFuture = service.isBookWantedByCurrentUser(book.id);
+          final isWantedFuture = FeatureFlags.wantToReadUiEnabled
+               ? service.isBookWantedByCurrentUser(book.id)
+               : Future<bool>.value(false);
 
           return Dialog(
             backgroundColor: const Color(0xFFE6E6E6),
