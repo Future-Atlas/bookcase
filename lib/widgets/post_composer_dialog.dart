@@ -5,6 +5,7 @@ import '../models/book.dart';
 import '../models/post.dart';
 import '../services/content_safety_service.dart';
 import '../services/supabase_service.dart';
+import 'star_rating_slider.dart';
 
 const int _postCommentMaxLength = 1000;
 
@@ -27,6 +28,7 @@ Future<bool> showPostComposerDialog({
 
   final isEditing = existingPost != null;
   double rating = existingPost?.rating ?? 0.0;
+  bool hasSelectedRating = existingPost != null;
   bool isSpoiler = existingPost?.hasSpoiler ?? false;
   bool isSubmitting = false;
   final commentController = TextEditingController(
@@ -122,49 +124,18 @@ Future<bool> showPostComposerDialog({
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 12),
-                              Wrap(
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 2,
-                                children: [
-                                  ...List.generate(5, (index) {
-                                    final starValue = index + 1.0;
-                                    return IconButton(
-                                      visualDensity: VisualDensity.compact,
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(
-                                        minWidth: 34,
-                                        minHeight: 40,
-                                      ),
-                                      icon: Icon(
-                                        rating >= starValue
-                                            ? Icons.star
-                                            : Icons.star_border,
-                                        color: const Color(0xFFE0B400),
-                                        size: 34,
-                                      ),
-                                      onPressed: () {
-                                        setDialogState(
-                                          () => rating = starValue,
-                                        );
-                                      },
-                                    );
-                                  }),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    rating.toStringAsFixed(1),
-                                    style: const TextStyle(
-                                      fontSize: 24,
-                                      color: Color(0xFFE0B400),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
                             ],
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    StarRatingSlider(
+                      value: rating,
+                      onChanged: (score) => setDialogState(() {
+                        rating = score;
+                        hasSelectedRating = true;
+                      }),
                     ),
                     const SizedBox(height: 14),
                     Container(
@@ -220,7 +191,7 @@ Future<bool> showPostComposerDialog({
                     ? null
                     : () async {
                         final review = commentController.text.trim();
-                        if (rating <= 0) {
+                        if (!hasSelectedRating) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('評価が付いていないので、投稿できません'),
