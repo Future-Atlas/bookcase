@@ -12,7 +12,7 @@ test('want-to-read remains hidden and favorites remain available', () => {
   assert.match(flags, /wantToReadUiEnabled = subscriptionUiEnabled/);
   assert.match(flags, /subscriptionUiEnabled = false/);
   assert.match(profile, /FeatureFlags.wantToReadUiEnabled \? 4 : 3/);
-  assert.match(profile, /if \(FeatureFlags.wantToReadUiEnabled\) Tab\(text: '読みたい！'\)/);
+  assert.match(profile, /if \(FeatureFlags.wantToReadUiEnabled\) const Tab\(text: '読みたい！'\)/);
   assert.match(profile, /_buildFavoritesTab\(\)/);
   assert.match(books, /if \(FeatureFlags.wantToReadUiEnabled\) Expanded/);
   assert.match(cards, /FeatureFlags.wantToReadUiEnabled/);
