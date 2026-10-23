@@ -1001,7 +1001,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           _buildPostsTab(),
                           _buildReadBooksTab(),
                           _buildFavoritesTab(),
-                          _buildGridTab(
+                          if (FeatureFlags.wantToReadUiEnabled) _buildGridTab(
                             _wantToRead,
                             '「読みたい！」作品はありません。',
                             showDescription: true,
@@ -1316,7 +1316,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           fontSize: 13,
         ),
         tabs: isMobile
-            ? const [
+            ? [
                 Tab(
                   child: SizedBox(width: 56, child: Center(child: Text('投稿'))),
                 ),
@@ -1332,18 +1332,18 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     child: Center(child: Text('お気に入り')),
                   ),
                 ),
-                Tab(
+                if (FeatureFlags.wantToReadUiEnabled) Tab(
                   child: SizedBox(
                     width: 94,
                     child: Center(child: Text('読みたい！')),
                   ),
                 ),
               ]
-            : const [
-                Tab(text: '投稿'),
-                Tab(text: 'My 本棚'),
-                Tab(text: 'お気に入り'),
-                Tab(text: '読みたい！'),
+            : [
+                const Tab(text: '投稿'),
+                const Tab(text: 'My 本棚'),
+                const Tab(text: 'お気に入り'),
+                if (FeatureFlags.wantToReadUiEnabled) const Tab(text: '読みたい！'),
               ],
       ),
     );
@@ -1984,7 +1984,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              Expanded(
+                              if (FeatureFlags.wantToReadUiEnabled) Expanded(
                                 child: FutureBuilder<bool>(
                                   future: isWantedFuture,
                                   builder: (context, wantedSnapshot) {
