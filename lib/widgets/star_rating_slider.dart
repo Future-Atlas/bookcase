@@ -44,7 +44,8 @@ class StarRatingSlider extends StatelessWidget {
             // Flutter's 24px transparent thumb and the visible star have the
             // same travel range: from x=12 to x=width-12.
             final travel = (constraints.maxWidth - _thumbDiameter)
-                .clamp(0.0, double.infinity);
+                .clamp(0.0, double.infinity)
+                .toDouble();
             final starLeft = travel * snappedValue / 5.0;
             return SizedBox(
               height: 60,
