@@ -28,10 +28,8 @@ test('favorites UI remains hidden with the subscription release flag', () => {
     bookList,
     /FeatureFlags\.favoritesUiEnabled &&\s+post\.profileId == currentProfileId/,
   )
-  assert.match(
-    profile,
-    /length: FeatureFlags\.favoritesUiEnabled \? 4 : 3/,
-  )
+  assert.match(profile, /FeatureFlags\.favoritesUiEnabled \? 1 : 0/)
+  assert.match(profile, /FeatureFlags\.wantToReadUiEnabled \? 1 : 0/)
   assert.match(
     profile,
     /if \(FeatureFlags\.favoritesUiEnabled\)\s+_buildFavoritesTab\(\)/,

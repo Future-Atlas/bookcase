@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
+import '../config/feature_flags.dart';
 import '../widgets/book_search_results.dart';
 import '../widgets/rakuten_credit.dart';
 import '../models/profile_page_color.dart';
@@ -13,7 +14,6 @@ import '../widgets/post_card.dart';
 import '../widgets/timeline_ad_slot.dart';
 import '../widgets/timeline_ad_policy.dart';
 import '../controllers/book_list_controller.dart';
-import '../config/feature_flags.dart';
 import '../models/book.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
@@ -415,7 +415,9 @@ class _BookListScreenState extends State<BookListScreen> {
           final isFavoriteFuture = FeatureFlags.favoritesUiEnabled
               ? service.isBookFavoritedByCurrentUser(book.id)
               : null;
-          final isWantedFuture = service.isBookWantedByCurrentUser(book.id);
+          final isWantedFuture = FeatureFlags.wantToReadUiEnabled
+              ? service.isBookWantedByCurrentUser(book.id)
+              : Future<bool>.value(false);
 
           return Dialog(
             backgroundColor: const Color(0xFFE6E6E6),
@@ -541,87 +543,92 @@ class _BookListScreenState extends State<BookListScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 10),
-                                    Expanded(
-                                      child: FutureBuilder<bool>(
-                                        future: isWantedFuture,
-                                        builder: (context, wantedSnapshot) {
-                                          final wanted =
-                                              wantedSnapshot.data ?? false;
-                                          final checking =
-                                              wantedSnapshot.connectionState ==
-                                              ConnectionState.waiting;
-                                          return SizedBox(
-                                            height: 64,
-                                            child: ElevatedButton(
-                                              onPressed: checking
-                                                  ? null
-                                                  : () async {
-                                                      if (!await _ensureAuthenticated() ||
-                                                          !mounted) {
-                                                        return;
-                                                      }
-                                                      final result =
-                                                          await service
-                                                              .toggleWantToRead(
-                                                                book: book,
-                                                              );
-                                                      if (!mounted) return;
-                                                      if (result ==
-                                                          WantToReadToggleResult
-                                                              .subscriptionRequired) {
-                                                        await showSubscriptionLockedDialog(
-                                                          context: this.context,
-                                                          featureLabel:
-                                                              '「読みたい！」',
-                                                        );
-                                                        return;
-                                                      }
-                                                      if (context.mounted &&
-                                                          !result
-                                                              .shouldRestoreOptimisticState) {
-                                                        Navigator.of(
-                                                          context,
-                                                        ).pop();
-                                                      }
-                                                      ScaffoldMessenger.of(
-                                                        this.context,
-                                                      ).showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(
-                                                            result.message,
+                                    if (FeatureFlags.wantToReadUiEnabled)
+                                      Expanded(
+                                        child: FutureBuilder<bool>(
+                                          future: isWantedFuture,
+                                          builder: (context, wantedSnapshot) {
+                                            final wanted =
+                                                wantedSnapshot.data ?? false;
+                                            final checking =
+                                                wantedSnapshot
+                                                    .connectionState ==
+                                                ConnectionState.waiting;
+                                            return SizedBox(
+                                              height: 64,
+                                              child: ElevatedButton(
+                                                onPressed: checking
+                                                    ? null
+                                                    : () async {
+                                                        if (!await _ensureAuthenticated() ||
+                                                            !mounted) {
+                                                          return;
+                                                        }
+                                                        final result =
+                                                            await service
+                                                                .toggleWantToRead(
+                                                                  book: book,
+                                                                );
+                                                        if (!mounted) return;
+                                                        if (result ==
+                                                            WantToReadToggleResult
+                                                                .subscriptionRequired) {
+                                                          await showSubscriptionLockedDialog(
+                                                            context:
+                                                                this.context,
+                                                            featureLabel:
+                                                                '「読みたい！」',
+                                                          );
+                                                          return;
+                                                        }
+                                                        if (context.mounted &&
+                                                            !result
+                                                                .shouldRestoreOptimisticState) {
+                                                          Navigator.of(
+                                                            context,
+                                                          ).pop();
+                                                        }
+                                                        ScaffoldMessenger.of(
+                                                          this.context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text(
+                                                              result.message,
+                                                            ),
                                                           ),
+                                                        );
+                                                      },
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.black,
+                                                  foregroundColor: Colors.amber,
+                                                  disabledBackgroundColor:
+                                                      Colors.black,
+                                                  disabledForegroundColor:
+                                                      Colors.amber.shade200,
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          18,
                                                         ),
-                                                      );
-                                                    },
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.black,
-                                                foregroundColor: Colors.amber,
-                                                disabledBackgroundColor:
-                                                    Colors.black,
-                                                disabledForegroundColor:
-                                                    Colors.amber.shade200,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(18),
+                                                  ),
+                                                ),
+                                                child: BookActionLabel(
+                                                  bookId: book.id,
+                                                  label: wanted
+                                                      ? '読みたい！済み'
+                                                      : '読みたい！',
+                                                  color: Colors.amber,
+                                                  wantToRead: true,
+                                                  style: const TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
                                                 ),
                                               ),
-                                              child: BookActionLabel(
-                                                bookId: book.id,
-                                                label: wanted
-                                                    ? '読みたい！済み'
-                                                    : '読みたい！',
-                                                color: Colors.amber,
-                                                wantToRead: true,
-                                                style: const TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
+                                            );
+                                          },
+                                        ),
                                       ),
-                                    ),
                                   ],
                                 );
                               },

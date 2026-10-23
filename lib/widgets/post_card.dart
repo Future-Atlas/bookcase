@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import '../config/feature_flags.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
 import '../models/social_models.dart';
@@ -436,7 +437,9 @@ class _PostCardState extends State<PostCard> {
                       const SizedBox(height: 8),
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: _buildWantToReadButton(tertiaryTextColor),
+                        child: FeatureFlags.wantToReadUiEnabled
+                             ? _buildWantToReadButton(tertiaryTextColor)
+                             : const SizedBox.shrink(),
                       ),
                       const SizedBox(height: 6),
                       Row(
@@ -866,7 +869,9 @@ class _PostCardState extends State<PostCard> {
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerLeft,
-              child: _buildWantToReadButton(tertiaryTextColor),
+              child: FeatureFlags.wantToReadUiEnabled
+                             ? _buildWantToReadButton(tertiaryTextColor)
+                             : const SizedBox.shrink(),
             ),
             const SizedBox(height: 6),
             LayoutBuilder(

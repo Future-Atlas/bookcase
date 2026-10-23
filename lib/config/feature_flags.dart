@@ -8,4 +8,8 @@ abstract final class FeatureFlags {
   // data and backend support, but keep every user-facing entry point hidden
   // until the subscription UI is approved and enabled.
   static const bool favoritesUiEnabled = subscriptionUiEnabled;
+
+  // Want-to-read also launches alongside subscriptions. Preserve existing
+  // records while the user-facing entry points remain hidden.
+  static const bool wantToReadUiEnabled = subscriptionUiEnabled;
 }
