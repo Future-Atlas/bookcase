@@ -566,7 +566,7 @@ class _BookListScreenState extends State<BookListScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 10),
-                                    Expanded(
+                                    if (FeatureFlags.wantToReadUiEnabled) Expanded(
                                       child: FutureBuilder<bool>(
                                         future: isWantedFuture,
                                         builder: (context, wantedSnapshot) {
