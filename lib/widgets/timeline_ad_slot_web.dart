@@ -29,38 +29,15 @@ void _ensureEntitlementListener() {
 /// Actual DOM slot for the Ninja AdMax asynchronous SPA SDK.
 /// Neither the synchronous /s/ tag nor app-created iframes are used.
 class TimelineAdSlot extends StatefulWidget {
-  const TimelineAdSlot({
-    super.key,
-    required this.slotIndex,
-    this.dismissible = false,
-  });
+  const TimelineAdSlot({super.key, required this.slotIndex});
 
   final int slotIndex;
-  final bool dismissible;
   @override
   State<TimelineAdSlot> createState() => _TimelineAdSlotState();
 }
 
 class _TimelineAdSlotState extends State<TimelineAdSlot> {
   int get slotIndex => widget.slotIndex;
-  String get _dismissKey => 'sharemarium-ad-dismissed-$slotIndex';
-  bool _dismissed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (!widget.dismissible) return;
-    try {
-      _dismissed = html.window.sessionStorage[_dismissKey] == '1';
-    } catch (_) {}
-  }
-
-  void _dismiss() {
-    try {
-      html.window.sessionStorage[_dismissKey] = '1';
-    } catch (_) {}
-    setState(() => _dismissed = true);
-  }
 
   static final Set<int> _registered = <int>{};
 
@@ -108,7 +85,6 @@ class _TimelineAdSlotState extends State<TimelineAdSlot> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.dismissible && _dismissed) return const SizedBox.shrink();
     if (AppEnvironmentConfig.current == AppEnvironment.staging) {
       return Container(
         key: ValueKey('staging-ad-$slotIndex'),
@@ -120,19 +96,7 @@ class _TimelineAdSlotState extends State<TimelineAdSlot> {
           borderRadius: BorderRadius.circular(10),
         ),
         alignment: Alignment.center,
-        child: Row(
-          children: [
-            const Expanded(
-              child: Text('広告（検証用表示・配信なし）', textAlign: TextAlign.center),
-            ),
-            if (widget.dismissible)
-              IconButton(
-                tooltip: 'この広告を閉じる',
-                onPressed: _dismiss,
-                icon: const Icon(Icons.close, size: 20),
-              ),
-          ],
-        ),
+        child: const Text('広告（検証用表示・配信なし）', textAlign: TextAlign.center),
       );
     }
     if (!timelineAdReady || slotIndex < 0) {
@@ -166,22 +130,10 @@ class _TimelineAdSlotState extends State<TimelineAdSlot> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                '広告',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ),
-                            if (widget.dismissible)
-                              IconButton(
-                                tooltip: 'この広告を閉じる',
-                                onPressed: _dismiss,
-                                icon: const Icon(Icons.close, size: 20),
-                              ),
-                          ],
+                        const Text(
+                          '広告',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(

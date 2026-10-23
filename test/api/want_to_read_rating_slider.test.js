@@ -4,19 +4,27 @@ const fs = require('node:fs');
 const path = require('node:path');
 const read = (name) => fs.readFileSync(path.join(__dirname, '../../', name), 'utf8');
 
-test('want-to-read remains hidden and favorites remain available', () => {
+test('want-to-read and favorites remain hidden until subscriptions launch', () => {
   const flags = read('lib/config/feature_flags.dart');
   const profile = read('lib/screens/user_profile_screen.dart');
   const cards = read('lib/widgets/post_card.dart');
   const books = read('lib/screens/book_list_screen.dart');
   assert.match(flags, /wantToReadUiEnabled = subscriptionUiEnabled/);
+  assert.match(flags, /favoritesUiEnabled = subscriptionUiEnabled/);
   assert.match(flags, /subscriptionUiEnabled = false/);
-  assert.match(profile, /FeatureFlags.wantToReadUiEnabled \? 4 : 3/);
-  assert.match(profile, /if \(FeatureFlags.wantToReadUiEnabled\) const Tab\(text: '読みたい！'\)/);
-  assert.match(profile, /_buildFavoritesTab\(\)/);
-  assert.match(books, /if \(FeatureFlags.wantToReadUiEnabled\) Expanded/);
+  assert.match(profile, /FeatureFlags\.favoritesUiEnabled \? 1 : 0/);
+  assert.match(profile, /FeatureFlags\.wantToReadUiEnabled \? 1 : 0/);
+  assert.match(
+    profile,
+    /if \(FeatureFlags\.wantToReadUiEnabled\)\s+const Tab\(text: '読みたい！'\)/,
+  );
+  assert.match(profile, /if \(FeatureFlags\.favoritesUiEnabled\)\s+_buildFavoritesTab\(\)/);
+  assert.match(
+    books,
+    /if \(FeatureFlags\.wantToReadUiEnabled\)\s+Expanded/,
+  );
+  assert.match(books, /if \(FeatureFlags\.favoritesUiEnabled\)/);
   assert.match(cards, /FeatureFlags.wantToReadUiEnabled/);
-  assert.match(cards, /widget.favoriteLabel/);
 });
 
 test('rating ruler has 51 tick positions and labels every half point', () => {

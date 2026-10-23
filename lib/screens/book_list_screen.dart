@@ -412,12 +412,12 @@ class _BookListScreenState extends State<BookListScreen> {
           final hasCover = book.coverUrl.trim().isNotEmpty;
           final service = Provider.of<SupabaseService>(context, listen: false);
           final isReadFuture = service.isBookReadByCurrentUser(bookId: book.id);
-          final isFavoriteFuture = service.isBookFavoritedByCurrentUser(
-            book.id,
-          );
+          final isFavoriteFuture = FeatureFlags.favoritesUiEnabled
+              ? service.isBookFavoritedByCurrentUser(book.id)
+              : null;
           final isWantedFuture = FeatureFlags.wantToReadUiEnabled
-               ? service.isBookWantedByCurrentUser(book.id)
-               : Future<bool>.value(false);
+              ? service.isBookWantedByCurrentUser(book.id)
+              : Future<bool>.value(false);
 
           return Dialog(
             backgroundColor: const Color(0xFFE6E6E6),
@@ -543,157 +543,165 @@ class _BookListScreenState extends State<BookListScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 10),
-                                    if (FeatureFlags.wantToReadUiEnabled) Expanded(
-                                      child: FutureBuilder<bool>(
-                                        future: isWantedFuture,
-                                        builder: (context, wantedSnapshot) {
-                                          final wanted =
-                                              wantedSnapshot.data ?? false;
-                                          final checking =
-                                              wantedSnapshot.connectionState ==
-                                              ConnectionState.waiting;
-                                          return SizedBox(
-                                            height: 64,
-                                            child: ElevatedButton(
-                                              onPressed: checking
-                                                  ? null
-                                                  : () async {
-                                                      if (!await _ensureAuthenticated() ||
-                                                          !mounted) {
-                                                        return;
-                                                      }
-                                                      final result =
-                                                          await service
-                                                              .toggleWantToRead(
-                                                                book: book,
-                                                              );
-                                                      if (!mounted) return;
-                                                      if (result ==
-                                                          WantToReadToggleResult
-                                                              .subscriptionRequired) {
-                                                        await showSubscriptionLockedDialog(
-                                                          context: this.context,
-                                                          featureLabel:
-                                                              '「読みたい！」',
-                                                        );
-                                                        return;
-                                                      }
-                                                      if (context.mounted &&
-                                                          !result
-                                                              .shouldRestoreOptimisticState) {
-                                                        Navigator.of(
-                                                          context,
-                                                        ).pop();
-                                                      }
-                                                      ScaffoldMessenger.of(
-                                                        this.context,
-                                                      ).showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(
-                                                            result.message,
+                                    if (FeatureFlags.wantToReadUiEnabled)
+                                      Expanded(
+                                        child: FutureBuilder<bool>(
+                                          future: isWantedFuture,
+                                          builder: (context, wantedSnapshot) {
+                                            final wanted =
+                                                wantedSnapshot.data ?? false;
+                                            final checking =
+                                                wantedSnapshot
+                                                    .connectionState ==
+                                                ConnectionState.waiting;
+                                            return SizedBox(
+                                              height: 64,
+                                              child: ElevatedButton(
+                                                onPressed: checking
+                                                    ? null
+                                                    : () async {
+                                                        if (!await _ensureAuthenticated() ||
+                                                            !mounted) {
+                                                          return;
+                                                        }
+                                                        final result =
+                                                            await service
+                                                                .toggleWantToRead(
+                                                                  book: book,
+                                                                );
+                                                        if (!mounted) return;
+                                                        if (result ==
+                                                            WantToReadToggleResult
+                                                                .subscriptionRequired) {
+                                                          await showSubscriptionLockedDialog(
+                                                            context:
+                                                                this.context,
+                                                            featureLabel:
+                                                                '「読みたい！」',
+                                                          );
+                                                          return;
+                                                        }
+                                                        if (context.mounted &&
+                                                            !result
+                                                                .shouldRestoreOptimisticState) {
+                                                          Navigator.of(
+                                                            context,
+                                                          ).pop();
+                                                        }
+                                                        ScaffoldMessenger.of(
+                                                          this.context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text(
+                                                              result.message,
+                                                            ),
                                                           ),
+                                                        );
+                                                      },
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.black,
+                                                  foregroundColor: Colors.amber,
+                                                  disabledBackgroundColor:
+                                                      Colors.black,
+                                                  disabledForegroundColor:
+                                                      Colors.amber.shade200,
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          18,
                                                         ),
-                                                      );
-                                                    },
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.black,
-                                                foregroundColor: Colors.amber,
-                                                disabledBackgroundColor:
-                                                    Colors.black,
-                                                disabledForegroundColor:
-                                                    Colors.amber.shade200,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(18),
+                                                  ),
+                                                ),
+                                                child: BookActionLabel(
+                                                  bookId: book.id,
+                                                  label: wanted
+                                                      ? '読みたい！済み'
+                                                      : '読みたい！',
+                                                  color: Colors.amber,
+                                                  wantToRead: true,
+                                                  style: const TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
                                                 ),
                                               ),
-                                              child: BookActionLabel(
-                                                bookId: book.id,
-                                                label: wanted
-                                                    ? '読みたい！済み'
-                                                    : '読みたい！',
-                                                color: Colors.amber,
-                                                wantToRead: true,
-                                                style: const TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
+                                            );
+                                          },
+                                        ),
                                       ),
-                                    ),
                                   ],
                                 );
                               },
                             ),
                             const SizedBox(height: 10),
-                            FutureBuilder<bool>(
-                              future: isFavoriteFuture,
-                              builder: (context, snapshot) {
-                                final isFavorite = snapshot.data ?? false;
-                                final isLoading =
-                                    snapshot.connectionState ==
-                                    ConnectionState.waiting;
-                                return Align(
-                                  alignment: Alignment.center,
-                                  child: OutlinedButton.icon(
-                                    onPressed: isLoading
-                                        ? null
-                                        : () async {
-                                            // Temporarily disable auth check for
-                                            // public browsing mode.
-                                            // if (!service.isAuthenticated) {
-                                            //   Navigator.of(context).pop();
-                                            //   final authenticated =
-                                            //       await _ensureAuthenticated();
-                                            //   if (authenticated && mounted) {
-                                            //     _showBookDetailDialog(book);
-                                            //   }
-                                            //   return;
-                                            // }
+                            if (FeatureFlags.favoritesUiEnabled)
+                              FutureBuilder<bool>(
+                                future: isFavoriteFuture,
+                                builder: (context, snapshot) {
+                                  final isFavorite = snapshot.data ?? false;
+                                  final isLoading =
+                                      snapshot.connectionState ==
+                                      ConnectionState.waiting;
+                                  return Align(
+                                    alignment: Alignment.center,
+                                    child: OutlinedButton.icon(
+                                      onPressed: isLoading
+                                          ? null
+                                          : () async {
+                                              // Temporarily disable auth check for
+                                              // public browsing mode.
+                                              // if (!service.isAuthenticated) {
+                                              //   Navigator.of(context).pop();
+                                              //   final authenticated =
+                                              //       await _ensureAuthenticated();
+                                              //   if (authenticated && mounted) {
+                                              //     _showBookDetailDialog(book);
+                                              //   }
+                                              //   return;
+                                              // }
 
-                                            final result = await service
-                                                .toggleFavorite(book.id);
-                                            if (!mounted) return;
-                                            if (result ==
-                                                FavoriteToggleResult
-                                                    .standardLimitReached) {
-                                              final replaced =
-                                                  await _replaceFavoriteAtLimit(
-                                                    targetBookId: book.id,
-                                                    targetBookTitle: book.title,
-                                                  );
-                                              if (replaced && context.mounted) {
+                                              final result = await service
+                                                  .toggleFavorite(book.id);
+                                              if (!mounted) return;
+                                              if (result ==
+                                                  FavoriteToggleResult
+                                                      .standardLimitReached) {
+                                                final replaced =
+                                                    await _replaceFavoriteAtLimit(
+                                                      targetBookId: book.id,
+                                                      targetBookTitle:
+                                                          book.title,
+                                                    );
+                                                if (replaced &&
+                                                    context.mounted) {
+                                                  Navigator.of(context).pop();
+                                                }
+                                                return;
+                                              }
+                                              if (context.mounted &&
+                                                  (result ==
+                                                          FavoriteToggleResult
+                                                              .added ||
+                                                      result ==
+                                                          FavoriteToggleResult
+                                                              .removed)) {
                                                 Navigator.of(context).pop();
                                               }
-                                              return;
-                                            }
-                                            if (context.mounted &&
-                                                (result ==
-                                                        FavoriteToggleResult
-                                                            .added ||
-                                                    result ==
-                                                        FavoriteToggleResult
-                                                            .removed)) {
-                                              Navigator.of(context).pop();
-                                            }
-                                            _showFavoriteResult(result);
-                                          },
-                                    icon: Icon(
-                                      isFavorite
-                                          ? Icons.favorite
-                                          : Icons.favorite_border,
-                                      color: const Color(0xFFD00303),
+                                              _showFavoriteResult(result);
+                                            },
+                                      icon: Icon(
+                                        isFavorite
+                                            ? Icons.favorite
+                                            : Icons.favorite_border,
+                                        color: const Color(0xFFD00303),
+                                      ),
+                                      label: Text(
+                                        isFavorite ? 'お気に入り解除' : 'お気に入りに登録',
+                                      ),
                                     ),
-                                    label: Text(
-                                      isFavorite ? 'お気に入り解除' : 'お気に入りに登録',
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
+                                  );
+                                },
+                              ),
                             Row(
                               children: [
                                 ...List.generate(5, (index) {
@@ -929,7 +937,6 @@ class _BookListScreenState extends State<BookListScreen> {
                               const TimelineAdSlot(
                                 key: ValueKey('home-ad-between-popular-new'),
                                 slotIndex: 0,
-                                dismissible: true,
                               ),
                             if (widget.initialGenre == null ||
                                 widget.initialGenre == 'recommended')
@@ -957,7 +964,6 @@ class _BookListScreenState extends State<BookListScreen> {
                               const TimelineAdSlot(
                                 key: ValueKey('home-ad-between-new-western'),
                                 slotIndex: 1,
-                                dismissible: true,
                               ),
                             if (widget.initialGenre == null ||
                                 widget.initialGenre == 'western')
@@ -1778,7 +1784,9 @@ class _BookListScreenState extends State<BookListScreen> {
             onEdit: post.profileId == currentProfileId
                 ? () => _editPost(post)
                 : null,
-            onFavorite: post.profileId == currentProfileId
+            onFavorite:
+                FeatureFlags.favoritesUiEnabled &&
+                    post.profileId == currentProfileId
                 ? () => _toggleFavoriteFromPost(post)
                 : null,
             onReport: post.profileId == currentProfileId

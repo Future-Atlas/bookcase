@@ -98,13 +98,42 @@
         }
 
         function isProviderBottomPopup(node) {
-          if (!node || !node.style ||
-              node.classList?.contains("sharemarium-admax-timeline-slot")) {
+          if (!node ||
+              node.closest?.(".sharemarium-admax-timeline-slot")) {
             return false;
           }
-          return node.style.position === "fixed" &&
-            node.style.zIndex === "2147483647" &&
-            Boolean(node.querySelector?.("iframe"));
+          const iframe = node.tagName === "IFRAME"
+            ? node
+            : node.querySelector?.("iframe");
+          if (!iframe) return false;
+
+          // Ninja AdMax can apply the fixed positioning from a stylesheet and
+          // can wrap the iframe below a body child. Checking only inline style
+          // and one exact z-index missed the real mobile/desktop bottom ad.
+          const computed = window.getComputedStyle?.(node);
+          const position = computed?.position || node.style?.position;
+          if (position !== "fixed") return false;
+
+          const rect = node.getBoundingClientRect?.();
+          if (!rect || rect.width < 120 || rect.height < 40) return false;
+          const bottomGap = window.innerHeight - rect.bottom;
+          return bottomGap >= -32 && bottomGap <= 32 && rect.top >= 0;
+        }
+
+        function providerBottomPopups() {
+          const popups = new Set();
+          for (const iframe of document.querySelectorAll("iframe")) {
+            if (iframe.closest?.(".sharemarium-admax-timeline-slot")) continue;
+            let node = iframe;
+            while (node && node !== document.body) {
+              if (isProviderBottomPopup(node)) {
+                popups.add(node);
+                break;
+              }
+              node = node.parentElement;
+            }
+          }
+          return popups;
         }
 
         function providerHasCloseButton(node) {
@@ -188,8 +217,7 @@
               managedPopups.delete(node);
             }
           }
-          for (const node of Array.from(document.body?.children || [])) {
-            if (!isProviderBottomPopup(node)) continue;
+          for (const node of providerBottomPopups()) {
             if (!eligibleRoute() || popupWasDismissed()) {
               removeManagedPopup(node);
             } else {
