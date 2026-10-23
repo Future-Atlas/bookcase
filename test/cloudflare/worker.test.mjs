@@ -112,6 +112,23 @@ test("legacy profile route keeps the identifier when redirecting", async () => {
   );
 });
 
+test("legacy book slug permanently redirects to the canonical ISBN page", async () => {
+  const { env, requests } = environment({ appEnv: "production" });
+  const response = await worker.fetch(
+    new Request(
+      "https://www.sharemarium.com/book/nanji-hoshi-no-gotoku?utm_source=google",
+    ),
+    env,
+  );
+
+  assert.equal(response.status, 308);
+  assert.equal(
+    response.headers.get("location"),
+    "https://www.sharemarium.com/book/9784065281499?utm_source=google",
+  );
+  assert.equal(requests.length, 0);
+});
+
 test("crawler legal requests use server-rendered HTML", async () => {
   const { env, requests } = environment({ appEnv: "production" });
   const response = await worker.fetch(

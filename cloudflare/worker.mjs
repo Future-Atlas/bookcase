@@ -15,6 +15,9 @@ const SEO_PATH_PATTERN =
   /^\/(?:featured-books|genre\/.*|book\/.*|user\/.*|users\/.*|profile\/.*|privacy|terms|community-guidelines|infringement-policy|external-transmission|contact|about)$/;
 const LEGAL_PATH_PATTERN =
   /^\/(privacy|terms|community-guidelines|infringement-policy|external-transmission)$/;
+const LEGACY_BOOK_REDIRECTS = new Map([
+  ["/book/nanji-hoshi-no-gotoku", "/book/9784065281499"],
+]);
 const CSP_REPORT_ONLY = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -145,6 +148,11 @@ async function routeRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/{2,}/g, "/");
 
+  const canonicalBookPath = LEGACY_BOOK_REDIRECTS.get(path);
+  if (canonicalBookPath) {
+    return redirect(request, canonicalBookPath);
+  }
+
   if ((env.APP_ENV !== "production" || url.hostname.endsWith(".workers.dev")) && path === "/robots.txt") {
     return new Response("User-agent: *\nDisallow: /\n", {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
@@ -228,6 +236,7 @@ export default {
 
 export const _test = {
   BOT_PATTERN,
+  LEGACY_BOOK_REDIRECTS,
   SEO_PATH_PATTERN,
   VercelResponseAdapter,
   queryFromUrl,
