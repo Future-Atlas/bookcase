@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../config/feature_flags.dart';
 import '../services/supabase_service.dart';
 import '../api/rakuten_api.dart';
 import '../models/book.dart';
@@ -299,7 +300,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: FeatureFlags.wantToReadUiEnabled ? 4 : 3, vsync: this);
     _loadProfileData();
   }
 
@@ -1000,7 +1001,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           _buildPostsTab(),
                           _buildReadBooksTab(),
                           _buildFavoritesTab(),
-                          _buildGridTab(
+                          if (FeatureFlags.wantToReadUiEnabled) _buildGridTab(
                             _wantToRead,
                             '「読みたい！」作品はありません。',
                             showDescription: true,
@@ -1270,7 +1271,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             if (!blocked) ...[
               const SizedBox(height: 8),
               const Text(
-                'フォローリクエストが承認されると、投稿・My 本棚・お気に入り・「読みたい！」を確認できます。',
+                'フォローリクエストが承認されると、投稿・My 本棚・お気に入りを確認できます。',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -1315,7 +1316,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           fontSize: 13,
         ),
         tabs: isMobile
-            ? const [
+            ? [
                 Tab(
                   child: SizedBox(width: 56, child: Center(child: Text('投稿'))),
                 ),
@@ -1331,18 +1332,18 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     child: Center(child: Text('お気に入り')),
                   ),
                 ),
-                Tab(
+                if (FeatureFlags.wantToReadUiEnabled) Tab(
                   child: SizedBox(
                     width: 94,
                     child: Center(child: Text('読みたい！')),
                   ),
                 ),
               ]
-            : const [
-                Tab(text: '投稿'),
-                Tab(text: 'My 本棚'),
-                Tab(text: 'お気に入り'),
-                Tab(text: '読みたい！'),
+            : [
+                const Tab(text: '投稿'),
+                const Tab(text: 'My 本棚'),
+                const Tab(text: 'お気に入り'),
+                if (FeatureFlags.wantToReadUiEnabled) const Tab(text: '読みたい！'),
               ],
       ),
     );
@@ -1873,7 +1874,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   Future<void> _showSearchedBookDetailDialog(Book book) async {
     final service = Provider.of<SupabaseService>(context, listen: false);
     final isReadFuture = service.isBookReadByCurrentUser(bookId: book.id);
-    final isWantedFuture = service.isBookWantedByCurrentUser(book.id);
+    final isWantedFuture = FeatureFlags.wantToReadUiEnabled
+        ? service.isBookWantedByCurrentUser(book.id)
+        : Future<bool>.value(false);
     final postsFuture = () async {
       final posts = await service.fetchPostsForBook(book.id);
       final replies = await service.fetchRepliesForPosts(
@@ -1981,7 +1984,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              Expanded(
+                              if (FeatureFlags.wantToReadUiEnabled) Expanded(
                                 child: FutureBuilder<bool>(
                                   future: isWantedFuture,
                                   builder: (context, wantedSnapshot) {
