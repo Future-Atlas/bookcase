@@ -3,4 +3,7 @@ abstract final class FeatureFlags {
   // billing disclosures are ready for publication. Keep the backend and
   // tests in place so the feature can be re-enabled with a single flag.
   static const bool subscriptionUiEnabled = false;
+
+  // The want-to-read entry points launch alongside subscriptions; favorites stay public.
+  static const bool wantToReadUiEnabled = subscriptionUiEnabled;
 }
