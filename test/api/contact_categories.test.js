@@ -9,12 +9,13 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
 }
 
-test("contact form exposes billing/refund and fraud categories", () => {
+test("contact form hides billing/refund until subscriptions launch", () => {
   const source = read("lib/screens/contact_screen.dart");
 
-  assert.match(source, /'billing': '料金・返金'/);
+  assert.doesNotMatch(source, /'billing': '料金・返金'/);
   assert.match(source, /'fraud': '不正利用'/);
-  assert.match(source, /料金・返金、不正利用に関するご連絡/);
+  assert.doesNotMatch(source, /料金・返金/);
+  assert.match(source, /アカウント、不正利用に関するご連絡/);
 });
 
 test("contact category migration allows the UI category keys", () => {

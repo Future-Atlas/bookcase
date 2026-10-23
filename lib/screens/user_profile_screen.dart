@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../config/feature_flags.dart';
 import '../services/supabase_service.dart';
 import '../api/rakuten_api.dart';
 import '../models/book.dart';
@@ -299,7 +300,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(
+      length: FeatureFlags.favoritesUiEnabled ? 4 : 3,
+      vsync: this,
+    );
     _loadProfileData();
   }
 
@@ -436,13 +440,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final colls = canLoadContent
         ? await service.fetchUserCollections(profileId)
         : <Book>[];
-    final favs = canLoadContent
+    final favs = canLoadContent && FeatureFlags.favoritesUiEnabled
         ? await service.fetchUserFavorites(profileId)
         : <Book>[];
     final wanted = canLoadContent
         ? await service.fetchUserWantToRead(profileId)
         : <Book>[];
-    final favoriteLimit = relationship.isOwnProfile
+    final favoriteLimit =
+        FeatureFlags.favoritesUiEnabled && relationship.isOwnProfile
         ? await service.fetchCurrentFavoriteLimit()
         : SupabaseService.standardFavoriteLimit;
     final postedBookIds = posts.map((post) => post.bookId).toSet();
@@ -999,7 +1004,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                         children: [
                           _buildPostsTab(),
                           _buildReadBooksTab(),
-                          _buildFavoritesTab(),
+                          if (FeatureFlags.favoritesUiEnabled)
+                            _buildFavoritesTab(),
                           _buildGridTab(
                             _wantToRead,
                             '「読みたい！」作品はありません。',
@@ -1270,7 +1276,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             if (!blocked) ...[
               const SizedBox(height: 8),
               const Text(
-                'フォローリクエストが承認されると、投稿・My 本棚・お気に入り・「読みたい！」を確認できます。',
+                'フォローリクエストが承認されると、投稿・My 本棚・「読みたい！」を確認できます。',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -1325,12 +1331,13 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     child: Center(child: Text('My 本棚')),
                   ),
                 ),
-                Tab(
-                  child: SizedBox(
-                    width: 100,
-                    child: Center(child: Text('お気に入り')),
+                if (FeatureFlags.favoritesUiEnabled)
+                  Tab(
+                    child: SizedBox(
+                      width: 100,
+                      child: Center(child: Text('お気に入り')),
+                    ),
                   ),
-                ),
                 Tab(
                   child: SizedBox(
                     width: 94,
@@ -1341,7 +1348,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             : const [
                 Tab(text: '投稿'),
                 Tab(text: 'My 本棚'),
-                Tab(text: 'お気に入り'),
+                if (FeatureFlags.favoritesUiEnabled) Tab(text: 'お気に入り'),
                 Tab(text: '読みたい！'),
               ],
       ),
@@ -1378,15 +1385,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       onWantToRead: _isOwnProfile
                           ? null
                           : () => _toggleWantToReadFromPost(post),
-                      onReactionUsers: (reaction) => _openEngagementUsers(
-                        post,
-                        reaction: reaction,
-                      ),
+                      onReactionUsers: (reaction) =>
+                          _openEngagementUsers(post, reaction: reaction),
                       onWantToReadUsers: () =>
                           _openEngagementUsers(post, wantToRead: true),
                       onDelete: _isOwnProfile ? () => _deletePost(post) : null,
                       onEdit: _isOwnProfile ? () => _editPost(post) : null,
-                      onFavorite: _isOwnProfile
+                      onFavorite:
+                          FeatureFlags.favoritesUiEnabled && _isOwnProfile
                           ? () => _toggleFavorite(post.bookId, post.bookTitle)
                           : null,
                       favoriteLabel: _isFavorited(post.bookId)
@@ -1395,8 +1401,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       onReport: _isOwnProfile
                           ? null
                           : () => _reportPost(post.id),
-                      onReply: (parentReply) =>
-                          _replyToPost(post, parentReply),
+                      onReply: (parentReply) => _replyToPost(post, parentReply),
                       onReplyReport: _reportReply,
                       concealReplySpoiler: (reply) {
                         final profileId = Provider.of<SupabaseService>(
