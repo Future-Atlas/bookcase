@@ -2955,6 +2955,12 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
+  bool _isValidPostRating(double rating) =>
+      rating.isFinite &&
+      rating >= 0 &&
+      rating <= 5 &&
+      (rating - (rating * 10).round() / 10.0).abs() < 0.0000001;
+
   Future<bool> createPost({
     required Book book,
     required double rating,
@@ -2966,6 +2972,7 @@ class SupabaseService extends ChangeNotifier {
       debugPrint('Cannot create post: no authenticated user.');
       return false;
     }
+    if (!_isValidPostRating(rating)) return false;
     if (await isBookReadByCurrentUser(bookId: book.id)) {
       debugPrint('Cannot create post: this user already posted this book.');
       return false;
@@ -3069,7 +3076,7 @@ class SupabaseService extends ChangeNotifier {
       allowNewLines: true,
       maxLength: 1000,
     );
-    if (trimmedComment.isEmpty || rating < 1 || rating > 5) return false;
+    if (trimmedComment.isEmpty || !_isValidPostRating(rating)) return false;
 
     final isAgeRestricted =
         post.isAgeRestricted ||
