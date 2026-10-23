@@ -3431,7 +3431,7 @@ CREATE TABLE IF NOT EXISTS "public"."posts" (
     "is_age_restricted" boolean DEFAULT false NOT NULL,
     "is_spoiler" boolean DEFAULT false NOT NULL,
     "edited_at" timestamp with time zone,
-    CONSTRAINT "posts_rating_check" CHECK ((("rating" >= (1.0)::double precision) AND ("rating" <= (5.0)::double precision)))
+    CONSTRAINT "posts_rating_check" CHECK ((("rating" >= (0.0)::double precision) AND ("rating" <= (5.0)::double precision)))
 );
 
 
