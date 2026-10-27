@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'config/app_environment.dart';
@@ -33,6 +34,9 @@ final supabaseService = SupabaseService();
 final themeService = ThemeService();
 
 void main() async {
+  // Keep Flutter web routes on normal paths (/login, /posts/{id}) instead of /#/.
+  // This is a no-op on Android and iOS.
+  usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
 
   await themeService.initialize();
@@ -359,26 +363,20 @@ class _MainNavigationShellState extends State<MainNavigationShell>
     final currentUri = Uri.base;
     final currentAppPath = _currentAppPathFromUri(currentUri);
     final hasTransientQuery = _hasTransientQuery(currentUri);
-    if (currentAppPath == targetPath && !hasTransientQuery) return;
+    // A legacy hash URL also needs canonicalization even if its logical
+    // destination matches the current page.
+    if (currentAppPath == targetPath &&
+        !hasTransientQuery &&
+        !currentUri.fragment.startsWith('/')) {
+      return;
+    }
 
-    final sanitizedQuery = _sanitizedQuery(currentUri);
-    final sanitizedFragmentQuery = _sanitizedFragmentQuery(currentUri);
-
-    final targetUri = currentUri.fragment.startsWith('/')
-        ? Uri(
-            path: currentUri.path.isEmpty ? '/' : currentUri.path,
-            queryParameters: sanitizedQuery.isEmpty ? null : sanitizedQuery,
-            fragment: Uri(
-              path: targetPath,
-              queryParameters: sanitizedFragmentQuery.isEmpty
-                  ? null
-                  : sanitizedFragmentQuery,
-            ).toString(),
-          )
-        : Uri(
-            path: targetPath,
-            queryParameters: sanitizedQuery.isEmpty ? null : sanitizedQuery,
-          );
+    final sanitizedQuery = _sanitizedQuery(currentUri)
+      ..addAll(_sanitizedFragmentQuery(currentUri));
+    final targetUri = Uri(
+      path: targetPath,
+      queryParameters: sanitizedQuery.isEmpty ? null : sanitizedQuery,
+    );
 
     SystemNavigator.routeInformationUpdated(uri: targetUri, replace: replace);
   }

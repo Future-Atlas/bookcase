@@ -38,6 +38,20 @@ test("staging serves Flutter SPA assets with noindex headers", async () => {
   ]);
 });
 
+test("clean app paths are noindex in staging and on production custom domain", async () => {
+  const routes = ["/login", "/mypage", "/settings", "/help", "/moderation"];
+  for (const appEnv of ["staging", "production"]) {
+    const { env, requests } = environment({ appEnv });
+    for (const path of routes) {
+      const host = appEnv === "staging" ? "staging.example.test" : "www.sharemarium.com";
+      const response = await worker.fetch(new Request(`https://${host}${path}`), env);
+      assert.equal(response.status, 200, path);
+      assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow", path);
+    }
+    assert.equal(requests.length, routes.length);
+  }
+});
+
 test("staging robots.txt blocks all crawlers without loading assets", async () => {
   const { env, requests } = environment();
   const response = await worker.fetch(
@@ -160,7 +174,7 @@ test("Workers Free serves static Flutter assets without invoking Worker first", 
   const config = JSON.parse(readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8"));
   const patterns = config.assets.run_worker_first;
   assert.ok(Array.isArray(patterns));
-  for (const route of ["/", "/api/*", "/sitemap.xml", "/robots.txt", "/posts/*", "/book/*", "/privacy"]) {
+  for (const route of ["/", "/api/*", "/sitemap.xml", "/robots.txt", "/login", "/mypage", "/settings", "/help", "/moderation", "/posts/*", "/book/*", "/privacy"]) {
     assert.ok(patterns.includes(route), route + " must execute the Worker for SEO/API");
   }
   assert.ok(!patterns.includes("/*"), "Worker must not run for every asset");
