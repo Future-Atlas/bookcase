@@ -6,8 +6,11 @@ const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "../..");
 const html = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-const match = html.match(/<script id="sharemarium-legacy-hash-route">([\\s\\S]*?)<\\/script>/);
-assert.ok(match, "legacy hash migration must run before Flutter starts");
+const tag = '<script id="sharemarium-legacy-hash-route">';
+const start = html.indexOf(tag);
+const end = html.indexOf("</script>", start);
+assert.ok(start >= 0 && end > start, "legacy hash migration must run before Flutter starts");
+const migrationCode = html.slice(start + tag.length, end);
 
 function redirectLegacyUrl(href) {
   const location = new URL(href);
@@ -20,7 +23,7 @@ function redirectLegacyUrl(href) {
       replacedUrl = new URL(url, location.origin).href;
     },
   };
-  vm.runInNewContext(match[1], { window: { location, history }, URL, URLSearchParams });
+  vm.runInNewContext(migrationCode, { window: { location, history }, URL, URLSearchParams });
   return { url: replacedUrl ?? href, wasReplaced: replacedUrl !== null, state: replacedState };
 }
 
@@ -72,6 +75,6 @@ test("legacy migration executes in the HTML head, before Flutter bootstraps", ()
   assert.ok(migrationPos < html.indexOf("</head>"));
   const main = fs.readFileSync(path.join(root, "lib/main.dart"), "utf8");
   const pubspec = fs.readFileSync(path.join(root, "pubspec.yaml"), "utf8");
-  assert.match(main, /usePathUrlStrategy\\(\\);/);
-  assert.match(pubspec, /flutter_web_plugins:\\s*\\n\\s*sdk: flutter/);
+  assert.ok(main.includes("usePathUrlStrategy();"));
+  assert.ok(pubspec.includes("flutter_web_plugins:\n    sdk: flutter"));
 });
