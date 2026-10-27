@@ -13,6 +13,36 @@
   -->
     <base href="$FLUTTER_BASE_HREF" />
 
+    <script id="sharemarium-legacy-hash-route">
+      (() => {
+        // Keep old /#/login, /#/book/ISBN, /#/posts/ID links usable.
+        // Do not touch OAuth callback fragments such as #access_token=...
+        const { location, history } = window;
+        if (location.pathname !== "/" && location.pathname !== "/index.html") {
+          return;
+        }
+        const hash = location.hash || "";
+        if (!hash.startsWith("#/") || hash.startsWith("#//")) return;
+
+        let route;
+        try {
+          route = new URL(hash.slice(1), location.origin);
+        } catch (_) {
+          return;
+        }
+        if (route.origin !== location.origin || !route.pathname.startsWith("/")) {
+          return;
+        }
+
+        const query = new URLSearchParams(location.search);
+        route.searchParams.forEach((value, key) => query.set(key, value));
+        const search = query.toString();
+        const cleanPath = route.pathname + (search ? `?${search}` : "");
+        // Replace the current history entry instead of adding a new one.
+        history.replaceState(history.state, "", cleanPath);
+      })();
+    </script>
+
     <meta charset="UTF-8" />
     <meta content="IE=Edge" http-equiv="X-UA-Compatible" />
     <meta
