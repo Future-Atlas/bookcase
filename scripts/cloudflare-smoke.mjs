@@ -33,12 +33,15 @@ function validateBaseUrl() {
   record("base_url", "ok");
 }
 
-async function check(name, pathname, { bot = false, contentType } = {}) {
+async function check(name, pathname, { bot = false, htmlNavigation = false, contentType } = {}) {
   let response;
   try {
     response = await fetch(`${baseUrl}${pathname}`, {
       redirect: "manual",
-      headers: bot ? { "User-Agent": "Googlebot/2.1" } : {},
+      headers: {
+        ...(bot ? { "User-Agent": "Googlebot/2.1" } : {}),
+        ...(htmlNavigation ? { Accept: "text/html" } : {}),
+      },
     });
   } catch {
     record(name, "network_error");
@@ -61,6 +64,10 @@ async function check(name, pathname, { bot = false, contentType } = {}) {
 
 validateBaseUrl();
 await check("home", "/", { contentType: "text/html" });
+// A clean Flutter path must be served as an SPA navigation, not a 404.
+await check("login_path", "/login", { htmlNavigation: true, contentType: "text/html" });
+await check("settings_path", "/settings", { htmlNavigation: true, contentType: "text/html" });
+await check("posts_human", "/posts", { htmlNavigation: true, contentType: "text/html" });
 await check("api", "/api/home-ad-eligibility", { contentType: "application/json" });
 await check("sitemap", "/sitemap.xml", { contentType: "application/xml" });
 await check("privacy", "/privacy?seo_preview=1", { contentType: "text/html" });
