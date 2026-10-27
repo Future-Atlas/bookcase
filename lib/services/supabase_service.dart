@@ -18,6 +18,7 @@ import 'content_safety_service.dart';
 import 'input_security_service.dart';
 import 'timeline_ranking_service.dart';
 import '../utils/dev_logger.dart';
+import '../utils/public_user_id.dart';
 
 // Kept for local troubleshooting. `debugLog` is silent outside debug builds.
 void debugPrint(String? message, {int? wrapWidth}) {
@@ -620,7 +621,7 @@ class SupabaseService extends ChangeNotifier {
     if (!_isInitialized || _client == null || profileId.isEmpty) return false;
 
     try {
-      final normalized = userId.trim().toLowerCase();
+      final normalized = normalizePublicUserId(userId);
       final existing = await _client!
           .from('profiles')
           .select('id')
@@ -635,7 +636,8 @@ class SupabaseService extends ChangeNotifier {
   }
 
   Future<String?> completeRegistration({
-    required String fullName,
+    required String familyName,
+    required String givenName,
     required DateTime birthDate,
     required String phoneNumber,
     required String username,
@@ -648,12 +650,19 @@ class SupabaseService extends ChangeNotifier {
       return 'ログイン状態を確認できませんでした。';
     }
 
-    final fullNameError = InputSecurityService.validateSafeText(
-      fullName,
-      fieldLabel: '氏名',
-      maxLength: 100,
+    final familyNameError = InputSecurityService.validateSafeText(
+      familyName,
+      fieldLabel: '姓',
+      maxLength: 50,
     );
-    if (fullNameError != null) return fullNameError;
+    if (familyNameError != null) return familyNameError;
+
+    final givenNameError = InputSecurityService.validateSafeText(
+      givenName,
+      fieldLabel: '名',
+      maxLength: 50,
+    );
+    if (givenNameError != null) return givenNameError;
 
     final usernameError = InputSecurityService.validateSafeText(
       username,
@@ -662,16 +671,20 @@ class SupabaseService extends ChangeNotifier {
     );
     if (usernameError != null) return usernameError;
 
+    final userIdError = validatePublicUserId(userId);
+    if (userIdError != null) return userIdError;
+
     try {
       await _ensureProfile(userId: profileId);
       await _client!.rpc(
         'complete_registration',
         params: {
-          'p_full_name': fullName.trim(),
+          'p_family_name': familyName.trim(),
+          'p_given_name': givenName.trim(),
           'p_birth_date': birthDate.toIso8601String().split('T').first,
           'p_phone_number': _normalizePhoneNumber(phoneNumber),
           'p_username': username.trim(),
-          'p_user_id': userId.trim().toLowerCase(),
+          'p_user_id': normalizePublicUserId(userId),
           'p_privacy_password': privacyPassword,
           'p_guardian_consent': guardianConsentDeclared,
           'p_terms_version': LegalDocumentVersions.terms,
@@ -714,7 +727,7 @@ class SupabaseService extends ChangeNotifier {
       return await _client!
           .from('account_details')
           .select(
-            'full_name, birth_date, phone_number, phone_verified_at, updated_at',
+            'family_name, given_name, full_name, birth_date, phone_number, phone_verified_at, updated_at',
           )
           .eq('profile_id', profileId)
           .maybeSingle();
@@ -967,7 +980,8 @@ class SupabaseService extends ChangeNotifier {
 
   Future<String?> updatePrivateAccountDetails({
     required String password,
-    required String fullName,
+    required String familyName,
+    required String givenName,
     required DateTime birthDate,
     required String phoneNumber,
     required String email,
@@ -976,12 +990,19 @@ class SupabaseService extends ChangeNotifier {
       return 'ログイン状態を確認できませんでした。';
     }
 
-    final fullNameError = InputSecurityService.validateSafeText(
-      fullName,
-      fieldLabel: '氏名',
-      maxLength: 100,
+    final familyNameError = InputSecurityService.validateSafeText(
+      familyName,
+      fieldLabel: '姓',
+      maxLength: 50,
     );
-    if (fullNameError != null) return fullNameError;
+    if (familyNameError != null) return familyNameError;
+
+    final givenNameError = InputSecurityService.validateSafeText(
+      givenName,
+      fieldLabel: '名',
+      maxLength: 50,
+    );
+    if (givenNameError != null) return givenNameError;
 
     try {
       final verified = await verifyPrivacyPassword(password);
@@ -998,7 +1019,8 @@ class SupabaseService extends ChangeNotifier {
         'update_private_account_details',
         params: {
           'p_password': password,
-          'p_full_name': fullName.trim(),
+          'p_family_name': familyName.trim(),
+          'p_given_name': givenName.trim(),
           'p_birth_date': birthDate.toIso8601String().split('T').first,
           'p_phone_number': _normalizePhoneNumber(phoneNumber),
         },
