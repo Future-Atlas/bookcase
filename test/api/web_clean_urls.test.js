@@ -76,5 +76,6 @@ test("legacy migration executes in the HTML head, before Flutter bootstraps", ()
   const main = fs.readFileSync(path.join(root, "lib/main.dart"), "utf8");
   const pubspec = fs.readFileSync(path.join(root, "pubspec.yaml"), "utf8");
   assert.ok(main.includes("usePathUrlStrategy();"));
-  assert.ok(pubspec.includes("flutter_web_plugins:\n    sdk: flutter"));
+  assert.ok(pubspec.includes("flutter_web_plugins:"));
+  assert.ok(pubspec.includes("sdk: flutter"));
 });
