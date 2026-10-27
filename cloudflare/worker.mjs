@@ -15,6 +15,8 @@ const SEO_PATH_PATTERN =
   /^\/(?:featured-books|genre\/.*|book\/.*|user\/.*|users\/.*|profile\/.*|privacy|terms|community-guidelines|infringement-policy|external-transmission|contact|about)$/;
 const LEGAL_PATH_PATTERN =
   /^\/(privacy|terms|community-guidelines|infringement-policy|external-transmission)$/;
+// Utility and account screens should not appear as independent search results.
+const NOINDEX_APP_PATHS = new Set(["/login", "/mypage", "/settings", "/help", "/moderation"]);
 const CSP_REPORT_ONLY = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -127,11 +129,14 @@ function withEnvironmentHeaders(response, env, request) {
     "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
   );
   headers.set("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY);
-  const hostname = new URL(request.url).hostname;
+  const requestUrl = new URL(request.url);
+  const hostname = requestUrl.hostname;
   if (env.APP_ENV === "production" && hostname === "www.sharemarium.com") {
     headers.set("Strict-Transport-Security", "max-age=31536000");
   }
-  if (env.APP_ENV !== "production" || hostname.endsWith(".workers.dev")) {
+  if (env.APP_ENV !== "production" ||
+      hostname.endsWith(".workers.dev") ||
+      NOINDEX_APP_PATHS.has(requestUrl.pathname)) {
     headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   return new Response(response.body, {
