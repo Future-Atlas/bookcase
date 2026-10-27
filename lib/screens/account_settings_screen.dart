@@ -913,8 +913,17 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
       listen: false,
     ).fetchCurrentSettingsData();
     if (!mounted) return;
-    _familyNameController.text = data?['family_name']?.toString() ?? '';
-    _givenNameController.text = data?['given_name']?.toString() ?? '';
+    final storedFamilyName = data?['family_name']?.toString().trim() ?? '';
+    final storedGivenName = data?['given_name']?.toString().trim() ?? '';
+    final legacyFullName = data?['full_name']?.toString().trim() ?? '';
+    if (storedFamilyName.isNotEmpty || storedGivenName.isNotEmpty) {
+      _familyNameController.text = storedFamilyName;
+      _givenNameController.text = storedGivenName;
+    } else if (legacyFullName.isNotEmpty) {
+      final nameParts = legacyFullName.split(RegExp(r'\s+'));
+      _familyNameController.text = nameParts.first;
+      _givenNameController.text = nameParts.skip(1).join(' ');
+    }
     _phoneController.text = data?['phone_number']?.toString() ?? '';
     _emailController.text = data?['email']?.toString() ?? '';
     _birthDate = DateTime.tryParse(data?['birth_date']?.toString() ?? '');
