@@ -676,20 +676,40 @@ class SupabaseService extends ChangeNotifier {
 
     try {
       await _ensureProfile(userId: profileId);
-      await _client!.rpc(
-        'complete_registration',
-        params: {
-          'p_family_name': familyName.trim(),
-          'p_given_name': givenName.trim(),
-          'p_birth_date': birthDate.toIso8601String().split('T').first,
-          'p_phone_number': _normalizePhoneNumber(phoneNumber),
-          'p_username': username.trim(),
-          'p_user_id': normalizePublicUserId(userId),
-          'p_privacy_password': privacyPassword,
-          'p_guardian_consent': guardianConsentDeclared,
-          'p_terms_version': LegalDocumentVersions.terms,
-        },
-      );
+      final birthDateValue = birthDate.toIso8601String().split('T').first;
+      final phoneValue = _normalizePhoneNumber(phoneNumber);
+      final normalizedUserId = normalizePublicUserId(userId);
+      try {
+        await _client!.rpc(
+          'complete_registration',
+          params: {
+            'p_family_name': familyName.trim(),
+            'p_given_name': givenName.trim(),
+            'p_birth_date': birthDateValue,
+            'p_phone_number': phoneValue,
+            'p_username': username.trim(),
+            'p_user_id': normalizedUserId,
+            'p_privacy_password': privacyPassword,
+            'p_guardian_consent': guardianConsentDeclared,
+            'p_terms_version': LegalDocumentVersions.terms,
+          },
+        );
+      } on PostgrestException catch (e) {
+        if (!_isSplitNameSchemaUnavailable(e)) rethrow;
+        await _client!.rpc(
+          'complete_registration',
+          params: {
+            'p_full_name': '${familyName.trim()} ${givenName.trim()}',
+            'p_birth_date': birthDateValue,
+            'p_phone_number': phoneValue,
+            'p_username': username.trim(),
+            'p_user_id': normalizedUserId,
+            'p_privacy_password': privacyPassword,
+            'p_guardian_consent': guardianConsentDeclared,
+            'p_terms_version': LegalDocumentVersions.terms,
+          },
+        );
+      }
       _cachedRegistrationUserId = profileId;
       _hasCompletedRegistrationCache = true;
       notifyListeners();
@@ -719,18 +739,38 @@ class SupabaseService extends ChangeNotifier {
     return source.trim().replaceAll(RegExp(r'[^0-9+]'), '');
   }
 
+  bool _isSplitNameSchemaUnavailable(PostgrestException error) {
+    final message = error.message.toLowerCase();
+    return error.code == 'PGRST202' ||
+        error.code == 'PGRST204' ||
+        error.code == '42703' ||
+        message.contains('family_name') ||
+        message.contains('given_name');
+  }
+
   Future<Map<String, dynamic>?> fetchCurrentAccountDetails() async {
     final profileId = activeProfileId;
     if (!_isInitialized || _client == null || profileId.isEmpty) return null;
 
     try {
-      return await _client!
-          .from('account_details')
-          .select(
-            'family_name, given_name, full_name, birth_date, phone_number, phone_verified_at, updated_at',
-          )
-          .eq('profile_id', profileId)
-          .maybeSingle();
+      try {
+        return await _client!
+            .from('account_details')
+            .select(
+              'family_name, given_name, full_name, birth_date, phone_number, phone_verified_at, updated_at',
+            )
+            .eq('profile_id', profileId)
+            .maybeSingle();
+      } on PostgrestException catch (e) {
+        if (!_isSplitNameSchemaUnavailable(e)) rethrow;
+        return await _client!
+            .from('account_details')
+            .select(
+              'full_name, birth_date, phone_number, phone_verified_at, updated_at',
+            )
+            .eq('profile_id', profileId)
+            .maybeSingle();
+      }
     } catch (e) {
       debugPrint('Error fetching account details: $e');
       return null;
@@ -1015,16 +1055,32 @@ class SupabaseService extends ChangeNotifier {
           emailRedirectTo: _redirectUrl,
         );
       }
-      final updated = await _client!.rpc(
-        'update_private_account_details',
-        params: {
-          'p_password': password,
-          'p_family_name': familyName.trim(),
-          'p_given_name': givenName.trim(),
-          'p_birth_date': birthDate.toIso8601String().split('T').first,
-          'p_phone_number': _normalizePhoneNumber(phoneNumber),
-        },
-      );
+      final birthDateValue = birthDate.toIso8601String().split('T').first;
+      final phoneValue = _normalizePhoneNumber(phoneNumber);
+      dynamic updated;
+      try {
+        updated = await _client!.rpc(
+          'update_private_account_details',
+          params: {
+            'p_password': password,
+            'p_family_name': familyName.trim(),
+            'p_given_name': givenName.trim(),
+            'p_birth_date': birthDateValue,
+            'p_phone_number': phoneValue,
+          },
+        );
+      } on PostgrestException catch (e) {
+        if (!_isSplitNameSchemaUnavailable(e)) rethrow;
+        updated = await _client!.rpc(
+          'update_private_account_details',
+          params: {
+            'p_password': password,
+            'p_full_name': '${familyName.trim()} ${givenName.trim()}',
+            'p_birth_date': birthDateValue,
+            'p_phone_number': phoneValue,
+          },
+        );
+      }
       if (updated != true) return 'パスワードが正しくありません。';
       notifyListeners();
       return null;
