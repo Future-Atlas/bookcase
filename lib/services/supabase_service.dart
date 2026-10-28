@@ -638,6 +638,7 @@ class SupabaseService extends ChangeNotifier {
   Future<String?> completeRegistration({
     required String familyName,
     required String givenName,
+    required String gender,
     required DateTime birthDate,
     required String phoneNumber,
     required String username,
@@ -664,6 +665,10 @@ class SupabaseService extends ChangeNotifier {
     );
     if (givenNameError != null) return givenNameError;
 
+    if (!_allowedAccountGenders.contains(gender)) {
+      return '性別を選択してください。';
+    }
+
     final usernameError = InputSecurityService.validateSafeText(
       username,
       fieldLabel: 'ユーザー名',
@@ -685,6 +690,7 @@ class SupabaseService extends ChangeNotifier {
           params: {
             'p_family_name': familyName.trim(),
             'p_given_name': givenName.trim(),
+            'p_gender': gender,
             'p_birth_date': birthDateValue,
             'p_phone_number': phoneValue,
             'p_username': username.trim(),
@@ -695,20 +701,41 @@ class SupabaseService extends ChangeNotifier {
           },
         );
       } on PostgrestException catch (e) {
-        if (!_isSplitNameSchemaUnavailable(e)) rethrow;
-        await _client!.rpc(
-          'complete_registration',
-          params: {
-            'p_full_name': '${familyName.trim()} ${givenName.trim()}',
-            'p_birth_date': birthDateValue,
-            'p_phone_number': phoneValue,
-            'p_username': username.trim(),
-            'p_user_id': normalizedUserId,
-            'p_privacy_password': privacyPassword,
-            'p_guardian_consent': guardianConsentDeclared,
-            'p_terms_version': LegalDocumentVersions.terms,
-          },
-        );
+        if (!_isGenderSchemaUnavailable(e) &&
+            !_isSplitNameSchemaUnavailable(e)) {
+          rethrow;
+        }
+        try {
+          await _client!.rpc(
+            'complete_registration',
+            params: {
+              'p_family_name': familyName.trim(),
+              'p_given_name': givenName.trim(),
+              'p_birth_date': birthDateValue,
+              'p_phone_number': phoneValue,
+              'p_username': username.trim(),
+              'p_user_id': normalizedUserId,
+              'p_privacy_password': privacyPassword,
+              'p_guardian_consent': guardianConsentDeclared,
+              'p_terms_version': LegalDocumentVersions.terms,
+            },
+          );
+        } on PostgrestException catch (splitNameError) {
+          if (!_isSplitNameSchemaUnavailable(splitNameError)) rethrow;
+          await _client!.rpc(
+            'complete_registration',
+            params: {
+              'p_full_name': '${familyName.trim()} ${givenName.trim()}',
+              'p_birth_date': birthDateValue,
+              'p_phone_number': phoneValue,
+              'p_username': username.trim(),
+              'p_user_id': normalizedUserId,
+              'p_privacy_password': privacyPassword,
+              'p_guardian_consent': guardianConsentDeclared,
+              'p_terms_version': LegalDocumentVersions.terms,
+            },
+          );
+        }
       }
       _cachedRegistrationUserId = profileId;
       _hasCompletedRegistrationCache = true;
@@ -739,6 +766,20 @@ class SupabaseService extends ChangeNotifier {
     return source.trim().replaceAll(RegExp(r'[^0-9+]'), '');
   }
 
+  static const Set<String> _allowedAccountGenders = {
+    'female',
+    'male',
+    'undisclosed',
+  };
+
+  bool _isGenderSchemaUnavailable(PostgrestException error) {
+    final message = error.message.toLowerCase();
+    return error.code == 'PGRST202' ||
+        error.code == 'PGRST204' ||
+        error.code == '42703' ||
+        message.contains('gender');
+  }
+
   bool _isSplitNameSchemaUnavailable(PostgrestException error) {
     final message = error.message.toLowerCase();
     return error.code == 'PGRST202' ||
@@ -757,19 +798,33 @@ class SupabaseService extends ChangeNotifier {
         return await _client!
             .from('account_details')
             .select(
-              'family_name, given_name, full_name, birth_date, phone_number, phone_verified_at, updated_at',
+              'family_name, given_name, full_name, gender, birth_date, phone_number, phone_verified_at, updated_at',
             )
             .eq('profile_id', profileId)
             .maybeSingle();
       } on PostgrestException catch (e) {
-        if (!_isSplitNameSchemaUnavailable(e)) rethrow;
-        return await _client!
-            .from('account_details')
-            .select(
-              'full_name, birth_date, phone_number, phone_verified_at, updated_at',
-            )
-            .eq('profile_id', profileId)
-            .maybeSingle();
+        if (!_isGenderSchemaUnavailable(e) &&
+            !_isSplitNameSchemaUnavailable(e)) {
+          rethrow;
+        }
+        try {
+          return await _client!
+              .from('account_details')
+              .select(
+                'family_name, given_name, full_name, birth_date, phone_number, phone_verified_at, updated_at',
+              )
+              .eq('profile_id', profileId)
+              .maybeSingle();
+        } on PostgrestException catch (splitNameError) {
+          if (!_isSplitNameSchemaUnavailable(splitNameError)) rethrow;
+          return await _client!
+              .from('account_details')
+              .select(
+                'full_name, birth_date, phone_number, phone_verified_at, updated_at',
+              )
+              .eq('profile_id', profileId)
+              .maybeSingle();
+        }
       }
     } catch (e) {
       debugPrint('Error fetching account details: $e');
@@ -1022,6 +1077,7 @@ class SupabaseService extends ChangeNotifier {
     required String password,
     required String familyName,
     required String givenName,
+    required String gender,
     required DateTime birthDate,
     required String phoneNumber,
     required String email,
@@ -1044,6 +1100,10 @@ class SupabaseService extends ChangeNotifier {
     );
     if (givenNameError != null) return givenNameError;
 
+    if (!_allowedAccountGenders.contains(gender)) {
+      return '性別を選択してください。';
+    }
+
     try {
       final verified = await verifyPrivacyPassword(password);
       if (!verified) return 'パスワードが正しくありません。';
@@ -1065,21 +1125,39 @@ class SupabaseService extends ChangeNotifier {
             'p_password': password,
             'p_family_name': familyName.trim(),
             'p_given_name': givenName.trim(),
+            'p_gender': gender,
             'p_birth_date': birthDateValue,
             'p_phone_number': phoneValue,
           },
         );
       } on PostgrestException catch (e) {
-        if (!_isSplitNameSchemaUnavailable(e)) rethrow;
-        updated = await _client!.rpc(
-          'update_private_account_details',
-          params: {
-            'p_password': password,
-            'p_full_name': '${familyName.trim()} ${givenName.trim()}',
-            'p_birth_date': birthDateValue,
-            'p_phone_number': phoneValue,
-          },
-        );
+        if (!_isGenderSchemaUnavailable(e) &&
+            !_isSplitNameSchemaUnavailable(e)) {
+          rethrow;
+        }
+        try {
+          updated = await _client!.rpc(
+            'update_private_account_details',
+            params: {
+              'p_password': password,
+              'p_family_name': familyName.trim(),
+              'p_given_name': givenName.trim(),
+              'p_birth_date': birthDateValue,
+              'p_phone_number': phoneValue,
+            },
+          );
+        } on PostgrestException catch (splitNameError) {
+          if (!_isSplitNameSchemaUnavailable(splitNameError)) rethrow;
+          updated = await _client!.rpc(
+            'update_private_account_details',
+            params: {
+              'p_password': password,
+              'p_full_name': '${familyName.trim()} ${givenName.trim()}',
+              'p_birth_date': birthDateValue,
+              'p_phone_number': phoneValue,
+            },
+          );
+        }
       }
       if (updated != true) return 'パスワードが正しくありません。';
       notifyListeners();
@@ -1596,6 +1674,20 @@ class SupabaseService extends ChangeNotifier {
           .select('id')
           .eq('profile_id', userId)
           .eq('bundle_version', LegalDocumentVersions.bundle)
+          .eq('terms_version', LegalDocumentVersions.terms)
+          .eq('privacy_version', LegalDocumentVersions.privacy)
+          .eq(
+            'community_guidelines_version',
+            LegalDocumentVersions.communityGuidelines,
+          )
+          .eq(
+            'infringement_policy_version',
+            LegalDocumentVersions.infringementPolicy,
+          )
+          .eq(
+            'external_transmission_version',
+            LegalDocumentVersions.externalTransmission,
+          )
           .maybeSingle();
       _cachedConsentUserId = userId;
       _hasCurrentLegalConsentCache = consent != null;
