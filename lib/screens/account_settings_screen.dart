@@ -893,7 +893,8 @@ class _PrivacySettingsScreen extends StatefulWidget {
 
 class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  final _familyNameController = TextEditingController();
+  final _givenNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   DateTime? _birthDate;
@@ -912,7 +913,17 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
       listen: false,
     ).fetchCurrentSettingsData();
     if (!mounted) return;
-    _nameController.text = data?['full_name']?.toString() ?? '';
+    final storedFamilyName = data?['family_name']?.toString().trim() ?? '';
+    final storedGivenName = data?['given_name']?.toString().trim() ?? '';
+    final legacyFullName = data?['full_name']?.toString().trim() ?? '';
+    if (storedFamilyName.isNotEmpty || storedGivenName.isNotEmpty) {
+      _familyNameController.text = storedFamilyName;
+      _givenNameController.text = storedGivenName;
+    } else if (legacyFullName.isNotEmpty) {
+      final nameParts = legacyFullName.split(RegExp(r'\s+'));
+      _familyNameController.text = nameParts.first;
+      _givenNameController.text = nameParts.skip(1).join(' ');
+    }
     _phoneController.text = data?['phone_number']?.toString() ?? '';
     _emailController.text = data?['email']?.toString() ?? '';
     _birthDate = DateTime.tryParse(data?['birth_date']?.toString() ?? '');
@@ -921,7 +932,8 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _familyNameController.dispose();
+    _givenNameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     super.dispose();
@@ -944,7 +956,8 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
     final error = await Provider.of<SupabaseService>(context, listen: false)
         .updatePrivateAccountDetails(
           password: widget.password,
-          fullName: _nameController.text,
+          familyName: _familyNameController.text,
+          givenName: _givenNameController.text,
           birthDate: _birthDate!,
           phoneNumber: _phoneController.text,
           email: _emailController.text,
@@ -977,10 +990,20 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
                       ),
                       const SizedBox(height: 18),
                       TextFormField(
-                        controller: _nameController,
-                        maxLength: 100,
+                        controller: _familyNameController,
+                        maxLength: 50,
                         decoration: const InputDecoration(
-                          labelText: '氏名',
+                          labelText: '姓（Family name）',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: _required,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _givenNameController,
+                        maxLength: 50,
+                        decoration: const InputDecoration(
+                          labelText: '名（Given name）',
                           border: OutlineInputBorder(),
                         ),
                         validator: _required,

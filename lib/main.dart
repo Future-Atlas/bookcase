@@ -26,6 +26,7 @@ import 'screens/account_suspension_gate.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/public_post_routes.dart';
 import 'widgets/public_posts_link.dart';
+import 'utils/initial_public_route.dart';
 
 enum _HeaderMenuAction { home, myPage, settings, help, moderation, logout }
 
@@ -67,6 +68,7 @@ class MyApp extends StatelessWidget {
 
     return MaterialApp(
       title: 'Sharemarium',
+      initialRoute: initialPublicRoute(Uri.base),
       debugShowCheckedModeBanner: false,
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         dragDevices: {
@@ -623,7 +625,12 @@ class _MainNavigationShellState extends State<MainNavigationShell>
             : ownHeaderColor;
         final menuIconColor = isDarkMode ? Colors.white : Colors.black;
         final popupMenuTextColor = isDarkMode ? Colors.black : Colors.black;
-        final headerSideWidth = service.isAuthenticated ? 146.0 : 104.0;
+        final mediaSize = MediaQuery.sizeOf(context);
+        final isPortraitPhone =
+            mediaSize.width < 600 && mediaSize.height > mediaSize.width;
+        final headerSideWidth = isPortraitPhone
+            ? 104.0
+            : (service.isAuthenticated ? 146.0 : 104.0);
 
         if (!service.isAuthenticated &&
             _currentScreenIndex == 1 &&
@@ -651,84 +658,89 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                         width: headerSideWidth,
                         child: Row(
                           children: [
-                            PopupMenuButton<_HeaderMenuAction>(
-                              tooltip: 'メニュー',
-                              icon: Icon(
-                                Icons.menu,
-                                size: 30,
-                                color: menuIconColor,
+                            SizedBox(
+                              width: isPortraitPhone ? 42 : 48,
+                              child: PopupMenuButton<_HeaderMenuAction>(
+                                tooltip: 'メニュー',
+                                padding: EdgeInsets.zero,
+                                icon: Icon(
+                                  Icons.menu,
+                                  size: 30,
+                                  color: menuIconColor,
+                                ),
+                                position: PopupMenuPosition.under,
+                                color: Colors.white,
+                                onSelected: _onMenuAction,
+                                itemBuilder: (context) => [
+                                  PopupMenuItem(
+                                    value: _HeaderMenuAction.home,
+                                    child: Text(
+                                      'ホーム',
+                                      style: TextStyle(
+                                        fontSize: 28 / 2,
+                                        color: popupMenuTextColor,
+                                      ),
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    value: _HeaderMenuAction.myPage,
+                                    child: Text(
+                                      'マイページ',
+                                      style: TextStyle(
+                                        fontSize: 28 / 2,
+                                        color: popupMenuTextColor,
+                                      ),
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    value: _HeaderMenuAction.settings,
+                                    child: Text(
+                                      '設定',
+                                      style: TextStyle(
+                                        fontSize: 28 / 2,
+                                        color: popupMenuTextColor,
+                                      ),
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    value: _HeaderMenuAction.help,
+                                    child: Text(
+                                      'ヘルプ',
+                                      style: TextStyle(
+                                        fontSize: 28 / 2,
+                                        color: popupMenuTextColor,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_isAdmin)
+                                    PopupMenuItem(
+                                      value: _HeaderMenuAction.moderation,
+                                      child: Text(
+                                        '管理',
+                                        style: TextStyle(
+                                          fontSize: 28 / 2,
+                                          color: popupMenuTextColor,
+                                        ),
+                                      ),
+                                    ),
+                                  if (service.isAuthenticated)
+                                    PopupMenuItem(
+                                      value: _HeaderMenuAction.logout,
+                                      child: Text(
+                                        'ログアウト',
+                                        style: TextStyle(
+                                          fontSize: 28 / 2,
+                                          color: popupMenuTextColor,
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
-                              position: PopupMenuPosition.under,
-                              color: Colors.white,
-                              onSelected: _onMenuAction,
-                              itemBuilder: (context) => [
-                                PopupMenuItem(
-                                  value: _HeaderMenuAction.home,
-                                  child: Text(
-                                    'ホーム',
-                                    style: TextStyle(
-                                      fontSize: 28 / 2,
-                                      color: popupMenuTextColor,
-                                    ),
-                                  ),
-                                ),
-                                PopupMenuItem(
-                                  value: _HeaderMenuAction.myPage,
-                                  child: Text(
-                                    'マイページ',
-                                    style: TextStyle(
-                                      fontSize: 28 / 2,
-                                      color: popupMenuTextColor,
-                                    ),
-                                  ),
-                                ),
-                                PopupMenuItem(
-                                  value: _HeaderMenuAction.settings,
-                                  child: Text(
-                                    '設定',
-                                    style: TextStyle(
-                                      fontSize: 28 / 2,
-                                      color: popupMenuTextColor,
-                                    ),
-                                  ),
-                                ),
-                                PopupMenuItem(
-                                  value: _HeaderMenuAction.help,
-                                  child: Text(
-                                    'ヘルプ',
-                                    style: TextStyle(
-                                      fontSize: 28 / 2,
-                                      color: popupMenuTextColor,
-                                    ),
-                                  ),
-                                ),
-                                if (_isAdmin)
-                                  PopupMenuItem(
-                                    value: _HeaderMenuAction.moderation,
-                                    child: Text(
-                                      '管理',
-                                      style: TextStyle(
-                                        fontSize: 28 / 2,
-                                        color: popupMenuTextColor,
-                                      ),
-                                    ),
-                                  ),
-                                if (service.isAuthenticated)
-                                  PopupMenuItem(
-                                    value: _HeaderMenuAction.logout,
-                                    child: Text(
-                                      'ログアウト',
-                                      style: TextStyle(
-                                        fontSize: 28 / 2,
-                                        color: popupMenuTextColor,
-                                      ),
-                                    ),
-                                  ),
-                              ],
                             ),
                             Expanded(
                               child: PublicPostsLink(
                                 compact: true,
+                                dense: isPortraitPhone,
                                 foregroundColor: headerColor,
                               ),
                             ),
@@ -764,22 +776,10 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                 ),
                               ),
                             SizedBox(
-                              width: 104,
+                              width: isPortraitPhone ? 42 : 104,
                               height: 36,
-                              child: ElevatedButton.icon(
+                              child: ElevatedButton(
                                 onPressed: _goToProfile,
-                                icon: const Icon(
-                                  Icons.person_outline,
-                                  size: 16,
-                                ),
-                                label: const Text(
-                                  'マイページ',
-                                  maxLines: 1,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: isDarkMode
                                       ? Colors.black
@@ -798,6 +798,23 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                   elevation: 0,
                                   shape: const StadiumBorder(),
                                 ),
+                                child: isPortraitPhone
+                                    ? const Icon(Icons.person_outline, size: 18)
+                                    : const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.person_outline, size: 16),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            'マイページ',
+                                            maxLines: 1,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                               ),
                             ),
                           ],
