@@ -107,8 +107,21 @@ test("Vercel production workflow is manual fallback only after Cloudflare migrat
 });
 
 test("Cloudflare is the default staging deploy while Vercel remains a manual fallback", () => {
-  const cloudflare = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-staging.yaml"), "utf8");
-  const vercel = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-staging.yaml"), "utf8");
+  const cloudflare = fs
+    .readFileSync(
+      path.resolve(
+        __dirname,
+        "../../.github/workflows/deploy-cloudflare-staging.yaml",
+      ),
+      "utf8",
+    )
+    .replace(/\r\n/g, "\n");
+  const vercel = fs
+    .readFileSync(
+      path.resolve(__dirname, "../../.github/workflows/deploy-staging.yaml"),
+      "utf8",
+    )
+    .replace(/\r\n/g, "\n");
   assert.match(cloudflare, /on:\n  push:\n    branches:\n      - develop/);
   assert.match(cloudflare, /workflow_dispatch:/);
   assert.match(cloudflare, /github\.ref == 'refs\/heads\/develop'/);
@@ -125,8 +138,24 @@ test("Cloudflare is the default staging deploy while Vercel remains a manual fal
 });
 
 test("Wrangler action uploads secrets to the same Cloudflare Worker environment as deploy", () => {
-  const staging = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-staging.yaml"), "utf8");
-  const production = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-production.yaml"), "utf8");
+  const staging = fs
+    .readFileSync(
+      path.resolve(
+        __dirname,
+        "../../.github/workflows/deploy-cloudflare-staging.yaml",
+      ),
+      "utf8",
+    )
+    .replace(/\r\n/g, "\n");
+  const production = fs
+    .readFileSync(
+      path.resolve(
+        __dirname,
+        "../../.github/workflows/deploy-cloudflare-production.yaml",
+      ),
+      "utf8",
+    )
+    .replace(/\r\n/g, "\n");
   for (const [workflow, environment] of [[staging, "staging"], [production, "production"]]) {
     // GitHub job.environment only selects the GitHub secrets scope.
     // The action's with.environment is separately required for wrangler secret bulk --env.

@@ -4,6 +4,12 @@ abstract final class FeatureFlags {
   // tests in place so the feature can be re-enabled with a single flag.
   static const bool subscriptionUiEnabled = false;
 
-  // The want-to-read entry points launch alongside subscriptions; favorites stay public.
+  // Favorites are part of the future subscription release. Preserve stored
+  // data and backend support, but keep every user-facing entry point hidden
+  // until the subscription UI is approved and enabled.
+  static const bool favoritesUiEnabled = subscriptionUiEnabled;
+
+  // Want-to-read also launches alongside subscriptions. Preserve existing
+  // records while the user-facing entry points remain hidden.
   static const bool wantToReadUiEnabled = subscriptionUiEnabled;
 }

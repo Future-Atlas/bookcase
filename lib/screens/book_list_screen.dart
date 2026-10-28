@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,31 +58,7 @@ class _BookListScreenState extends State<BookListScreen> {
       GlobalKey();
   final GlobalKey<_PagedBookScrollerState> _westernScrollerKey = GlobalKey();
   String? _openingBookId;
-
-  Iterable<GlobalKey<_PagedBookScrollerState>> get _homeScrollerKeys => [
-    _featuredScrollerKey,
-    _popularScrollerKey,
-    _newArrivalsScrollerKey,
-    _westernScrollerKey,
-  ];
-
-  void _registerHomeInteraction() {
-    for (final key in _homeScrollerKeys) {
-      key.currentState?.registerUserInteraction();
-    }
-  }
-
-  void _pauseHomeCarouselsForBookDetail() {
-    for (final key in _homeScrollerKeys) {
-      key.currentState?.pauseForBookDetail();
-    }
-  }
-
-  void _resumeHomeCarouselsAfterBookDetail() {
-    for (final key in _homeScrollerKeys) {
-      key.currentState?.resumeAfterBookDetail();
-    }
-  }
+  bool _isServiceIntroductionExpanded = false;
 
   @override
   void initState() {
@@ -427,7 +405,6 @@ class _BookListScreenState extends State<BookListScreen> {
       _replaceBrowserPath(bookPath);
     }
 
-    _pauseHomeCarouselsForBookDetail();
     try {
       await showDialog(
         context: context,
@@ -435,12 +412,12 @@ class _BookListScreenState extends State<BookListScreen> {
           final hasCover = book.coverUrl.trim().isNotEmpty;
           final service = Provider.of<SupabaseService>(context, listen: false);
           final isReadFuture = service.isBookReadByCurrentUser(bookId: book.id);
-          final isFavoriteFuture = service.isBookFavoritedByCurrentUser(
-            book.id,
-          );
+          final isFavoriteFuture = FeatureFlags.favoritesUiEnabled
+              ? service.isBookFavoritedByCurrentUser(book.id)
+              : null;
           final isWantedFuture = FeatureFlags.wantToReadUiEnabled
-               ? service.isBookWantedByCurrentUser(book.id)
-               : Future<bool>.value(false);
+              ? service.isBookWantedByCurrentUser(book.id)
+              : Future<bool>.value(false);
 
           return Dialog(
             backgroundColor: const Color(0xFFE6E6E6),
@@ -566,157 +543,165 @@ class _BookListScreenState extends State<BookListScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 10),
-                                    if (FeatureFlags.wantToReadUiEnabled) Expanded(
-                                      child: FutureBuilder<bool>(
-                                        future: isWantedFuture,
-                                        builder: (context, wantedSnapshot) {
-                                          final wanted =
-                                              wantedSnapshot.data ?? false;
-                                          final checking =
-                                              wantedSnapshot.connectionState ==
-                                              ConnectionState.waiting;
-                                          return SizedBox(
-                                            height: 64,
-                                            child: ElevatedButton(
-                                              onPressed: checking
-                                                  ? null
-                                                  : () async {
-                                                      if (!await _ensureAuthenticated() ||
-                                                          !mounted) {
-                                                        return;
-                                                      }
-                                                      final result =
-                                                          await service
-                                                              .toggleWantToRead(
-                                                                book: book,
-                                                              );
-                                                      if (!mounted) return;
-                                                      if (result ==
-                                                          WantToReadToggleResult
-                                                              .subscriptionRequired) {
-                                                        await showSubscriptionLockedDialog(
-                                                          context: this.context,
-                                                          featureLabel:
-                                                              '「読みたい！」',
-                                                        );
-                                                        return;
-                                                      }
-                                                      if (context.mounted &&
-                                                          !result
-                                                              .shouldRestoreOptimisticState) {
-                                                        Navigator.of(
-                                                          context,
-                                                        ).pop();
-                                                      }
-                                                      ScaffoldMessenger.of(
-                                                        this.context,
-                                                      ).showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(
-                                                            result.message,
+                                    if (FeatureFlags.wantToReadUiEnabled)
+                                      Expanded(
+                                        child: FutureBuilder<bool>(
+                                          future: isWantedFuture,
+                                          builder: (context, wantedSnapshot) {
+                                            final wanted =
+                                                wantedSnapshot.data ?? false;
+                                            final checking =
+                                                wantedSnapshot
+                                                    .connectionState ==
+                                                ConnectionState.waiting;
+                                            return SizedBox(
+                                              height: 64,
+                                              child: ElevatedButton(
+                                                onPressed: checking
+                                                    ? null
+                                                    : () async {
+                                                        if (!await _ensureAuthenticated() ||
+                                                            !mounted) {
+                                                          return;
+                                                        }
+                                                        final result =
+                                                            await service
+                                                                .toggleWantToRead(
+                                                                  book: book,
+                                                                );
+                                                        if (!mounted) return;
+                                                        if (result ==
+                                                            WantToReadToggleResult
+                                                                .subscriptionRequired) {
+                                                          await showSubscriptionLockedDialog(
+                                                            context:
+                                                                this.context,
+                                                            featureLabel:
+                                                                '「読みたい！」',
+                                                          );
+                                                          return;
+                                                        }
+                                                        if (context.mounted &&
+                                                            !result
+                                                                .shouldRestoreOptimisticState) {
+                                                          Navigator.of(
+                                                            context,
+                                                          ).pop();
+                                                        }
+                                                        ScaffoldMessenger.of(
+                                                          this.context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text(
+                                                              result.message,
+                                                            ),
                                                           ),
+                                                        );
+                                                      },
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.black,
+                                                  foregroundColor: Colors.amber,
+                                                  disabledBackgroundColor:
+                                                      Colors.black,
+                                                  disabledForegroundColor:
+                                                      Colors.amber.shade200,
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          18,
                                                         ),
-                                                      );
-                                                    },
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.black,
-                                                foregroundColor: Colors.amber,
-                                                disabledBackgroundColor:
-                                                    Colors.black,
-                                                disabledForegroundColor:
-                                                    Colors.amber.shade200,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(18),
+                                                  ),
+                                                ),
+                                                child: BookActionLabel(
+                                                  bookId: book.id,
+                                                  label: wanted
+                                                      ? '読みたい！済み'
+                                                      : '読みたい！',
+                                                  color: Colors.amber,
+                                                  wantToRead: true,
+                                                  style: const TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
                                                 ),
                                               ),
-                                              child: BookActionLabel(
-                                                bookId: book.id,
-                                                label: wanted
-                                                    ? '読みたい！済み'
-                                                    : '読みたい！',
-                                                color: Colors.amber,
-                                                wantToRead: true,
-                                                style: const TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
+                                            );
+                                          },
+                                        ),
                                       ),
-                                    ),
                                   ],
                                 );
                               },
                             ),
                             const SizedBox(height: 10),
-                            FutureBuilder<bool>(
-                              future: isFavoriteFuture,
-                              builder: (context, snapshot) {
-                                final isFavorite = snapshot.data ?? false;
-                                final isLoading =
-                                    snapshot.connectionState ==
-                                    ConnectionState.waiting;
-                                return Align(
-                                  alignment: Alignment.center,
-                                  child: OutlinedButton.icon(
-                                    onPressed: isLoading
-                                        ? null
-                                        : () async {
-                                            // Temporarily disable auth check for
-                                            // public browsing mode.
-                                            // if (!service.isAuthenticated) {
-                                            //   Navigator.of(context).pop();
-                                            //   final authenticated =
-                                            //       await _ensureAuthenticated();
-                                            //   if (authenticated && mounted) {
-                                            //     _showBookDetailDialog(book);
-                                            //   }
-                                            //   return;
-                                            // }
+                            if (FeatureFlags.favoritesUiEnabled)
+                              FutureBuilder<bool>(
+                                future: isFavoriteFuture,
+                                builder: (context, snapshot) {
+                                  final isFavorite = snapshot.data ?? false;
+                                  final isLoading =
+                                      snapshot.connectionState ==
+                                      ConnectionState.waiting;
+                                  return Align(
+                                    alignment: Alignment.center,
+                                    child: OutlinedButton.icon(
+                                      onPressed: isLoading
+                                          ? null
+                                          : () async {
+                                              // Temporarily disable auth check for
+                                              // public browsing mode.
+                                              // if (!service.isAuthenticated) {
+                                              //   Navigator.of(context).pop();
+                                              //   final authenticated =
+                                              //       await _ensureAuthenticated();
+                                              //   if (authenticated && mounted) {
+                                              //     _showBookDetailDialog(book);
+                                              //   }
+                                              //   return;
+                                              // }
 
-                                            final result = await service
-                                                .toggleFavorite(book.id);
-                                            if (!mounted) return;
-                                            if (result ==
-                                                FavoriteToggleResult
-                                                    .standardLimitReached) {
-                                              final replaced =
-                                                  await _replaceFavoriteAtLimit(
-                                                    targetBookId: book.id,
-                                                    targetBookTitle: book.title,
-                                                  );
-                                              if (replaced && context.mounted) {
+                                              final result = await service
+                                                  .toggleFavorite(book.id);
+                                              if (!mounted) return;
+                                              if (result ==
+                                                  FavoriteToggleResult
+                                                      .standardLimitReached) {
+                                                final replaced =
+                                                    await _replaceFavoriteAtLimit(
+                                                      targetBookId: book.id,
+                                                      targetBookTitle:
+                                                          book.title,
+                                                    );
+                                                if (replaced &&
+                                                    context.mounted) {
+                                                  Navigator.of(context).pop();
+                                                }
+                                                return;
+                                              }
+                                              if (context.mounted &&
+                                                  (result ==
+                                                          FavoriteToggleResult
+                                                              .added ||
+                                                      result ==
+                                                          FavoriteToggleResult
+                                                              .removed)) {
                                                 Navigator.of(context).pop();
                                               }
-                                              return;
-                                            }
-                                            if (context.mounted &&
-                                                (result ==
-                                                        FavoriteToggleResult
-                                                            .added ||
-                                                    result ==
-                                                        FavoriteToggleResult
-                                                            .removed)) {
-                                              Navigator.of(context).pop();
-                                            }
-                                            _showFavoriteResult(result);
-                                          },
-                                    icon: Icon(
-                                      isFavorite
-                                          ? Icons.favorite
-                                          : Icons.favorite_border,
-                                      color: const Color(0xFFD00303),
+                                              _showFavoriteResult(result);
+                                            },
+                                      icon: Icon(
+                                        isFavorite
+                                            ? Icons.favorite
+                                            : Icons.favorite_border,
+                                        color: const Color(0xFFD00303),
+                                      ),
+                                      label: Text(
+                                        isFavorite ? 'お気に入り解除' : 'お気に入りに登録',
+                                      ),
                                     ),
-                                    label: Text(
-                                      isFavorite ? 'お気に入り解除' : 'お気に入りに登録',
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
+                                  );
+                                },
+                              ),
                             Row(
                               children: [
                                 ...List.generate(5, (index) {
@@ -841,16 +826,13 @@ class _BookListScreenState extends State<BookListScreen> {
         },
       );
     } finally {
-      _resumeHomeCarouselsAfterBookDetail();
-    }
-
-    if (!mounted || !kIsWeb) return;
-    if (_currentAppPath() == bookPath) {
-      _replaceBrowserPath(
-        openedFromDirectUrl || previousPath.startsWith('/book/')
-            ? '/'
-            : previousPath,
-      );
+      if (mounted && kIsWeb && _currentAppPath() == bookPath) {
+        _replaceBrowserPath(
+          openedFromDirectUrl || previousPath.startsWith('/book/')
+              ? '/'
+              : previousPath,
+        );
+      }
     }
   }
 
@@ -906,7 +888,6 @@ class _BookListScreenState extends State<BookListScreen> {
             onRefresh: () => _controller.loadData(context),
             color: const Color(0xFFD00303),
             child: Listener(
-              onPointerDown: (_) => _registerHomeInteraction(),
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
@@ -1156,61 +1137,84 @@ class _BookListScreenState extends State<BookListScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Sharemariumでできること',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Sharemariumは、読んだ本の感想を自分の言葉で記録し、ほかの読者のレビューから新しい本や視点に出会うための読書レビューSNSです。',
-            style: TextStyle(color: textColor, height: 1.65),
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
+          Row(
             children: [
-              _buildServicePoint(
-                icon: Icons.rate_review_outlined,
-                title: '読書体験をレビューとして残す',
-                description:
-                    '読んだ本を評価するだけでなく、印象に残った点や読後の考えを文章で記録できます。読んだ本を記録して、あなただけの本棚を作りましょう！',
-              ),
-              _buildServicePoint(
-                icon: Icons.people_outline,
-                title: '他の読者の感想に触れる',
-                description:
-                    '他ユーザーのレビューやリアクションを通じて、同じ作品を読んだ人の、自分と異なる感想に触れることができます。',
-              ),
-              _buildServicePoint(
-                icon: Icons.menu_book_outlined,
-                title: '次に読む本を見つける',
-                description:
-                    '「タイトル・著者・出版社」で検索することができます。気になる書籍のレビューを読んで、次に読む本を決めましょう！',
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              PublicPostsLink(
-                foregroundColor: ProfilePageColors.colorFor(
-                  context.watch<SupabaseService>().activePageColorKey,
+              const Expanded(
+                child: Text(
+                  'Sharemariumでできること',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                 ),
               ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pushNamed('/about'),
-                child: const Text('サービス・運営方針について'),
+              IconButton(
+                key: const ValueKey('service-introduction-toggle'),
+                tooltip: _isServiceIntroductionExpanded ? '閉じる' : '開く',
+                onPressed: () {
+                  setState(() {
+                    _isServiceIntroductionExpanded =
+                        !_isServiceIntroductionExpanded;
+                  });
+                },
+                icon: Icon(
+                  _isServiceIntroductionExpanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'あなたの感想や交流が、Sharemariumを作ります。',
-            style: TextStyle(color: mutedColor, fontSize: 12, height: 1.5),
-          ),
+          if (_isServiceIntroductionExpanded) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Sharemariumは、読んだ本の感想を自分の言葉で記録し、ほかの読者のレビューから新しい本や視点に出会うための読書レビューSNSです。',
+              style: TextStyle(color: textColor, height: 1.65),
+            ),
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _buildServicePoint(
+                  icon: Icons.rate_review_outlined,
+                  title: '読書体験をレビューとして残す',
+                  description:
+                      '読んだ本を評価するだけでなく、印象に残った点や読後の考えを文章で記録できます。読んだ本を記録して、あなただけの本棚を作りましょう！',
+                ),
+                _buildServicePoint(
+                  icon: Icons.people_outline,
+                  title: '他の読者の感想に触れる',
+                  description:
+                      '他ユーザーのレビューやリアクションを通じて、同じ作品を読んだ人の、自分と異なる感想に触れることができます。',
+                ),
+                _buildServicePoint(
+                  icon: Icons.menu_book_outlined,
+                  title: '次に読む本を見つける',
+                  description:
+                      '「タイトル・著者・出版社」で検索することができます。気になる書籍のレビューを読んで、次に読む本を決めましょう！',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                PublicPostsLink(
+                  foregroundColor: ProfilePageColors.colorFor(
+                    context.watch<SupabaseService>().activePageColorKey,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pushNamed('/about'),
+                  child: const Text('サービス・運営方針について'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'あなたの感想や交流が、Sharemariumを作ります。',
+              style: TextStyle(color: mutedColor, fontSize: 12, height: 1.5),
+            ),
+          ],
         ],
       ),
     );
@@ -1477,7 +1481,12 @@ class _BookListScreenState extends State<BookListScreen> {
             _buildCarouselPageButton(
               direction: AxisDirection.left,
               tooltip: '前の9冊に戻る',
-              onPressed: isLoadingMore ? null : onLoadPrevious,
+              onPressed: isLoadingMore
+                  ? null
+                  : () {
+                      scrollerKey.currentState?.registerUserInteraction();
+                      onLoadPrevious();
+                    },
             ),
           Expanded(
             child: _PagedBookScroller(
@@ -1496,7 +1505,12 @@ class _BookListScreenState extends State<BookListScreen> {
             _buildCarouselPageButton(
               direction: AxisDirection.right,
               tooltip: '次の9冊を読み込む',
-              onPressed: isLoadingMore ? null : () => onLoadMore(),
+              onPressed: isLoadingMore
+                  ? null
+                  : () {
+                      scrollerKey.currentState?.registerUserInteraction();
+                      onLoadMore();
+                    },
             ),
         ],
       ),
@@ -1770,7 +1784,9 @@ class _BookListScreenState extends State<BookListScreen> {
             onEdit: post.profileId == currentProfileId
                 ? () => _editPost(post)
                 : null,
-            onFavorite: post.profileId == currentProfileId
+            onFavorite:
+                FeatureFlags.favoritesUiEnabled &&
+                    post.profileId == currentProfileId
                 ? () => _toggleFavoriteFromPost(post)
                 : null,
             onReport: post.profileId == currentProfileId
@@ -2150,16 +2166,24 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
   bool _landAtEndAfterChange = false;
   bool _isRepositioningAfterPageChange = false;
   bool _isAutoScrolling = false;
+  bool _appending = false;
+  late List<Book> _buffer;
   double _overscrollDistance = 0;
 
   @override
   void initState() {
     super.initState();
+    _buffer = List.of(widget.books);
     _autoAdvance = BookCarouselAutoAdvance(onAdvance: _advanceAutomatically)
       ..start();
   }
 
-  void registerUserInteraction() => _autoAdvance.registerUserInteraction();
+  void registerUserInteraction() {
+    _autoAdvance.registerUserInteraction();
+    if (_isAutoScrolling && _scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.offset);
+    }
+  }
 
   void pauseForBookDetail() => _autoAdvance.pauseForBookDetail();
 
@@ -2170,6 +2194,12 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.pageNumber != widget.pageNumber) {
       _pageChangePending = false;
+      if (_appending) {
+        final ids = _buffer.map((book) => book.id).toSet();
+        _buffer.addAll(widget.books.where((book) => ids.add(book.id)));
+        return;
+      }
+      _buffer = List.of(widget.books);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_scrollController.hasClients) return;
         final target = _landAtEndAfterChange
@@ -2189,6 +2219,8 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
       });
     } else if (oldWidget.isLoadingMore && !widget.isLoadingMore) {
       _pageChangePending = false;
+    } else if (!identical(oldWidget.books, widget.books) && !_appending) {
+      _buffer = List.of(widget.books);
     }
   }
 
@@ -2201,38 +2233,41 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
 
   Future<void> _advanceAutomatically() async {
     if (!mounted ||
-        widget.isLoadingMore ||
-        _pageChangePending ||
+        (widget.isLoadingMore && !_appending) ||
+        (_pageChangePending && !_appending) ||
+        _isAutoScrolling ||
+        ModalRoute.of(context)?.isCurrent != true ||
         !_scrollController.hasClients ||
         !_isVisibleOnScreen()) {
       return;
     }
 
-    final position = _scrollController.position;
-    if (position.extentAfter > 1) {
-      final step = (position.viewportDimension * 0.42).clamp(150.0, 230.0);
-      final target = (position.pixels + step).clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
-      );
-      _isAutoScrolling = true;
-      try {
-        await _scrollController.animateTo(
-          target,
-          duration: const Duration(milliseconds: 650),
-          curve: Curves.easeInOutCubic,
-        );
-      } finally {
-        _isAutoScrolling = false;
+    if (await _moveOneBook()) {
+      // Keep the 1.5-second visual cadence independent from network latency.
+      // Loading the next nine books continues in the background while the
+      // already buffered books keep moving.
+      unawaited(_prefetchNextPageIfNeeded());
+      return;
+    }
+
+    // Do not wrap back to the beginning while the next batch is still in
+    // flight. The following timer tick continues as soon as cards are added.
+    if (_appending) return;
+
+    // A very wide viewport can initially fit all nine books. In that case a
+    // new batch is needed before there is any horizontal distance to move.
+    if (widget.hasMore && !_appending) {
+      await _prefetchNextPageIfNeeded(force: true);
+      if (mounted &&
+          !_autoAdvance.isPaused &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          _isVisibleOnScreen()) {
+        await _moveOneBook();
       }
       return;
     }
 
-    if (widget.hasMore) {
-      await _loadNextPage();
-      return;
-    }
-
+    final position = _scrollController.position;
     if (position.extentBefore > 1) {
       _isAutoScrolling = true;
       try {
@@ -2244,6 +2279,50 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
       } finally {
         _isAutoScrolling = false;
       }
+    }
+  }
+
+  Future<bool> _moveOneBook() async {
+    if (!mounted || !_scrollController.hasClients) return false;
+    final position = _scrollController.position;
+    if (position.extentAfter <= 1) return false;
+
+    const step = 150.0; // 138px cover plus 12px spacing.
+    final target = ((position.pixels / step).floor() * step + step).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    _isAutoScrolling = true;
+    try {
+      await _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 650),
+        curve: Curves.easeInOutCubic,
+      );
+    } finally {
+      _isAutoScrolling = false;
+    }
+    return true;
+  }
+
+  Future<void> _prefetchNextPageIfNeeded({bool force = false}) async {
+    if (!mounted ||
+        _appending ||
+        !widget.hasMore ||
+        !_scrollController.hasClients) {
+      return;
+    }
+    const step = 150.0;
+    final firstVisible = (_scrollController.position.pixels / step).floor();
+    if (!force && _buffer.length - firstVisible > 9) return;
+
+    _appending = true;
+    try {
+      await _loadNextPage();
+      // didUpdateWidget consumes the new page on the next frame.
+      await WidgetsBinding.instance.endOfFrame;
+    } finally {
+      _appending = false;
     }
   }
 
@@ -2275,6 +2354,15 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
 
   bool _handleScrollNotification(ScrollNotification notification) {
     if (notification.metrics.axis != Axis.horizontal) return false;
+    final isUserDriven =
+        (notification is ScrollStartNotification &&
+            notification.dragDetails != null) ||
+        (notification is ScrollUpdateNotification &&
+            notification.dragDetails != null) ||
+        notification is OverscrollNotification;
+    if (isUserDriven && !_isAutoScrolling && !_isRepositioningAfterPageChange) {
+      registerUserInteraction();
+    }
     if (notification is ScrollStartNotification) {
       _overscrollDistance = 0;
     } else if (notification is OverscrollNotification) {
@@ -2319,14 +2407,14 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
-      itemCount: widget.books.length,
+      itemCount: _buffer.length,
       itemBuilder: (context, index) => BookCard(
-        book: widget.books[index],
-        marginRight: index == widget.books.length - 1 ? 0 : 12,
+        book: _buffer[index],
+        marginRight: index == _buffer.length - 1 ? 0 : 12,
         onTap: () async {
           pauseForBookDetail();
           try {
-            await widget.onBookTap(widget.books[index]);
+            await widget.onBookTap(_buffer[index]);
           } finally {
             resumeAfterBookDetail();
           }
@@ -2340,18 +2428,15 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: Listener(
-                  onPointerDown: (_) => registerUserInteraction(),
-                  child: AbsorbPointer(
-                    absorbing: widget.isLoadingMore,
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: _handleScrollNotification,
-                      child: list,
-                    ),
+                child: AbsorbPointer(
+                  absorbing: widget.isLoadingMore && !_appending,
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: _handleScrollNotification,
+                    child: list,
                   ),
                 ),
               ),
-              if (widget.isLoadingMore)
+              if (widget.isLoadingMore && !_appending)
                 Positioned.fill(
                   child: ColoredBox(
                     color: Theme.of(

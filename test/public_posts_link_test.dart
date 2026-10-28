@@ -44,6 +44,19 @@ void main() {
     );
   }
 
+  testWidgets('portrait phone header uses the dense timeline label', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: PublicPostsLink(compact: true, dense: true)),
+      ),
+    );
+
+    final label = tester.widget<Text>(find.text('タイムライン'));
+    expect(label.style?.fontSize, 10);
+  });
+
   testWidgets('home timeline heading opens the full timeline', (tester) async {
     String? openedRoute;
     const accent = Color(0xFF20E0D0);

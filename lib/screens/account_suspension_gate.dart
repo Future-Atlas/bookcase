@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../config/feature_flags.dart';
 import '../models/moderation_models.dart';
 import '../services/supabase_service.dart';
 import '../widgets/favorite_retention_gate.dart';
@@ -19,7 +20,9 @@ class _AccountSuspensionGateState extends State<AccountSuspensionGate> {
   String? _checkedUserId;
   Future<AccountSuspensionStatus>? _statusFuture;
 
-  Widget _allowedContent() => FavoriteRetentionGate(child: widget.child);
+  Widget _allowedContent() => FeatureFlags.favoritesUiEnabled
+      ? FavoriteRetentionGate(child: widget.child)
+      : widget.child;
 
   void _refresh(SupabaseService service) {
     setState(() {

@@ -78,6 +78,32 @@
   ],
   "routes": [
     {
+      "src": "/book/nanji-hoshi-no-gotoku",
+      "has": [
+        {
+          "type": "host",
+          "value": "book-case-u9uq.vercel.app"
+        }
+      ],
+      "status": 308,
+      "headers": {
+        "Location": "https://www.sharemarium.com/book/9784065281499"
+      }
+    },
+    {
+      "src": "/book/nanji-hoshi-no-gotoku",
+      "has": [
+        {
+          "type": "host",
+          "value": "sharemariumbookcase.vercel.app"
+        }
+      ],
+      "status": 308,
+      "headers": {
+        "Location": "https://www.sharemarium.com/book/9784065281499"
+      }
+    },
+    {
       "src": "/(.*)",
       "has": [
         {

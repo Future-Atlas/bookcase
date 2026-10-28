@@ -121,7 +121,6 @@ class RakutenApi {
     try {
       final response = await _requestRakuten('book', queryParameters);
       if (response == null || response.statusCode != 200) {
-        _bookByIdCache[cacheKey] = null;
         return null;
       }
 
@@ -142,7 +141,6 @@ class RakutenApi {
       return result;
     } catch (e) {
       debugPrint('Rakuten book lookup failed: $e');
-      _bookByIdCache[cacheKey] = null;
       return null;
     }
   }

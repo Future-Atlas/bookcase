@@ -27,6 +27,10 @@ function runtime({
   const sdkBatches = [];
   const entitlementEvents = [];
   const targets = [];
+  const iframes = [];
+  const buttons = [];
+  const sessionValues = new Map();
+  let domObserver;
   class CustomEvent {
     constructor(type, options = {}) {
       this.type = type;
@@ -35,12 +39,20 @@ function runtime({
   }
   const window = {
     location: { hostname: "www.sharemarium.com", pathname: "/", search: "" },
+    innerWidth: 400,
+    innerHeight: 800,
     localStorage: {
       length: token ? 1 : 0,
       key: () => token ? "sb-test-auth-token" : null,
       getItem: () => JSON.stringify({ access_token: token }),
     },
+    sessionStorage: {
+      getItem: (key) => sessionValues.get(key) || null,
+      setItem: (key, value) => sessionValues.set(key, String(value)),
+    },
+    getComputedStyle: (node) => node.computedStyle || node.style || {},
     addEventListener(name, fn) { listeners.set(name, fn); },
+    removeEventListener() {},
     dispatchEvent(event) {
       if (event.type === "sharemarium:admax-entitlement-changed") {
         entitlementEvents.push(event.detail);
@@ -52,10 +64,19 @@ function runtime({
     setInterval() { return 1; },
     history: { pushState() {}, replaceState() {} },
   };
+  const bodyChildren = [];
+  const body = {
+    children: bodyChildren,
+    appendChild(node) {
+      node.isConnected = true;
+      bodyChildren.push(node);
+      return node;
+    },
+  };
   const document = {
     readyState: "loading",
     hidden: false,
-    body: {},
+    body,
     head: {
       appendChild(node) {
         requests.push(node);
@@ -67,17 +88,32 @@ function runtime({
     getElementById(id) {
       return requests.find(node => node.id === id && !node.removed) || null;
     },
-    querySelectorAll() { return []; },
+    querySelectorAll(selector) {
+      if (selector === "iframe") return iframes;
+      return [];
+    },
     createElement(tag) {
-      assert.equal(tag, "script", "must not create a sandboxed iframe");
-      return {
-        tag, async: false, removed: false,
-        remove() { this.removed = true; },
+      assert.notEqual(tag, "iframe", "must not create a sandboxed iframe");
+      const eventListeners = new Map();
+      const node = {
+        tag, async: false, removed: false, style: {},
+        textContent: "", children: [],
+        setAttribute(name, value) { this[name] = value; },
+        addEventListener(name, fn) { eventListeners.set(name, fn); },
+        click() { eventListeners.get("click")?.({ preventDefault() {}, stopPropagation() {} }); },
+        remove() {
+          this.removed = true;
+          this.isConnected = false;
+          const index = bodyChildren.indexOf(this);
+          if (index >= 0) bodyChildren.splice(index, 1);
+        },
       };
+      if (tag === "button") buttons.push(node);
+      return node;
     },
   };
   class MutationObserver {
-    constructor(fn) { this.callback = fn; }
+    constructor(fn) { this.callback = fn; domObserver = this; }
     observe() {}
   }
   const fetch = async () => {
@@ -121,6 +157,42 @@ function runtime({
     }
     await new Promise(resolve => setImmediate(resolve));
   }
+  function startDomWatcher() {
+    listeners.get("DOMContentLoaded")?.();
+  }
+  function emitBottomPopup({ inline = false } = {}) {
+    const iframe = {
+      tagName: "IFRAME",
+      parentElement: null,
+      style: {},
+      closest(selector) {
+        return inline && selector === ".sharemarium-admax-timeline-slot"
+          ? {} : null;
+      },
+      querySelector() { return null; },
+      getBoundingClientRect() {
+        return { top: 700, right: 400, bottom: 800, width: 400, height: 100 };
+      },
+    };
+    const popup = {
+      tagName: "DIV",
+      parentElement: body,
+      style: {},
+      computedStyle: { position: "fixed" },
+      children: [],
+      isConnected: true,
+      closest() { return null; },
+      querySelector(selector) { return selector === "iframe" ? iframe : null; },
+      getBoundingClientRect() {
+        return { top: 700, right: 400, bottom: 800, width: 400, height: 100 };
+      },
+      remove() { this.isConnected = false; this.removed = true; },
+    };
+    iframe.parentElement = popup;
+    iframes.push(iframe);
+    domObserver?.callback();
+    return popup;
+  }
   return {
     window,
     document,
@@ -131,6 +203,10 @@ function runtime({
     emitSlot,
     flush,
     targets,
+    buttons,
+    sessionValues,
+    startDomWatcher,
+    emitBottomPopup,
   };
 }
 
@@ -144,6 +220,16 @@ test("the issued synchronous tag remains verbatim but inert", () => {
   assert.doesNotMatch(html, /document\.createElement\("iframe"\)/);
   assert.doesNotMatch(read("lib/widgets/timeline_ad_slot_web.dart"),
     /IFrameElement|HtmlIFrameElement|srcdoc/);
+});
+
+test("clean book deep links retain ad eligibility without bypassing ad-free users", async () => {
+  for (const adFree of [false, true]) {
+    const app = runtime({ token: 'test-token', adFree });
+    app.window.location.pathname = '/book/9784101269313';
+    app.emitSlot(0);
+    await app.flush();
+    assert.equal(app.requests.length, adFree ? 0 : 1);
+  }
 });
 
 test("timeline has no application-imposed slot cap", () => {
@@ -253,6 +339,63 @@ test("public timeline mounts ads but post detail pages do not", async () => {
   r.emitSlot(2);
   await r.flush();
   assert.equal(r.requests.length, 0);
+});
+
+test("legal and operator hash routes never load or retain advertising", async () => {
+  for (const path of [
+    "/privacy",
+    "/terms",
+    "/community-guidelines",
+    "/infringement-policy",
+    "/external-transmission",
+    "/contact",
+    "/about",
+  ]) {
+    const r = runtime();
+    r.window.location.hash = `#${path}`;
+    r.emitSlot(0);
+    await r.flush();
+    assert.equal(r.requests.length, 0, `${path} must remain ad-free`);
+  }
+  const html = read("web/index.html");
+  assert.match(html, /window\.addEventListener\("hashchange", scheduleEntitlementReview\)/);
+});
+
+test("only the provider bottom popup is dismissible", () => {
+  const home = read("lib/screens/book_list_screen.dart");
+  const search = read("lib/widgets/book_search_results.dart");
+  const slot = read("lib/widgets/timeline_ad_slot_web.dart");
+  const html = read("web/index.html");
+
+  assert.doesNotMatch(home, /dismissible: true/);
+  assert.doesNotMatch(search, /dismissible: true/);
+  assert.doesNotMatch(slot, /dismissible|この広告を閉じる|Icons\.close/);
+  assert.match(html, /sharemarium-bottom-popup-ad-dismissed/);
+  assert.match(html, /document\.querySelectorAll\("iframe"\)/);
+  assert.match(html, /getComputedStyle/);
+  assert.match(html, /bottomGap >= -32 && bottomGap <= 32/);
+  assert.match(html, /\.closest\?\.\("\.sharemarium-admax-timeline-slot"\)/);
+  assert.match(html, /width: "36px"/);
+  assert.match(html, /height: "36px"/);
+  assert.match(html, /画面下部の広告を閉じる/);
+});
+
+test("the bottom popup close control works with computed fixed positioning", () => {
+  const r = runtime();
+  r.startDomWatcher();
+  const popup = r.emitBottomPopup();
+  assert.equal(r.buttons.length, 1);
+  assert.equal(r.buttons[0]["aria-label"], "画面下部の広告を閉じる");
+  r.buttons[0].click();
+  assert.equal(popup.removed, true);
+  assert.equal(
+    r.sessionValues.get("sharemarium-bottom-popup-ad-dismissed"),
+    "1",
+  );
+
+  const repeated = r.emitBottomPopup();
+  assert.equal(repeated.removed, true, "dismissed popup stays hidden in the tab");
+  assert.equal(r.buttons.length, 1, "no replacement close control is mounted");
 });
 
 test("ad-free members and entitlement errors never load SDK", async () => {
