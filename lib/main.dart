@@ -26,6 +26,7 @@ import 'screens/account_suspension_gate.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/public_post_routes.dart';
 import 'widgets/public_posts_link.dart';
+import 'widgets/bottom_ad_viewport_inset.dart';
 import 'utils/initial_public_route.dart';
 
 enum _HeaderMenuAction { home, myPage, settings, help, moderation, logout }
@@ -70,6 +71,9 @@ class MyApp extends StatelessWidget {
       title: 'Sharemarium',
       initialRoute: initialPublicRoute(Uri.base),
       debugShowCheckedModeBanner: false,
+      builder: (context, child) => BottomAdViewportInset(
+        child: child ?? const SizedBox.shrink(),
+      ),
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         dragDevices: {
           PointerDeviceKind.touch,

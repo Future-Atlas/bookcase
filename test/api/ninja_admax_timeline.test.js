@@ -26,6 +26,7 @@ function runtime({
   const requests = [];
   const sdkBatches = [];
   const entitlementEvents = [];
+  const bottomInsetEvents = [];
   const targets = [];
   const iframes = [];
   const buttons = [];
@@ -56,6 +57,9 @@ function runtime({
     dispatchEvent(event) {
       if (event.type === "sharemarium:admax-entitlement-changed") {
         entitlementEvents.push(event.detail);
+      }
+      if (event.type === "sharemarium:bottom-ad-viewport-inset-changed") {
+        bottomInsetEvents.push(event.detail);
       }
       listeners.get(event.type)?.(event);
       return true;
@@ -199,6 +203,7 @@ function runtime({
     requests,
     sdkBatches,
     entitlementEvents,
+    bottomInsetEvents,
     listeners,
     emitSlot,
     flush,
@@ -385,9 +390,11 @@ test("the bottom popup close control works with computed fixed positioning", () 
   r.startDomWatcher();
   const popup = r.emitBottomPopup();
   assert.equal(r.buttons.length, 1);
+  assert.equal(r.bottomInsetEvents.at(-1), 100);
   assert.equal(r.buttons[0]["aria-label"], "画面下部の広告を閉じる");
   r.buttons[0].click();
   assert.equal(popup.removed, true);
+  assert.equal(r.bottomInsetEvents.at(-1), 0);
   assert.equal(
     r.sessionValues.get("sharemarium-bottom-popup-ad-dismissed"),
     "1",
@@ -396,6 +403,18 @@ test("the bottom popup close control works with computed fixed positioning", () 
   const repeated = r.emitBottomPopup();
   assert.equal(repeated.removed, true, "dismissed popup stays hidden in the tab");
   assert.equal(r.buttons.length, 1, "no replacement close control is mounted");
+});
+
+test("Flutter reserves and releases the provider bottom-popup height", () => {
+  const html = read("web/index.html");
+  const wrapper = read("lib/widgets/bottom_ad_viewport_inset_web.dart");
+  const main = read("lib/main.dart");
+
+  assert.match(html, /sharemarium:bottom-ad-viewport-inset-changed/);
+  assert.match(html, /Math\.ceil\(Math\.max\(rect\.height, window\.innerHeight - rect\.top\)\)/);
+  assert.match(wrapper, /BottomAdViewportInset/);
+  assert.match(wrapper, /AnimatedPadding/);
+  assert.match(main, /builder: \(context, child\) => BottomAdViewportInset/);
 });
 
 test("ad-free members and entitlement errors never load SDK", async () => {
