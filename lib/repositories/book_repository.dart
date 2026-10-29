@@ -54,7 +54,13 @@ class BookRepository {
       BookSearchField.author,
     ];
 
+    // 「社」で終わる検索語は出版社を優先する。
+    // それ以外の漢字のみの検索語は、文字数によらず著者を優先する。
+    // 「々」は人名に使われる漢字の繰り返し記号として扱う。
     if (query.endsWith('社')) return publisherFirst;
+    if (RegExp(r'^[\u3400-\u4DBF\u4E00-\u9FFF々]+$').hasMatch(query)) {
+      return authorFirst;
+    }
 
     final lowerQuery = query.toLowerCase();
     if (RegExp(r'(co\.|comics)\s*$').hasMatch(lowerQuery)) {

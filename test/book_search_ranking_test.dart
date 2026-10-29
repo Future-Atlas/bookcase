@@ -49,6 +49,32 @@ void main() {
       );
     });
 
+    test('社で終わらない漢字だけの検索語は文字数にかかわらず著者を優先する', () {
+      for (final query in ['海', '三体', '村上春樹', '日本文学研究', '佐々木']) {
+        expect(
+          BookRepository.searchFieldPriority(query),
+          [
+            BookSearchField.author,
+            BookSearchField.title,
+            BookSearchField.publisher,
+          ],
+          reason: '漢字のみの入力: $query',
+        );
+      }
+    });
+
+    test('社で終わる漢字だけの文字列は引き続き出版社を優先する', () {
+      expect(
+        BookRepository.searchFieldPriority('講談社'),
+        [BookSearchField.publisher, BookSearchField.title, BookSearchField.author],
+      );
+    });
+
+    test('仮名混じりの検索語は既存の分類を維持する', () {
+      expect(BookRepository.searchFieldPriority('君の名は').first, BookSearchField.author);
+      expect(BookRepository.searchFieldPriority('あ').first, BookSearchField.title);
+    });
+
     test('スペースなし3〜5文字の日本語は著者を優先する', () {
       expect(
         BookRepository.searchFieldPriority('村上春樹').first,
@@ -63,11 +89,7 @@ void main() {
       );
     });
 
-    test('2文字以内と6文字以上はタイトルを優先する', () {
-      expect(
-        BookRepository.searchFieldPriority('海').first,
-        BookSearchField.title,
-      );
+    test('漢字のみ以外の長い書名はタイトルを優先する', () {
       expect(
         BookRepository.searchFieldPriority('プロジェクトヘイルメアリー').first,
         BookSearchField.title,
@@ -113,6 +135,26 @@ void main() {
     ], 'アンディ・ウィアー');
 
     expect(ranked.first.id, 'exact');
+  });
+
+  test('漢字のみの書名もタイトル完全一致なら著者の部分一致より先に表示される', () {
+    final ranked = BookRepository.rankSearchResults([
+      _book(
+        id: 'author-match',
+        title: '別の書名',
+        author: '三体研究会',
+        publisher: '架空出版',
+        reviewCount: 1000,
+      ),
+      _book(
+        id: 'title-exact',
+        title: '三体',
+        author: '劉慈欣',
+        publisher: '早川書房',
+      ),
+    ], '三体');
+
+    expect(ranked.first.id, 'title-exact');
   });
 
   test('中点の有無が異なるタイトルも完全一致として扱う', () {
