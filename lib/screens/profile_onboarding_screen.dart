@@ -331,6 +331,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
   final _usernameController = TextEditingController();
   final _userIdController = TextEditingController();
   DateTime? _birthDate;
+  String _gender = 'undisclosed';
   int _step = 0;
   bool _isSaving = false;
   bool _didPrefill = false;
@@ -427,6 +428,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
     final error = await service.completeRegistration(
       familyName: _familyNameController.text,
       givenName: _givenNameController.text,
+      gender: _gender,
       birthDate: _birthDate!,
       phoneNumber: _phoneController.text,
       username: _usernameController.text,
@@ -506,7 +508,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '氏名・生年月日・電話番号・パスワードは公開されません。',
+            '氏名・性別・生年月日・電話番号・パスワードは公開されません。',
             style: TextStyle(color: Colors.white70),
           ),
           const SizedBox(height: 22),
@@ -526,6 +528,20 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             decoration: _decoration('名（Given name）'),
             validator: (value) =>
                 (value?.trim().isEmpty ?? true) ? '名を入力してください。' : null,
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: _gender,
+            dropdownColor: const Color(0xFF202020),
+            style: const TextStyle(color: Colors.white),
+            decoration: _decoration('性別（任意）'),
+            items: const [
+              DropdownMenuItem(value: 'female', child: Text('女性')),
+              DropdownMenuItem(value: 'male', child: Text('男性')),
+              DropdownMenuItem(value: 'undisclosed', child: Text('無回答')),
+            ],
+            onChanged: (value) =>
+                setState(() => _gender = value ?? 'undisclosed'),
           ),
           const SizedBox(height: 10),
           InkWell(

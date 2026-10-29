@@ -92,8 +92,16 @@ test("production custom domain adds browser security headers", async () => {
     "strict-origin-when-cross-origin",
   );
   assert.match(
-    response.headers.get("content-security-policy-report-only") || "",
+    response.headers.get("content-security-policy") || "",
     /frame-ancestors 'none'/,
+  );
+  assert.match(
+    response.headers.get("content-security-policy") || "",
+    /script-src-attr 'none'/,
+  );
+  assert.equal(
+    response.headers.get("content-security-policy-report-only"),
+    null,
   );
 });
 

@@ -1292,7 +1292,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   Widget _buildTabBar() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final isMobile = MediaQuery.sizeOf(context).width < 600;
     final tabBackgroundColor = isDarkMode
         ? const Color(0xFF424242)
         : const Color(0xFFBDBDBD);
@@ -1300,6 +1299,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final selectedTextColor = isDarkMode ? Colors.black : Colors.white;
     final unselectedTextColor = isDarkMode ? Colors.white : Colors.black;
     return Container(
+      width: double.infinity,
       margin: EdgeInsets.zero,
       decoration: BoxDecoration(
         color: tabBackgroundColor,
@@ -1307,8 +1307,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       ),
       child: TabBar(
         controller: _tabController,
-        isScrollable: isMobile,
-        tabAlignment: isMobile ? TabAlignment.start : null,
+        isScrollable: false,
         labelPadding: EdgeInsets.zero,
         indicator: BoxDecoration(
           color: selectedBackgroundColor,
@@ -1324,38 +1323,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           fontWeight: FontWeight.w500,
           fontSize: 13,
         ),
-        tabs: isMobile
-            ? [
-                Tab(
-                  child: SizedBox(width: 56, child: Center(child: Text('投稿'))),
-                ),
-                Tab(
-                  child: SizedBox(
-                    width: 74,
-                    child: Center(child: Text('My 本棚')),
-                  ),
-                ),
-                if (FeatureFlags.favoritesUiEnabled)
-                  Tab(
-                    child: SizedBox(
-                      width: 100,
-                      child: Center(child: Text('お気に入り')),
-                    ),
-                  ),
-                if (FeatureFlags.wantToReadUiEnabled)
-                  Tab(
-                    child: SizedBox(
-                      width: 94,
-                      child: Center(child: Text('読みたい！')),
-                    ),
-                  ),
-              ]
-            : [
-                const Tab(text: '投稿'),
-                const Tab(text: 'My 本棚'),
-                if (FeatureFlags.favoritesUiEnabled) const Tab(text: 'お気に入り'),
-                if (FeatureFlags.wantToReadUiEnabled) const Tab(text: '読みたい！'),
-              ],
+        tabs: [
+          const Tab(text: '投稿'),
+          const Tab(text: 'My 本棚'),
+          if (FeatureFlags.favoritesUiEnabled) const Tab(text: 'お気に入り'),
+          if (FeatureFlags.wantToReadUiEnabled) const Tab(text: '読みたい！'),
+        ],
       ),
     );
   }

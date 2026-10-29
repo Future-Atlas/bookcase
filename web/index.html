@@ -84,8 +84,13 @@
           "/about",
         ]);
         const popupDismissKey = "sharemarium-bottom-popup-ad-dismissed";
+        const bottomInsetChangedEvent =
+          "sharemarium:bottom-ad-viewport-inset-changed";
+        const bottomInsetRequestEvent =
+          "sharemarium:bottom-ad-viewport-inset-request";
         const renderedSlots = new Map();
         const managedPopups = new Map();
+        let publishedBottomInset = -1;
         let entitlementToken = null;
         let entitlementState = "unknown";
         let entitlementRequest = null;
@@ -129,6 +134,7 @@
 
         function isProviderBottomPopup(node) {
           if (!node ||
+              !node.isConnected ||
               node.closest?.(".sharemarium-admax-timeline-slot")) {
             return false;
           }
@@ -166,6 +172,25 @@
           return popups;
         }
 
+        function publishBottomAdInset() {
+          let inset = 0;
+          if (eligibleRoute() && !popupWasDismissed()) {
+            for (const node of providerBottomPopups()) {
+              const rect = node.getBoundingClientRect?.();
+              if (!rect) continue;
+              inset = Math.max(
+                inset,
+                Math.ceil(Math.max(rect.height, window.innerHeight - rect.top)),
+              );
+            }
+          }
+          if (inset === publishedBottomInset) return;
+          publishedBottomInset = inset;
+          window.dispatchEvent(
+            new CustomEvent(bottomInsetChangedEvent, { detail: inset }),
+          );
+        }
+
         function providerHasCloseButton(node) {
           return Array.from(node.children || []).some((child) => {
             const label = (child.textContent || "").trim();
@@ -185,6 +210,7 @@
             managedPopups.delete(node);
           }
           node.remove();
+          publishBottomAdInset();
         }
 
         function addPopupCloseButton(node) {
@@ -219,11 +245,13 @@
             if (!node.isConnected) {
               button.remove();
               managedPopups.delete(node);
+              publishBottomAdInset();
               return;
             }
             const rect = node.getBoundingClientRect();
             button.style.right = Math.max(4, window.innerWidth - rect.right) + "px";
             button.style.bottom = Math.max(4, window.innerHeight - rect.top + 4) + "px";
+            publishBottomAdInset();
           };
           button.addEventListener("click", (event) => {
             event.preventDefault();
@@ -254,6 +282,7 @@
               addPopupCloseButton(node);
             }
           }
+          publishBottomAdInset();
         }
 
         function currentSupabaseAccessToken() {
@@ -454,6 +483,7 @@
         window.addEventListener("sharemarium:admax-slot-ready", (event) => {
           void mountSlot(event.detail);
         });
+        window.addEventListener(bottomInsetRequestEvent, publishBottomAdInset);
 
         function scheduleEntitlementReview() {
           if (!eligibleRoute()) {

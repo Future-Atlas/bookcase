@@ -4,13 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const read = (name) => fs.readFileSync(path.join(__dirname, '../../', name), 'utf8');
 
-test('want-to-read and favorites remain hidden until subscriptions launch', () => {
+test('want-to-read stays hidden while free favorites remain available', () => {
   const flags = read('lib/config/feature_flags.dart');
   const profile = read('lib/screens/user_profile_screen.dart');
   const cards = read('lib/widgets/post_card.dart');
   const books = read('lib/screens/book_list_screen.dart');
   assert.match(flags, /wantToReadUiEnabled = subscriptionUiEnabled/);
-  assert.match(flags, /favoritesUiEnabled = subscriptionUiEnabled/);
+  assert.match(flags, /favoritesUiEnabled = true/);
   assert.match(flags, /subscriptionUiEnabled = false/);
   assert.match(profile, /FeatureFlags\.favoritesUiEnabled \? 1 : 0/);
   assert.match(profile, /FeatureFlags\.wantToReadUiEnabled \? 1 : 0/);
