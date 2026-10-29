@@ -1,0 +1,54 @@
+name: Audit Rakuten Books Genre Taxonomy
+
+on:
+  workflow_dispatch:
+    inputs:
+      root_genre_id:
+        description: "Rakuten Books root (001 = Japanese books, 005 = foreign)"
+        required: true
+        default: "001"
+        type: choice
+        options:
+          - "001"
+          - "005"
+      max_nodes:
+        description: "Maximum nodes to review; incomplete=true means not fully scanned"
+        required: true
+        default: "300"
+        type: choice
+        options:
+          - "100"
+          - "300"
+          - "600"
+          - "1000"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Audit taxonomy (no changes to restrictions)
+        env:
+          RAKUTEN_APP_ID: ${{ secrets.RAKUTEN_APP_ID }}
+          RAKUTEN_ACCESS_KEY: ${{ secrets.RAKUTEN_ACCESS_KEY }}
+          GENRE_AUDIT_ROOT: ${{ inputs.root_genre_id }}
+          GENRE_AUDIT_MAX_NODES: ${{ inputs.max_nodes }}
+          GENRE_AUDIT_DELAY_MS: "400"
+          GENRE_AUDIT_OUTPUT: "${{ runner.temp }}/rakuten-genre-audit.json"
+        run: node scripts/audit-rakuten-books-genres.mjs
+      - name: Save taxonomy candidates for manual review
+        uses: actions/upload-artifact@v4
+        with:
+          name: rakuten-books-genre-audit
+          path: ${{ runner.temp }}/rakuten-genre-audit.json
+          if-no-files-found: error
+          retention-days: 7
