@@ -1,4 +1,5 @@
 import '../models/book.dart';
+import '../config/restricted_rakuten_genres.dart';
 
 /// Centralized age-restriction checks used for externally sourced book data.
 ///
@@ -52,18 +53,20 @@ class ContentSafetyService {
   /// intentionally empty until the official taxonomy is reviewed; categories
   /// such as BL or general comics are not uniformly age-restricted.
   /// Ancestor IDs match their descendant genres.
-  static const Set<String> restrictedRakutenGenreIds = <String>{};
+  static final Set<String> restrictedRakutenGenreIds =
+      RestrictedRakutenGenres.blockedIds;
 
   static bool hasRestrictedRakutenGenre(
     Book book, {
-    Set<String> restrictedGenreIds = restrictedRakutenGenreIds,
+    Set<String>? restrictedGenreIds,
   }) {
-    return restrictedGenreIds.any(book.belongsToRakutenGenre);
+    final blockedIds = restrictedGenreIds ?? restrictedRakutenGenreIds;
+    return blockedIds.any(book.belongsToRakutenGenre);
   }
 
   static bool isAdultBook(
     Book book, {
-    Set<String> restrictedGenreIds = restrictedRakutenGenreIds,
+    Set<String>? restrictedGenreIds,
   }) {
     return hasRestrictedRakutenGenre(
       book,
@@ -84,7 +87,7 @@ class ContentSafetyService {
   static List<Book> filterBooks(
     Iterable<Book> books, {
     required bool allowAdultContent,
-    Set<String> restrictedGenreIds = restrictedRakutenGenreIds,
+    Set<String>? restrictedGenreIds,
   }) {
     if (allowAdultContent) return List<Book>.of(books);
     return books
