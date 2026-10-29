@@ -11,7 +11,7 @@ const root = process.env.GENRE_AUDIT_ROOT || '001';
 const maxNodes = Number(process.env.GENRE_AUDIT_MAX_NODES || 300);
 const delayMs = Number(process.env.GENRE_AUDIT_DELAY_MS || 400);
 const validId = /^\d{3}(?:\d{3})*$/;
-const candidateName = /成人|成年|アダルト|18禁|R[\s-]?18|ポルノ|エロティック|porn|erotic|adults.only|age.restricted/i;
+const candidateName = /成人|成年|アダルト|18禁|18歳以上|R[\s-]?18|ポルノ|エロティック|adult|porn|erotic|age.restricted/i;
 
 if (!appId || !accessKey) {
   throw new Error('Missing RAKUTEN_APP_ID or RAKUTEN_ACCESS_KEY (values are never printed).');
