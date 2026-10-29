@@ -48,8 +48,27 @@ class ContentSafetyService {
     return _normalizedAdultTerms.any(normalized.contains);
   }
 
-  static bool isAdultBook(Book book) {
-    return containsAdultContentTerms([
+  /// Add *verified* adult-only Rakuten Books genre IDs here. This list is
+  /// intentionally empty until the official taxonomy is reviewed; categories
+  /// such as BL or general comics are not uniformly age-restricted.
+  /// Ancestor IDs match their descendant genres.
+  static const Set<String> restrictedRakutenGenreIds = <String>{};
+
+  static bool hasRestrictedRakutenGenre(
+    Book book, {
+    Set<String> restrictedGenreIds = restrictedRakutenGenreIds,
+  }) {
+    return restrictedGenreIds.any(book.belongsToRakutenGenre);
+  }
+
+  static bool isAdultBook(
+    Book book, {
+    Set<String> restrictedGenreIds = restrictedRakutenGenreIds,
+  }) {
+    return hasRestrictedRakutenGenre(
+      book,
+      restrictedGenreIds: restrictedGenreIds,
+    ) || containsAdultContentTerms([
       book.title,
       book.author,
       book.publisher,
@@ -65,9 +84,17 @@ class ContentSafetyService {
   static List<Book> filterBooks(
     Iterable<Book> books, {
     required bool allowAdultContent,
+    Set<String> restrictedGenreIds = restrictedRakutenGenreIds,
   }) {
     if (allowAdultContent) return List<Book>.of(books);
-    return books.where((book) => !isAdultBook(book)).toList(growable: false);
+    return books
+        .where(
+          (book) => !isAdultBook(
+            book,
+            restrictedGenreIds: restrictedGenreIds,
+          ),
+        )
+        .toList(growable: false);
   }
 
   static bool isAtLeast18(DateTime birthDate, {DateTime? onDate}) {
