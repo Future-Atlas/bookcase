@@ -1,0 +1,51 @@
+name: Audit Production Security Boundaries
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Validate production database URL without printing it
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          node <<'NODE'
+          const raw = process.env.SUPABASE_DB_URL || "";
+          if (!raw) throw new Error("SUPABASE_DB_URL is not configured");
+          const parsed = new URL(raw);
+          if (!["postgres:", "postgresql:"].includes(parsed.protocol)) {
+            throw new Error("SUPABASE_DB_URL must use the postgres protocol");
+          }
+          if (parsed.port !== "5432") {
+            throw new Error("SUPABASE_DB_URL must use the Session pooler on port 5432");
+          }
+          if (parsed.hostname !== "pooler.supabase.com" &&
+              !parsed.hostname.endsWith(".pooler.supabase.com")) {
+            throw new Error("SUPABASE_DB_URL must use a Supabase Session pooler host");
+          }
+          NODE
+
+      - name: Run read-only catalog and RLS audit
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PGCONNECT_TIMEOUT: "10"
+          PGSSLMODE: require
+          PGOPTIONS: "-c statement_timeout=30000 -c default_transaction_read_only=on"
+        run: |
+          psql "$SUPABASE_DB_URL" \
+            --no-psqlrc \
+            --set=ON_ERROR_STOP=1 \
+            --file=scripts/audit-production-security.sql
