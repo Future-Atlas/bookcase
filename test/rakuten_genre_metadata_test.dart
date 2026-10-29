@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sharemarium/models/book.dart';
 import 'package:sharemarium/services/content_safety_service.dart';
+import 'package:sharemarium/config/restricted_rakuten_genres.dart';
 
 Book sampleBook({List<String> genreIds = const []}) => Book(
   id: '9780000000001',
@@ -14,6 +15,16 @@ Book sampleBook({List<String> genreIds = const []}) => Book(
 );
 
 void main() {
+  test('登録ジャンルは正しいID・成人専用の根拠があるものだけを許可', () {
+    for (final entry in RestrictedRakutenGenres.verifiedAdultOnly.entries) {
+      expect(entry.key, matches(RegExp(r'^\d{3}(?:\d{3})*$')));
+      expect(RestrictedRakutenGenres.neverBlockBroadGenres.contains(entry.key), isFalse);
+      expect(entry.value, contains('https://'), reason: '根拠URLが必要');
+      expect(entry.value, matches(RegExp(r'\d{4}-\d{2}-\d{2}')));
+    }
+    expect(ContentSafetyService.restrictedRakutenGenreIds, RestrictedRakutenGenres.verifiedAdultOnly.keys.toSet());
+  });
+
   test('楽天ジャンルIDを先頭ゼロを残して分割し、重複や不正値を除く', () {
     expect(
       Book.parseRakutenGenreIds('001004008 / 001021002 / 001004008 / invalid'),
