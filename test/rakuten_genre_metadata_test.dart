@@ -17,7 +17,7 @@ Book sampleBook({List<String> genreIds = const []}) => Book(
 void main() {
   test('登録ジャンルは正しいID・成人専用の根拠があるものだけを許可', () {
     for (final entry in RestrictedRakutenGenres.verifiedAdultOnly.entries) {
-      expect(entry.key, matches(RegExp(r'^\\d{3}(?:\\d{3})*\  test('楽天ジャンルIDを先頭ゼロを残して分割し、重複や不正値を除く', () {
+      expect(entry.key, matches(RegExp(r'^\d{3}(?:\d{3})*  test('楽天ジャンルIDを先頭ゼロを残して分割し、重複や不正値を除く', () {
     expect(
       Book.parseRakutenGenreIds('001004008 / 001021002 / 001004008 / invalid'),
       ['001004008', '001021002'],
@@ -90,10 +90,10 @@ void main() {
       expect(
         RestrictedRakutenGenres.neverBlockBroadGenres.contains(entry.key),
         isFalse,
-        reason: '一般向け書籍を含む親ジャンルはブロック不可: ${entry.key}',
+        reason: '一般向け作品を含む大分類はブロック不可',
       );
-      expect(entry.value, contains('https://'), reason: '登録には公式な根拠URLが必要');
-      expect(entry.value, matches(RegExp(r'\\d{4}-\\d{2}-\\d{2}')));
+      expect(entry.value, contains('https://'), reason: '根拠URLが必要');
+      expect(entry.value, matches(RegExp(r'\d{4}-\d{2}-\d{2}')));
     }
     expect(
       ContentSafetyService.restrictedRakutenGenreIds,
