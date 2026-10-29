@@ -35,7 +35,7 @@ class Book {
     this.itemPrice = 0,
   });
 
-  /// Parse the Rakuten Books \`booksGenreId\` field without losing leading zeros.
+  /// Parse the Rakuten Books `booksGenreId` field without losing leading zeros.
   /// Ignore missing / malformed values rather than treating them as safe genres.
   static List<String> parseRakutenGenreIds(Object? value) {
     final text = value is Iterable
@@ -53,7 +53,7 @@ class Book {
   }
 
   /// True for an exact genre ID or a child in its 3-digit hierarchy.
-  /// E.g. \`001004008\` belongs to both \`001\` and \`001004\`.
+  /// E.g. `001004008` belongs to both `001` and `001004`.
   bool belongsToRakutenGenre(String genreId) {
     if (!RegExp(r'^\d{3}(?:\d{3})*$').hasMatch(genreId)) return false;
     return rakutenGenreIds.any(
