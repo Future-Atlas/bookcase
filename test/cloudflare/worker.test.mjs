@@ -113,6 +113,24 @@ test("production custom domain adds browser security headers", async () => {
   );
 });
 
+test("Vercel fallback and Cloudflare share a Flutter-compatible CSP", async () => {
+  const config = JSON.parse(
+    readFileSync(new URL("../../vercel.json", import.meta.url), "utf8"),
+  );
+  const fallbackCsp = config.headers[0].headers.find(
+    ({ key }) => key === "Content-Security-Policy",
+  )?.value;
+  const { env } = environment({ appEnv: "production" });
+  const response = await worker.fetch(
+    new Request("https://www.sharemarium.com/"),
+    env,
+  );
+  const workerCsp = response.headers.get("content-security-policy");
+  assert.equal(fallbackCsp, workerCsp);
+  assert.match(fallbackCsp, /script-src[^;]*https:\/\/www\.gstatic\.com\/flutter-canvaskit\//);
+  assert.doesNotMatch(fallbackCsp, /script-src[^;]*'unsafe-eval'/);
+});
+
 test("HTTP requests are permanently redirected to HTTPS", async () => {
   const { env, requests } = environment({ appEnv: "production" });
   const response = await worker.fetch(
