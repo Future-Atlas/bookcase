@@ -279,6 +279,7 @@ class RakutenApi {
       ratingAvg: parsedReviewAverage,
       reviewCount: parsedReviewCount,
       genre: genre,
+      rakutenGenreIds: Book.parseRakutenGenreIds(bookData['booksGenreId']),
       description: description,
       rakutenAffiliateUrl: bookData['affiliateUrl'] as String? ?? '',
       itemPrice: parsedItemPrice,
