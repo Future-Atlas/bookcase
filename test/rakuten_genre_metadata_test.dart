@@ -45,8 +45,9 @@ void main() {
 
   test('認証済み成人向けジャンルのみを子ジャンルまで除外できる', () {
     final general = sampleBook(genreIds: const ['001004008']);
-    final restricted = sampleBook(genreIds: const ['001004008', '001021002']);
-    const vettedRestrictedIds = <String>{'001021'};
+    final restricted = sampleBook(genreIds: const ['001004008', '001999002']);
+    // Deliberately synthetic: real genres must be reviewed before blocking.
+    const vettedRestrictedIds = <String>{'001999'};
     expect(
       ContentSafetyService.hasRestrictedRakutenGenre(
         restricted, restrictedGenreIds: vettedRestrictedIds,
