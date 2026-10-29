@@ -20,13 +20,19 @@ const NOINDEX_APP_PATHS = new Set(["/login", "/mypage", "/settings", "/help", "/
 const LEGACY_BOOK_REDIRECTS = new Map([
   ["/book/nanji-hoshi-no-gotoku", "/book/9784065281499"],
 ]);
-const CSP_REPORT_ONLY = [
+// Enforce a conservative baseline CSP in production. Flutter Web and the
+// currently issued Ninja AdMax tag still require inline scripts and Wasm, so
+// those two allowances remain explicit instead of silently permitting every
+// third-party script origin. Tightening them further requires moving the
+// inline bootstrap/ad code to hashed or nonce-bearing scripts first.
+const CSP_ENFORCED = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://adm.shinobi.jp",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://adm.shinobi.jp https://*.shinobi.jp https://admax.cnobi.jp https://*.cnobi.jp",
+  "script-src-attr 'none'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
@@ -34,6 +40,7 @@ const CSP_REPORT_ONLY = [
   "frame-src https:",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
+  "upgrade-insecure-requests",
 ].join("; ");
 
 class VercelResponseAdapter {
@@ -131,7 +138,7 @@ function withEnvironmentHeaders(response, env, request) {
     "Permissions-Policy",
     "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
   );
-  headers.set("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY);
+  headers.set("Content-Security-Policy", CSP_ENFORCED);
   const requestUrl = new URL(request.url);
   const hostname = requestUrl.hostname;
   if (env.APP_ENV === "production" && hostname === "www.sharemarium.com") {
