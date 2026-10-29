@@ -13,11 +13,54 @@
 
 ## 18歳未満の書籍フィルタへの接続
 
-- `ContentSafetyService.restrictedRakutenGenreIds` が「成人向け専用と**検証済み**」のジャンルIDを保持する設定箇所。
-- 現時点では **空集合**。楽天のセーフサーチ判定フラグを返すAPI仕様は確認できず、根拠のないIDを指定すると全年齢向け作品を隠してしまう。
-- 管理者がジャンル名と実際の作品群を検証したうえでIDを追加すると、`ContentSafetyService.isAdultBook` / `filterBooks` がそのジャンルの子ジャンルを含めて18歳未満の一覧から除外する。
-- 既存のタイトル・説明文などのキーワードによる検査も残している。
-- BL/TL/一般コミックなど、**年齢制限のない作品を含む広いジャンルは一律に除外しない**。
+### 登録する場所
+
+`lib/config/restricted_rakuten_genres.dart` の
+`RestrictedRakutenGenres.verifiedAdultOnly` が唯一の登録台帳。
+**登録前は空集合であり、根拠のないジャンルを自動で禁止しない。**
+
+登録例（次のIDは**架空の例**であり、そのまま使わないこと）：
+
+```dart
+static const Map<String, String> verifiedAdultOnly = <String, String>{
+  // '001999001': '正式な成人専用ジャンル名 / 2026-10-29 / https://公式根拠URL',
+};
+```
+
+登録時にはIDのゼロを残し、**ジャンル名、確認日、根拠URL**を併記する。
+下位ジャンルは自動的に対象になるため、`001`（すべての本）、
+`005`（洋書全体）、`007`（雑誌全体）やBL/TL/一般コミック等の
+広いジャンルを登録してはいけない。
+監査には必ずジャンル名だけでなく、実際の所属書籍も確認する。
+
+### ジャンル一覧の調査
+
+1. GitHub Actions → **Audit Rakuten Books Genre Taxonomy** → Run workflow を開く。
+2. `main` ブランチ、`root_genre_id=001`（国内書籍）、`max_nodes=300`などで実行する。
+   洋書の確認には `005` を選択する。
+3. 完了後、Actions実行画面のArtifactsから `rakuten-books-genre-audit` を取得する。
+4. JSONの `candidates` に「成人」「18禁」などの名称候補があるか確認する。
+   `genres` には取得した全ジャンルを、`incomplete` には走査が途中かを記録する。
+5. **候補は自動登録しない**。楽天公式ジャンル検索APIでIDと名称を再確認し、
+   そのカテゴリに全年齢向け作品が含まれないことを検証する。
+6. 成人専用と裏付けられたIDだけを `verifiedAdultOnly` に追加し、
+   `flutter test`、CIを実施してからPRをマージ、デプロイする。
+
+GitHub Secretsの `RAKUTEN_APP_ID` と `RAKUTEN_ACCESS_KEY` をActions内で使用する。
+値はログやArtifactsに出力しない。
+監査スクリプトは `scripts/audit-rakuten-books-genres.mjs`。
+ローカルからも、同じ環境変数を設定して `node scripts/audit-rakuten-books-genres.mjs` を実行できる。
+
+### 重要：楽天サイトのアダルト区分とジャンルIDは同義ではない
+
+楽天の公開書籍API・ジャンルAPIには、サイトのセーフサーチで成人向けに
+分類されたことを保証する専用フラグを確認できていない。
+楽天サイト上の「アダルト（18歳以上）」が必ずしもBooksジャンル階層の
+一項目として表現されるわけではないため、**ジャンルのみで100%除外できない**。
+
+既存のタイトル・説明文等の成人向けキーワード判定は残す。
+登録済みジャンルIDは `ContentSafetyService.isAdultBook` と `filterBooks`
+から未成年向け書籍一覧の除外に使われる。
 
 ## 未対応・運用上の注意
 
