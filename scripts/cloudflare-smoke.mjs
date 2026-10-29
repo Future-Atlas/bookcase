@@ -33,7 +33,7 @@ function validateBaseUrl() {
   record("base_url", "ok");
 }
 
-async function check(name, pathname, { bot = false, htmlNavigation = false, contentType } = {}) {
+async function check(name, pathname, { bot = false, htmlNavigation = false, contentType, checkFlutterCsp = false, noindex = expectNoindex } = {}) {
   let response;
   try {
     response = await fetch(`${baseUrl}${pathname}`, {
@@ -55,15 +55,26 @@ async function check(name, pathname, { bot = false, htmlNavigation = false, cont
     record(name, "content_type_mismatch", response.status);
     throw new Error(`Cloudflare smoke check ${name} has unexpected content type`);
   }
-  if (expectNoindex && !String(response.headers.get("x-robots-tag") || "").includes("noindex")) {
+  if (noindex && !String(response.headers.get("x-robots-tag") || "").includes("noindex")) {
     record(name, "missing_noindex", response.status);
     throw new Error(`Cloudflare smoke check ${name} lacks noindex`);
+  }
+  if (checkFlutterCsp) {
+    const policy = response.headers.get("content-security-policy") || "";
+    if (!/script-src[^;]*https:\/\/www\.gstatic\.com\/flutter-canvaskit\//.test(policy)) {
+      record(name, "flutter_canvas_kit_blocked", response.status);
+      throw new Error("Cloudflare smoke check detected an incompatible Flutter CSP");
+    }
   }
   record(name, "ok", response.status);
 }
 
 validateBaseUrl();
-await check("home", "/", { contentType: "text/html" });
+await check("home", "/", { contentType: "text/html", checkFlutterCsp: true });
+// A healthy HTML response is not sufficient: the Flutter bootstrap and entrypoint
+// must be served as JavaScript, not as an HTML SPA fallback.
+await check("flutter_bootstrap", "/flutter_bootstrap.js", { contentType: "javascript", noindex: false });
+await check("flutter_entrypoint", "/main.dart.js", { contentType: "javascript", noindex: false });
 // A clean Flutter path must be served as an SPA navigation, not a 404.
 await check("login_path", "/login", { htmlNavigation: true, contentType: "text/html" });
 await check("settings_path", "/settings", { htmlNavigation: true, contentType: "text/html" });

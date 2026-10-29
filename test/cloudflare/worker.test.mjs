@@ -99,10 +99,36 @@ test("production custom domain adds browser security headers", async () => {
     response.headers.get("content-security-policy") || "",
     /script-src-attr 'none'/,
   );
+  // A CSP that blocks Flutter's CanvasKit CDN prevents the app from rendering.
+  const csp = response.headers.get("content-security-policy") || "";
+  assert.match(csp, /script-src[^;]*https:\/\/www\.gstatic\.com\/flutter-canvaskit\//);
+  assert.match(csp, /font-src[^;]*https:\/\/fonts\.gstatic\.com/);
+  assert.match(csp, /style-src[^;]*https:\/\/fonts\.googleapis\.com/);
+  assert.doesNotMatch(csp, /script-src[^;]*https:\/\/www\.gstatic\.com\s/);
+  assert.doesNotMatch(csp, /'unsafe-eval'/);
+
   assert.equal(
     response.headers.get("content-security-policy-report-only"),
     null,
   );
+});
+
+test("Vercel fallback and Cloudflare share a Flutter-compatible CSP", async () => {
+  const config = JSON.parse(
+    readFileSync(new URL("../../vercel.json", import.meta.url), "utf8"),
+  );
+  const fallbackCsp = config.headers[0].headers.find(
+    ({ key }) => key === "Content-Security-Policy",
+  )?.value;
+  const { env } = environment({ appEnv: "production" });
+  const response = await worker.fetch(
+    new Request("https://www.sharemarium.com/"),
+    env,
+  );
+  const workerCsp = response.headers.get("content-security-policy");
+  assert.equal(fallbackCsp, workerCsp);
+  assert.match(fallbackCsp, /script-src[^;]*https:\/\/www\.gstatic\.com\/flutter-canvaskit\//);
+  assert.doesNotMatch(fallbackCsp, /script-src[^;]*'unsafe-eval'/);
 });
 
 test("HTTP requests are permanently redirected to HTTPS", async () => {

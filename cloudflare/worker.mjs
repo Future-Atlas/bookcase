@@ -25,17 +25,19 @@ const LEGACY_BOOK_REDIRECTS = new Map([
 // those two allowances remain explicit instead of silently permitting every
 // third-party script origin. Tightening them further requires moving the
 // inline bootstrap/ad code to hashed or nonce-bearing scripts first.
+// The Flutter engine loads CanvasKit JavaScript from Google's versioned CDN;
+// blocking that trusted path causes a blank page before runApp executes.
 const CSP_ENFORCED = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://adm.shinobi.jp https://*.shinobi.jp https://admax.cnobi.jp https://*.cnobi.jp",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.gstatic.com/flutter-canvaskit/ https://adm.shinobi.jp https://*.shinobi.jp https://admax.cnobi.jp https://*.cnobi.jp",
   "script-src-attr 'none'",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
+  "font-src 'self' data: https://fonts.gstatic.com",
   "connect-src 'self' https: wss:",
   "frame-src https:",
   "worker-src 'self' blob:",
