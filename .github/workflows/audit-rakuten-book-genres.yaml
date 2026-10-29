@@ -4,13 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       root_genre_id:
-        description: "Rakuten Books root (001 = Japanese books, 005 = foreign)"
+        description: "Rakuten Books genre ID (001, 005, or a specific subgenre)"
         required: true
         default: "001"
-        type: choice
-        options:
-          - "001"
-          - "005"
+        type: string
       max_nodes:
         description: "Maximum nodes to review; incomplete=true means not fully scanned"
         required: true
