@@ -28,6 +28,8 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
+    environment:
+      name: staging
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
