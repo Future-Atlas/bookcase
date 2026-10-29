@@ -140,7 +140,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                   ListTile(
                     leading: const Icon(Icons.privacy_tip_outlined),
                     title: const Text('プライバシー設定'),
-                    subtitle: const Text('氏名・生年月日・電話番号・メールアドレス'),
+                    subtitle: const Text('氏名・性別・生年月日・電話番号・メールアドレス'),
                     trailing: const Icon(Icons.lock_outline),
                     onTap: _openPrivacySettings,
                   ),
@@ -898,6 +898,7 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   DateTime? _birthDate;
+  String _gender = 'undisclosed';
   bool _loading = true;
   bool _saving = false;
 
@@ -927,6 +928,10 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
     _phoneController.text = data?['phone_number']?.toString() ?? '';
     _emailController.text = data?['email']?.toString() ?? '';
     _birthDate = DateTime.tryParse(data?['birth_date']?.toString() ?? '');
+    final storedGender = data?['gender']?.toString();
+    _gender = const {'female', 'male', 'undisclosed'}.contains(storedGender)
+        ? storedGender!
+        : 'undisclosed';
     setState(() => _loading = false);
   }
 
@@ -958,6 +963,7 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
           password: widget.password,
           familyName: _familyNameController.text,
           givenName: _givenNameController.text,
+          gender: _gender,
           birthDate: _birthDate!,
           phoneNumber: _phoneController.text,
           email: _emailController.text,
@@ -1007,6 +1013,24 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
                           border: OutlineInputBorder(),
                         ),
                         validator: _required,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _gender,
+                        decoration: const InputDecoration(
+                          labelText: '性別（任意）',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'female', child: Text('女性')),
+                          DropdownMenuItem(value: 'male', child: Text('男性')),
+                          DropdownMenuItem(
+                            value: 'undisclosed',
+                            child: Text('無回答'),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => _gender = value ?? 'undisclosed'),
                       ),
                       const SizedBox(height: 12),
                       ListTile(

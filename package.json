@@ -9,7 +9,7 @@
   },
   "devDependencies": {
     "supabase": "2.122.0",
-    "wrangler": "4.152.0"
+    "wrangler": "4.154.0"
   },
   "dependencies": {
     "@vercel/speed-insights": "^2.0.0"
