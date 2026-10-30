@@ -116,11 +116,6 @@ class _GuardianConsentScreenState extends State<GuardianConsentScreen> {
       ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-    if (widget.isRecovery) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('パスワードを再設定しました。')),
-      );
-    }
     widget.onCompleted();
   }
 
@@ -248,6 +243,11 @@ class _PrivacyPasswordSetupScreenState
         context,
       ).showSnackBar(SnackBar(content: Text(error)));
       return;
+    }
+    if (widget.isRecovery) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('パスワードを再設定しました。')),
+      );
     }
     widget.onCompleted();
   }
