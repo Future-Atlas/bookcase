@@ -74,16 +74,13 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     if (_startingPrivacyRecovery) return;
     setState(() => _startingPrivacyRecovery = true);
     final service = Provider.of<SupabaseService>(context, listen: false);
-    final emailRecovery = service.currentUser?.appMetadata['provider'] == 'email';
+
     final error = await service.beginPrivacyPasswordRecovery();
     if (!mounted) return;
     setState(() => _startingPrivacyRecovery = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(error ??
-            (emailRecovery
-                ? '登録メールアドレスに確認用リンクを送信しました。メールから本人確認を完了してください。'
-                : '連携アカウントで本人確認してください。')),
+        content: Text(error ?? 'GoogleまたはXで本人確認してください。'),
       ),
     );
   }
@@ -130,7 +127,8 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       return const Center(child: Text('設定を利用するにはログインしてください。'));
     }
     if (_showRecovery) {
-      return _PrivacyPasswordRecoveryScreen(
+      return PrivacyPasswordSetupScreen(
+        isRecovery: true,
         onCompleted: () => setState(() => _showRecovery = false),
       );
     }
@@ -1348,109 +1346,6 @@ class _ChangePrivacyPasswordScreenState
               child: const Text('変更する'),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PrivacyPasswordRecoveryScreen extends StatefulWidget {
-  const _PrivacyPasswordRecoveryScreen({required this.onCompleted});
-
-  final VoidCallback onCompleted;
-
-  @override
-  State<_PrivacyPasswordRecoveryScreen> createState() =>
-      _PrivacyPasswordRecoveryScreenState();
-}
-
-class _PrivacyPasswordRecoveryScreenState
-    extends State<_PrivacyPasswordRecoveryScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _passwordController = TextEditingController();
-  final _confirmationController = TextEditingController();
-  bool _obscure = true;
-  bool _saving = false;
-
-  @override
-  void dispose() {
-    _passwordController.dispose();
-    _confirmationController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
-    final error = await Provider.of<SupabaseService>(
-      context,
-      listen: false,
-    ).resetPrivacyPasswordAfterReauthentication(_passwordController.text);
-    if (!mounted) return;
-    setState(() => _saving = false);
-    if (error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error)));
-      return;
-    }
-    widget.onCompleted();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('パスワードを再設定しました。')));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              const Text(
-                'パスワードを再設定',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text('登録メールまたは連携アカウントで本人確認した後、15分以内に新しい個人情報変更用パスワードを設定してください。本人確認が完了していない場合、再設定は拒否されます。'),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: _obscure,
-                decoration: InputDecoration(
-                  labelText: '新しいパスワード',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    onPressed: () => setState(() => _obscure = !_obscure),
-                    icon: Icon(
-                      _obscure ? Icons.visibility : Icons.visibility_off,
-                    ),
-                  ),
-                ),
-                validator: validatePrivacyPassword,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _confirmationController,
-                obscureText: _obscure,
-                decoration: const InputDecoration(
-                  labelText: '新しいパスワード（確認）',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) =>
-                    value != _passwordController.text ? 'パスワードが一致しません。' : null,
-              ),
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: _saving ? null : _save,
-                child: const Text('再設定する'),
-              ),
-            ],
-          ),
         ),
       ),
     );
