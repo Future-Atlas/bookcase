@@ -7,6 +7,7 @@ import '../models/post.dart';
 import '../models/post_reply.dart';
 import '../models/social_models.dart';
 import '../models/user_profile.dart';
+import '../services/content_safety_service.dart';
 import '../services/supabase_service.dart';
 
 class BookListController extends ChangeNotifier {
@@ -286,7 +287,13 @@ class BookListController extends ChangeNotifier {
 
     try {
       final featured = await SupabaseService().fetchFeaturedBooks();
-      featuredBooks = featured.map((item) => item.book).toList(growable: false);
+      featuredBooks = featured
+          .map((item) => item.book)
+          .where(
+            (book) =>
+                _allowAdultContent || !ContentSafetyService.isAdultBook(book),
+          )
+          .toList(growable: false);
     } catch (_) {
       featuredBooks = [];
     } finally {

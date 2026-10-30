@@ -18,6 +18,11 @@ test('forgotten privacy password starts Google/X OAuth without post-frame dialog
   assert.match(account, /beginPrivacyPasswordRecovery\(\)/);
   assert.match(account, /GoogleまたはXで本人確認してください/);
   assert.doesNotMatch(account, /登録メールアドレスに確認用リンクを送信/);
+  assert.match(account, /連携サービスで本人確認/);
+  assert.match(account, /currentOAuthProviderLabel/);
+  assert.match(account, /Sharemariumが\$providerLabelのパスワードを入力・保存することはありません/);
+  assert.match(service, /String\? get currentOAuthProvider/);
+  assert.match(service, /String\? get currentOAuthProviderLabel/);
 });
 
 test('after OAuth return, use the exact first-time password setup layout', () => {

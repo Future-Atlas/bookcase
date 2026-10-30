@@ -17,6 +17,24 @@ Sharemariumのログイン方法は現在 **Google / Xのみ**。メールアド
 
 **URLを手動で開いても本人確認は省略できず、SQL側で未認証の更新を拒否する。**
 
+SharemariumはGoogle/Xのパスワードを入力・保存しない。本人確認画面と
+認証方法は各プロバイダーが管理するため、パスワード入力のほか、パスキー、
+多要素認証、端末確認又は既存セッションのアカウント選択になる場合がある。
+Googleでは少なくともアカウント選択画面を要求するが、Sharemariumから
+外部サービスのパスワード文字列の再入力を強制することはできない。
+
+## 通常ログインの保持期間
+
+- 通常のGoogle/XログインはSupabase Authのセッションとして保持し、サイトを
+  開くたびに外部サービスへ再ログインさせない。
+- 10日間利用がない場合の再ログインは、Supabase Authの **Inactivity timeout**
+  を `10d` に設定して実現する。これはSupabase Pro以上の機能であり、本番の
+  Authentication → Sessionsで別途設定する。
+- ブラウザーのローカル時刻・localStorageだけで10日を判定する実装は、利用者が
+  書き換えられるためセキュリティ境界には使わない。
+- 新規登録・通常ログインでもGoogle/Xの認証画面を使い、外部サービスの
+  パスワードをSharemarium内で入力させない。
+
 ## Supabase Authの設定
 
 - 本番用 `https://www.sharemarium.com/?privacy_password_recovery=1` とステージングの同等URLを、Auth → URL Configuration → Redirect URLsに許可する（または明確に一致する許可パターン）。
