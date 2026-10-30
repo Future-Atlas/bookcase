@@ -271,6 +271,9 @@ class SupabaseService extends ChangeNotifier {
       final started = await _client!.auth.signInWithOAuth(
         provider,
         redirectTo: redirectTo,
+        queryParams: provider == OAuthProvider.google
+            ? const {'prompt': 'select_account'}
+            : null,
       );
       return started ? null : '$labelログインを開始できませんでした。';
     } on AuthException catch (e) {
@@ -1203,10 +1206,32 @@ class SupabaseService extends ChangeNotifier {
     if (!_isInitialized || _client == null || !isAuthenticated) {
       return 'ログイン状態を確認できませんでした。';
     }
+    final provider = currentUser?.appMetadata['provider']?.toString() ?? '';
+    final email = currentUser?.email?.trim() ?? '';
+    const supportedProviders = <String>{
+      'email', 'google', 'twitter', 'x', 'facebook', 'apple', 'discord',
+    };
+    if (!supportedProviders.contains(provider)) {
+      return '現在のログイン方法では再設定できません。お問い合わせからご連絡ください。';
+    }
+    if (provider == 'email' && email.isEmpty) {
+      return '確認用のメールアドレスが登録されていません。お問い合わせからご連絡ください。';
+    }
     try {
-      final provider = currentUser?.appMetadata['provider']?.toString() ?? '';
+      // The database records the *current* account and time, and refuses to
+      // change the private password until a new matching-provider login.
       await _client!.rpc('begin_privacy_password_recovery');
       switch (provider) {
+        case 'email':
+          // Must not silently create a different account during recovery.
+          // Supabase sends a one-time magic link or OTP to the registered
+          // mailbox. Opening the link yields a fresh OTP/magiclink AMR.
+          await _client!.auth.signInWithOtp(
+            email: email,
+            shouldCreateUser: false,
+            emailRedirectTo: _privacyRecoveryRedirectUrl(),
+          );
+          return null;
         case 'google':
           return _signInWithSocialProvider(
             OAuthProvider.google,
@@ -1227,12 +1252,18 @@ class SupabaseService extends ChangeNotifier {
         case 'discord':
           return signInWithDiscord(privacyRecovery: true);
         default:
-          return 'このログイン方法では再認証できません。お問い合わせからご連絡ください。';
+          return 'このログイン方法では本人確認できません。';
       }
+    } on AuthException catch (e) {
+      debugPrint('Privacy password recovery authentication failed: ${e.message}');
+      return '本人確認を開始できませんでした。ログインサービスの設定をご確認ください。';
     } on PostgrestException catch (e) {
-      return e.message;
-    } catch (e) {
+      if (e.code == '22023') return 'このログイン方法では再設定できません。';
+      if (e.code == '42501') return 'メールの確認またはログイン状態を確認できませんでした。';
       return '本人確認を開始できませんでした。';
+    } catch (e) {
+      debugPrint('Privacy password recovery start failed: $e');
+      return '本人確認を開始できませんでした。時間をおいて再度お試しください。';
     }
   }
 
