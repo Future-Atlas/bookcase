@@ -25,10 +25,12 @@ class AccountSettingsScreen extends StatefulWidget {
     super.key,
     required this.onAccountDeleted,
     this.openPrivacyPasswordRecovery = false,
+    this.onPrivacyPasswordRecoveryCompleted,
   });
 
   final VoidCallback onAccountDeleted;
   final bool openPrivacyPasswordRecovery;
+  final VoidCallback? onPrivacyPasswordRecoveryCompleted;
 
   @override
   State<AccountSettingsScreen> createState() => _AccountSettingsScreenState();
@@ -129,7 +131,10 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     if (_showRecovery) {
       return PrivacyPasswordSetupScreen(
         isRecovery: true,
-        onCompleted: () => setState(() => _showRecovery = false),
+        onCompleted: () {
+          setState(() => _showRecovery = false);
+          widget.onPrivacyPasswordRecoveryCompleted?.call();
+        },
       );
     }
 
