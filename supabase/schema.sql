@@ -346,18 +346,27 @@ $$;
 ALTER FUNCTION "public"."admin_set_account_suspension"("target_profile" "uuid", "suspend" boolean, "reason" "text") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."begin_privacy_password_recovery"() RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO 'public'
-    AS $$
+CREATE OR REPLACE FUNCTION public.begin_privacy_password_recovery()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 DECLARE
     current_provider TEXT := auth.jwt() -> 'app_metadata' ->> 'provider';
 BEGIN
     IF auth.uid() IS NULL THEN
         RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
     END IF;
-    IF current_provider NOT IN ('google', 'twitter', 'x', 'facebook', 'apple', 'discord') THEN
+    IF current_provider NOT IN ('email', 'google', 'twitter', 'x', 'facebook', 'apple', 'discord') THEN
         RAISE EXCEPTION 'Unsupported recovery provider' USING ERRCODE = '22023';
+    END IF;
+    IF current_provider = 'email' AND NOT EXISTS (
+        SELECT 1 FROM auth.users AS u
+        WHERE u.id = auth.uid()
+          AND u.email_confirmed_at IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION 'Verified email required' USING ERRCODE = '42501';
     END IF;
     INSERT INTO public.privacy_password_recovery_requests (
         profile_id, provider, requested_at
@@ -1166,21 +1175,29 @@ $$;
 ALTER FUNCTION "public"."request_follow"("target_profile" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."reset_privacy_password_after_reauthentication"("p_new_password" "text") RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO 'public', 'extensions'
-    AS $$
+CREATE OR REPLACE FUNCTION public.reset_privacy_password_after_reauthentication(
+    p_new_password TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
 DECLARE
     recovery public.privacy_password_recovery_requests%ROWTYPE;
-    has_recent_oauth BOOLEAN;
+    has_recent_auth BOOLEAN;
 BEGIN
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
+    END IF;
     IF NOT public.is_valid_privacy_password(p_new_password) THEN
         RAISE EXCEPTION 'Invalid privacy password' USING ERRCODE = '23514';
     END IF;
     SELECT * INTO recovery
     FROM public.privacy_password_recovery_requests
     WHERE profile_id = auth.uid()
-      AND requested_at >= timezone('utc'::text, now()) - interval '15 minutes';
+      AND requested_at >= timezone('utc'::text, now()) - interval '15 minutes'
+    FOR UPDATE;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Recovery request expired' USING ERRCODE = '42501';
     END IF;
@@ -1188,15 +1205,21 @@ BEGIN
         RAISE EXCEPTION 'Recovery provider mismatch' USING ERRCODE = '42501';
     END IF;
 
+    -- Merely having an existing session or refreshing a token is insufficient.
+    -- Only an authentication-method event after the request is accepted.
     SELECT EXISTS (
         SELECT 1
         FROM jsonb_array_elements(COALESCE(auth.jwt() -> 'amr', '[]'::jsonb)) AS entry
-        WHERE entry ->> 'method' = 'oauth'
+        WHERE (
+            (recovery.provider = 'email' AND entry ->> 'method' IN ('otp', 'magiclink'))
+            OR
+            (recovery.provider <> 'email' AND entry ->> 'method' = 'oauth')
+        )
           AND to_timestamp((entry ->> 'timestamp')::double precision)
               >= recovery.requested_at - interval '5 seconds'
-    ) INTO has_recent_oauth;
-    IF NOT has_recent_oauth THEN
-        RAISE EXCEPTION 'Fresh OAuth authentication required' USING ERRCODE = '42501';
+    ) INTO has_recent_auth;
+    IF NOT has_recent_auth THEN
+        RAISE EXCEPTION 'Fresh provider reauthentication required' USING ERRCODE = '42501';
     END IF;
 
     UPDATE public.privacy_password_credentials
@@ -1205,6 +1228,9 @@ BEGIN
         locked_until = NULL,
         updated_at = timezone('utc'::text, now())
     WHERE profile_id = auth.uid();
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Privacy password not initialized' USING ERRCODE = '42501';
+    END IF;
     DELETE FROM public.privacy_password_recovery_requests
     WHERE profile_id = auth.uid();
 END;
