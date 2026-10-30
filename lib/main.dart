@@ -850,6 +850,11 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                             onAccountDeleted: _goToBookList,
                             openPrivacyPasswordRecovery:
                                 _openPrivacyPasswordRecovery,
+                            onPrivacyPasswordRecoveryCompleted: () {
+                              setState(
+                                () => _openPrivacyPasswordRecovery = false,
+                              );
+                            },
                           )
                         : _currentScreenIndex == 3
                         ? _HelpScreen(
