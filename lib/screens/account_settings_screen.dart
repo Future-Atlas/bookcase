@@ -1416,7 +1416,7 @@ class _PrivacyPasswordRecoveryScreenState
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text('連携サービスでの本人確認が完了しました。15分以内に再設定してください。'),
+              const Text('登録メールまたは連携アカウントで本人確認した後、15分以内に新しい個人情報変更用パスワードを設定してください。本人確認が完了していない場合、再設定は拒否されます。'),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _passwordController,
