@@ -36,8 +36,9 @@ static const Map<String, String> verifiedAdultOnly = <String, String>{
 ### ジャンル一覧の調査
 
 1. GitHub Actions → **Audit Rakuten Books Genre Taxonomy** → Run workflow を開く。
-2. `main` ブランチ、`root_genre_id=001`（国内書籍）、`max_nodes=300`などで実行する。
-   洋書の確認には `005` を選択する。
+2. `main` ブランチで `001`（国内書籍）、`005`（洋書）、`007`（雑誌）を
+   それぞれ実行する。最初は `max_nodes=300`、`incomplete=true` の場合は
+   `1000`へ増やして再実行する。
 3. 完了後、Actions実行画面のArtifactsから `rakuten-books-genre-audit` を取得する。
 4. JSONの `candidates` に「成人」「18禁」などの名称候補があるか確認する。
    `genres` には取得した全ジャンルを、`incomplete` には走査が途中かを記録する。
@@ -60,11 +61,15 @@ GitHub Secretsの `RAKUTEN_APP_ID` と `RAKUTEN_ACCESS_KEY` をActions内で使�
 
 既存のタイトル・説明文等の成人向けキーワード判定は残す。
 登録済みジャンルIDは `ContentSafetyService.isAdultBook` と `filterBooks`
-から未成年向け書籍一覧の除外に使われる。
+から未成年向け書籍一覧の除外に使われる。検索結果に加え、注目書籍、
+プロフィールの本棚・お気に入り・読みたい本、書籍詳細ダイアログ及び
+書籍の直接URLにも同じクライアント側判定を適用する。
 
 ## 未対応・運用上の注意
 
 - ジャンルIDはカタログAPIから取得した `Book` オブジェクト上で利用できるが、Supabaseに書籍ジャンル情報を永続化してはいない。
-- 既存投稿・プロフィール・おすすめ・外部からの直リンクのすべてに対し、サーバー側で一貫して閲覧禁止を保証する変更ではない。
+- クライアント画面では既存投稿・プロフィール・おすすめ・外部からの直リンクを
+  制限するが、楽天APIプロキシから取得した外部書誌情報そのものを認証済み年齢に
+  応じてサーバーで出し分ける仕組みは未対応。
 - 未成年向けの完全なフィルタには、閲覧可否をサーバーで判定する仕組みと既存投稿への適用が追加で必要。
 - ジャンル情報がない書籍はジャンルだけで安全と認定せず、従来の成人向けキーワード判定が継続する。

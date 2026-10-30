@@ -169,6 +169,25 @@ class SupabaseService extends ChangeNotifier {
 
   User? get currentUser => _client?.auth.currentUser;
 
+  /// The OAuth provider that owns the current Sharemarium account.
+  ///
+  /// Privacy-password recovery must use this same provider. Never ask the
+  /// user to type their Google/X password into Sharemarium itself.
+  String? get currentOAuthProvider {
+    final provider = currentUser?.appMetadata['provider']?.toString();
+    return switch (provider) {
+      'google' => 'google',
+      'twitter' || 'x' => 'x',
+      _ => null,
+    };
+  }
+
+  String? get currentOAuthProviderLabel => switch (currentOAuthProvider) {
+    'google' => 'Google',
+    'x' => 'X',
+    _ => null,
+  };
+
   // ----- AUTH -------------------------------------------------------------
   Future<String?> sendMagicLink({required String email}) async {
     if (!_isInitialized || _client == null) {
@@ -2161,7 +2180,13 @@ class SupabaseService extends ChangeNotifier {
           );
         }),
       );
-      return resolved.where((book) => book.id.isNotEmpty).toList();
+      final books = resolved
+          .where((book) => book.id.isNotEmpty)
+          .toList(growable: false);
+      if (await canViewAdultContent()) return books;
+      return books
+          .where((book) => !ContentSafetyService.isAdultBook(book))
+          .toList(growable: false);
     } catch (e) {
       debugPrint('Error fetching want-to-read shelf: $e');
       return [];
@@ -2453,7 +2478,10 @@ class SupabaseService extends ChangeNotifier {
         ),
       );
     }
-    return books;
+    if (await canViewAdultContent()) return books;
+    return books
+        .where((book) => !ContentSafetyService.isAdultBook(book))
+        .toList(growable: false);
   }
 
   Future<void> _upsertReadCollection({

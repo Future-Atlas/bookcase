@@ -74,8 +74,41 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
 
   Future<void> _startRecovery() async {
     if (_startingPrivacyRecovery) return;
-    setState(() => _startingPrivacyRecovery = true);
     final service = Provider.of<SupabaseService>(context, listen: false);
+    final providerLabel = service.currentOAuthProviderLabel;
+    if (providerLabel == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('パスワードの再設定はGoogleまたはXで登録したアカウントのみ対応しています。'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('連携サービスで本人確認'),
+        content: Text(
+          '登録時と同じ$providerLabelアカウントで本人確認します。\n\n'
+          '本人確認方法は$providerLabel側が決定するため、パスワード、パスキー、MFA、端末確認などが使われる場合があります。Sharemariumが$providerLabelのパスワードを入力・保存することはありません。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('$providerLabelで本人確認'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+
+    setState(() => _startingPrivacyRecovery = true);
 
     final error = await service.beginPrivacyPasswordRecovery();
     if (!mounted) return;
