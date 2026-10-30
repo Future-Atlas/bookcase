@@ -9,6 +9,7 @@ import '../models/post.dart';
 import '../models/post_reply.dart';
 import '../models/social_models.dart';
 import '../models/profile_page_color.dart';
+import '../services/content_safety_service.dart';
 import '../widgets/post_card.dart';
 import '../widgets/book_card.dart';
 import '../widgets/post_composer_dialog.dart';
@@ -1855,6 +1856,15 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   Future<void> _showSearchedBookDetailDialog(Book book) async {
     final service = Provider.of<SupabaseService>(context, listen: false);
+    if (ContentSafetyService.isAdultBook(book) &&
+        !await service.canViewAdultContent()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('この書籍は18歳未満の利用者には表示できません。')),
+      );
+      return;
+    }
+    if (!mounted) return;
     final isReadFuture = service.isBookReadByCurrentUser(bookId: book.id);
     final isWantedFuture = FeatureFlags.wantToReadUiEnabled
         ? service.isBookWantedByCurrentUser(book.id)
