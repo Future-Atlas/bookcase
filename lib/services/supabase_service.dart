@@ -1073,32 +1073,17 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
-  Future<String?> updatePrivateAccountDetails({
+  Future<String?> updateOwnPrivateContactDetails({
     required String password,
     required String familyName,
     required String givenName,
     required String gender,
-    required DateTime birthDate,
+    required DateTime? birthDate,
     required String phoneNumber,
-    required String email,
   }) async {
     if (!_isInitialized || _client == null || !isAuthenticated) {
       return 'ログイン状態を確認できませんでした。';
     }
-
-    final familyNameError = InputSecurityService.validateSafeText(
-      familyName,
-      fieldLabel: '姓',
-      maxLength: 50,
-    );
-    if (familyNameError != null) return familyNameError;
-
-    final givenNameError = InputSecurityService.validateSafeText(
-      givenName,
-      fieldLabel: '名',
-      maxLength: 50,
-    );
-    if (givenNameError != null) return givenNameError;
 
     if (!_allowedAccountGenders.contains(gender)) {
       return '性別を選択してください。';
@@ -1108,17 +1093,23 @@ class SupabaseService extends ChangeNotifier {
       final verified = await verifyPrivacyPassword(password);
       if (!verified) return 'パスワードが正しくありません。';
 
-      final normalizedEmail = email.trim();
-      if (normalizedEmail != (currentUser?.email ?? '')) {
-        await _client!.auth.updateUser(
-          UserAttributes(email: normalizedEmail),
-          emailRedirectTo: _redirectUrl,
-        );
-      }
-      final birthDateValue = birthDate.toIso8601String().split('T').first;
       final phoneValue = _normalizePhoneNumber(phoneNumber);
       dynamic updated;
       try {
+        updated = await _client!.rpc(
+          'update_own_private_contact_details',
+          params: {
+            'p_password': password,
+            'p_gender': gender,
+            'p_phone_number': phoneValue,
+          },
+        );
+      } on PostgrestException catch (error) {
+        // Keep the production client usable during the short interval between
+        // deploying this client and applying the audited-data migration. The
+        // fallback sends the already loaded immutable values unchanged and is
+        // used only when PostgREST cannot find the new function.
+        if (error.code != 'PGRST202' || birthDate == null) rethrow;
         updated = await _client!.rpc(
           'update_private_account_details',
           params: {
@@ -1126,38 +1117,10 @@ class SupabaseService extends ChangeNotifier {
             'p_family_name': familyName.trim(),
             'p_given_name': givenName.trim(),
             'p_gender': gender,
-            'p_birth_date': birthDateValue,
+            'p_birth_date': birthDate.toIso8601String().split('T').first,
             'p_phone_number': phoneValue,
           },
         );
-      } on PostgrestException catch (e) {
-        if (!_isGenderSchemaUnavailable(e) &&
-            !_isSplitNameSchemaUnavailable(e)) {
-          rethrow;
-        }
-        try {
-          updated = await _client!.rpc(
-            'update_private_account_details',
-            params: {
-              'p_password': password,
-              'p_family_name': familyName.trim(),
-              'p_given_name': givenName.trim(),
-              'p_birth_date': birthDateValue,
-              'p_phone_number': phoneValue,
-            },
-          );
-        } on PostgrestException catch (splitNameError) {
-          if (!_isSplitNameSchemaUnavailable(splitNameError)) rethrow;
-          updated = await _client!.rpc(
-            'update_private_account_details',
-            params: {
-              'p_password': password,
-              'p_full_name': '${familyName.trim()} ${givenName.trim()}',
-              'p_birth_date': birthDateValue,
-              'p_phone_number': phoneValue,
-            },
-          );
-        }
       }
       if (updated != true) return 'パスワードが正しくありません。';
       notifyListeners();
@@ -2752,6 +2715,93 @@ class SupabaseService extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error checking administrator access: $e');
       return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> adminReadPrivateAccountDetails({
+    required String targetIdentifier,
+    required String adminPassword,
+    required String reason,
+    required String requestReference,
+  }) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return null;
+    if (!await isCurrentUserAdmin()) return null;
+    if (targetIdentifier.trim().isEmpty ||
+        adminPassword.isEmpty ||
+        reason.trim().length < 10 ||
+        requestReference.trim().isEmpty) {
+      return null;
+    }
+    try {
+      final value = await _client!.rpc(
+        'admin_read_private_account_details',
+        params: {
+          'p_target_identifier': targetIdentifier.trim(),
+          'p_admin_password': adminPassword,
+          'p_reason': reason.trim(),
+          'p_request_reference': requestReference.trim(),
+        },
+      );
+      if (value is Map) return Map<String, dynamic>.from(value);
+      return null;
+    } catch (e) {
+      debugPrint('Private account access was denied or failed.');
+      return null;
+    }
+  }
+
+  Future<List<String>?> adminUpdatePrivateAccountDetails({
+    required String targetIdentifier,
+    required String adminPassword,
+    required String reason,
+    required String requestReference,
+    required String familyName,
+    required String givenName,
+    required DateTime birthDate,
+    required String phoneNumber,
+    required String gender,
+  }) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return null;
+    if (!await isCurrentUserAdmin()) return null;
+    final familyNameError = InputSecurityService.validateSafeText(
+      familyName,
+      fieldLabel: '姓',
+      maxLength: 50,
+    );
+    final givenNameError = InputSecurityService.validateSafeText(
+      givenName,
+      fieldLabel: '名',
+      maxLength: 50,
+    );
+    if (familyNameError != null ||
+        givenNameError != null ||
+        targetIdentifier.trim().isEmpty ||
+        adminPassword.isEmpty ||
+        reason.trim().length < 10 ||
+        requestReference.trim().isEmpty ||
+        !_allowedAccountGenders.contains(gender)) {
+      return null;
+    }
+    try {
+      final value = await _client!.rpc(
+        'admin_update_private_account_details',
+        params: {
+          'p_target_identifier': targetIdentifier.trim(),
+          'p_admin_password': adminPassword,
+          'p_reason': reason.trim(),
+          'p_request_reference': requestReference.trim(),
+          'p_family_name': familyName.trim(),
+          'p_given_name': givenName.trim(),
+          'p_birth_date': birthDate.toIso8601String().split('T').first,
+          'p_phone_number': _normalizePhoneNumber(phoneNumber),
+          'p_gender': gender,
+        },
+      );
+      if (value is List) return value.map((item) => item.toString()).toList();
+      return null;
+    } catch (e) {
+      debugPrint('Private account correction was denied or failed.');
+      return null;
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/moderation_models.dart';
 import '../services/supabase_service.dart';
 import '../widgets/featured_books_admin_panel.dart';
+import '../widgets/private_account_admin_panel.dart';
 
 class ModerationScreen extends StatefulWidget {
   const ModerationScreen({super.key});
@@ -244,6 +245,7 @@ class _ModerationScreenState extends State<ModerationScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           const FeaturedBooksAdminPanel(),
+          const PrivateAccountAdminPanel(),
           const Text(
             '報告管理',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
