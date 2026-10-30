@@ -530,6 +530,11 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             '氏名・性別・生年月日・電話番号・パスワードは公開されません。',
             style: TextStyle(color: Colors.white70),
           ),
+          const SizedBox(height: 6),
+          const Text(
+            '氏名と生年月日は登録後にご自身で変更できません。入力内容を確認し、訂正が必要な場合はお問い合わせください。',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
           const SizedBox(height: 22),
           TextFormField(
             controller: _familyNameController,

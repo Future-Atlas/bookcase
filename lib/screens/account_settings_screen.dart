@@ -965,29 +965,17 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
     super.dispose();
   }
 
-  Future<void> _selectDate() async {
-    final now = DateTime.now();
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: _birthDate ?? DateTime(now.year - 20),
-      firstDate: DateTime(1900),
-      lastDate: now,
-    );
-    if (selected != null && mounted) setState(() => _birthDate = selected);
-  }
-
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate() || _birthDate == null) return;
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     final error = await Provider.of<SupabaseService>(context, listen: false)
-        .updatePrivateAccountDetails(
+        .updateOwnPrivateContactDetails(
           password: widget.password,
           familyName: _familyNameController.text,
           givenName: _givenNameController.text,
           gender: _gender,
-          birthDate: _birthDate!,
+          birthDate: _birthDate,
           phoneNumber: _phoneController.text,
-          email: _emailController.text,
         );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -1018,22 +1006,24 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
                       const SizedBox(height: 18),
                       TextFormField(
                         controller: _familyNameController,
-                        maxLength: 50,
+                        readOnly: true,
                         decoration: const InputDecoration(
                           labelText: '姓（Family name）',
+                          helperText: '登録後は本人による変更はできません。訂正はお問い合わせください。',
+                          suffixIcon: Icon(Icons.lock_outline),
                           border: OutlineInputBorder(),
                         ),
-                        validator: _required,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _givenNameController,
-                        maxLength: 50,
+                        readOnly: true,
                         decoration: const InputDecoration(
                           labelText: '名（Given name）',
+                          helperText: '運営者が訂正した場合は、理由と操作記録が保存されます。',
+                          suffixIcon: Icon(Icons.lock_outline),
                           border: OutlineInputBorder(),
                         ),
-                        validator: _required,
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
@@ -1062,8 +1052,11 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
                               ? '未登録'
                               : '${_birthDate!.year}/${_birthDate!.month.toString().padLeft(2, '0')}/${_birthDate!.day.toString().padLeft(2, '0')}',
                         ),
-                        trailing: const Icon(Icons.calendar_month),
-                        onTap: _selectDate,
+                        trailing: const Icon(Icons.lock_outline),
+                      ),
+                      const Text(
+                        '生年月日は登録後に本人が変更できません。訂正が必要な場合はお問い合わせください。',
+                        style: TextStyle(fontSize: 12),
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
@@ -1087,21 +1080,21 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
                       TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
+                        readOnly: true,
                         decoration: const InputDecoration(
                           labelText: 'メールアドレス',
-                          helperText: '変更時は新しいメールアドレスでの確認が必要になる場合があります。',
+                          helperText:
+                              '連携している認証サービスで管理されます。Sharemariumの管理者は変更しません。',
+                          suffixIcon: Icon(Icons.lock_outline),
                           border: OutlineInputBorder(),
                         ),
-                        validator: (value) => (value ?? '').contains('@')
-                            ? null
-                            : '有効なメールアドレスを入力してください。',
                       ),
                       const SizedBox(height: 24),
                       FilledButton(
                         onPressed: _saving ? null : _save,
                         child: _saving
                             ? const CircularProgressIndicator()
-                            : const Text('変更を保存する'),
+                            : const Text('電話番号・性別を保存する'),
                       ),
                       const SizedBox(height: 12),
                       OutlinedButton(
@@ -1121,9 +1114,6 @@ class _PrivacySettingsScreenState extends State<_PrivacySettingsScreen> {
             ),
     );
   }
-
-  static String? _required(String? value) =>
-      (value?.trim().isEmpty ?? true) ? '入力してください。' : null;
 }
 
 class _BlockedAccountsScreen extends StatefulWidget {

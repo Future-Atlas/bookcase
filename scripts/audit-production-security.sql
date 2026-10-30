@@ -32,6 +32,7 @@ begin
     ('posts'),
     ('privacy_password_credentials'),
     ('privacy_password_recovery_requests'),
+    ('private_data_admin_audit'),
     ('profiles'),
     ('session_ip_guards'),
     ('want_to_read_books')
@@ -78,6 +79,7 @@ begin
       'posts',
       'privacy_password_credentials',
       'privacy_password_recovery_requests',
+      'private_data_admin_audit',
       'profiles',
       'session_ip_guards',
       'want_to_read_books'
@@ -107,6 +109,38 @@ begin
   end if;
   if has_table_privilege('authenticated', 'public.privacy_password_recovery_requests', 'SELECT') then
     raise exception 'SECURITY_AUDIT_PASSWORD_RECOVERY_READ';
+  end if;
+  if has_table_privilege('authenticated', 'public.private_data_admin_audit', 'SELECT') then
+    raise exception 'SECURITY_AUDIT_PRIVATE_DATA_AUDIT_READ';
+  end if;
+  if has_table_privilege('authenticated', 'public.account_details', 'UPDATE') then
+    raise exception 'SECURITY_AUDIT_DIRECT_ACCOUNT_DETAILS_UPDATE';
+  end if;
+  if has_function_privilege(
+      'authenticated',
+      'public.update_private_account_details(text,text,date,text)',
+      'EXECUTE'
+    ) or has_function_privilege(
+      'authenticated',
+      'public.update_private_account_details(text,text,text,date,text)',
+      'EXECUTE'
+    ) or has_function_privilege(
+      'authenticated',
+      'public.update_private_account_details(text,text,text,text,date,text)',
+      'EXECUTE'
+    ) then
+    raise exception 'SECURITY_AUDIT_STALE_PRIVATE_UPDATE_FUNCTION';
+  end if;
+  if has_function_privilege(
+    'anon',
+    'public.admin_read_private_account_details(text,text,text,text)',
+    'EXECUTE'
+  ) or has_function_privilege(
+    'anon',
+    'public.admin_update_private_account_details(text,text,text,text,text,text,date,text,text)',
+    'EXECUTE'
+  ) then
+    raise exception 'SECURITY_AUDIT_ANON_PRIVATE_OPERATOR_FUNCTION';
   end if;
 end;
 $$;
@@ -143,9 +177,9 @@ begin
   if not exists (
     select 1
     from supabase_migrations.schema_migrations
-    where version = '20261029100000'
+    where version = '20261029143000'
   ) then
-    raise exception 'SECURITY_AUDIT_PENDING_HARDENING_MIGRATION';
+    raise exception 'SECURITY_AUDIT_PENDING_AUDITED_PRIVATE_DATA_MIGRATION';
   end if;
 end;
 $$;
