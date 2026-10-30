@@ -358,16 +358,10 @@ BEGIN
     IF auth.uid() IS NULL THEN
         RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
     END IF;
-    IF current_provider NOT IN ('email', 'google', 'twitter', 'x', 'facebook', 'apple', 'discord') THEN
+    IF current_provider NOT IN ('google', 'twitter', 'x') THEN
         RAISE EXCEPTION 'Unsupported recovery provider' USING ERRCODE = '22023';
     END IF;
-    IF current_provider = 'email' AND NOT EXISTS (
-        SELECT 1 FROM auth.users AS u
-        WHERE u.id = auth.uid()
-          AND u.email_confirmed_at IS NOT NULL
-    ) THEN
-        RAISE EXCEPTION 'Verified email required' USING ERRCODE = '42501';
-    END IF;
+
     INSERT INTO public.privacy_password_recovery_requests (
         profile_id, provider, requested_at
     ) VALUES (
@@ -1185,7 +1179,7 @@ SET search_path = public, extensions
 AS $$
 DECLARE
     recovery public.privacy_password_recovery_requests%ROWTYPE;
-    has_recent_auth BOOLEAN;
+    has_recent_oauth BOOLEAN;
 BEGIN
     IF auth.uid() IS NULL THEN
         RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
@@ -1201,25 +1195,20 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Recovery request expired' USING ERRCODE = '42501';
     END IF;
-    IF (auth.jwt() -> 'app_metadata' ->> 'provider') IS DISTINCT FROM recovery.provider THEN
+    IF recovery.provider NOT IN ('google', 'twitter', 'x')
+       OR (auth.jwt() -> 'app_metadata' ->> 'provider') IS DISTINCT FROM recovery.provider THEN
         RAISE EXCEPTION 'Recovery provider mismatch' USING ERRCODE = '42501';
     END IF;
 
-    -- Merely having an existing session or refreshing a token is insufficient.
-    -- Only an authentication-method event after the request is accepted.
     SELECT EXISTS (
         SELECT 1
         FROM jsonb_array_elements(COALESCE(auth.jwt() -> 'amr', '[]'::jsonb)) AS entry
-        WHERE (
-            (recovery.provider = 'email' AND entry ->> 'method' IN ('otp', 'magiclink'))
-            OR
-            (recovery.provider <> 'email' AND entry ->> 'method' = 'oauth')
-        )
+        WHERE entry ->> 'method' = 'oauth'
           AND to_timestamp((entry ->> 'timestamp')::double precision)
               >= recovery.requested_at - interval '5 seconds'
-    ) INTO has_recent_auth;
-    IF NOT has_recent_auth THEN
-        RAISE EXCEPTION 'Fresh provider reauthentication required' USING ERRCODE = '42501';
+    ) INTO has_recent_oauth;
+    IF NOT has_recent_oauth THEN
+        RAISE EXCEPTION 'Fresh OAuth authentication required' USING ERRCODE = '42501';
     END IF;
 
     UPDATE public.privacy_password_credentials
@@ -1231,6 +1220,7 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Privacy password not initialized' USING ERRCODE = '42501';
     END IF;
+
     DELETE FROM public.privacy_password_recovery_requests
     WHERE profile_id = auth.uid();
 END;
