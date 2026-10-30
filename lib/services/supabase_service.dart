@@ -169,6 +169,25 @@ class SupabaseService extends ChangeNotifier {
 
   User? get currentUser => _client?.auth.currentUser;
 
+  /// The OAuth provider that owns the current Sharemarium account.
+  ///
+  /// Privacy-password recovery must use this same provider. Never ask the
+  /// user to type their Google/X password into Sharemarium itself.
+  String? get currentOAuthProvider {
+    final provider = currentUser?.appMetadata['provider']?.toString();
+    return switch (provider) {
+      'google' => 'google',
+      'twitter' || 'x' => 'x',
+      _ => null,
+    };
+  }
+
+  String? get currentOAuthProviderLabel => switch (currentOAuthProvider) {
+    'google' => 'Google',
+    'x' => 'X',
+    _ => null,
+  };
+
   // ----- AUTH -------------------------------------------------------------
   Future<String?> sendMagicLink({required String email}) async {
     if (!_isInitialized || _client == null) {
@@ -271,6 +290,9 @@ class SupabaseService extends ChangeNotifier {
       final started = await _client!.auth.signInWithOAuth(
         provider,
         redirectTo: redirectTo,
+        queryParams: provider == OAuthProvider.google
+            ? const {'prompt': 'select_account'}
+            : null,
       );
       return started ? null : '$labelログインを開始できませんでした。';
     } on AuthException catch (e) {
@@ -1166,36 +1188,39 @@ class SupabaseService extends ChangeNotifier {
     if (!_isInitialized || _client == null || !isAuthenticated) {
       return 'ログイン状態を確認できませんでした。';
     }
+    // Sharemarium currently offers Google and X login only. Do not fall back
+    // to an email password or silently create an unrelated account.
+    final provider = currentUser?.appMetadata['provider']?.toString() ?? '';
+    if (!const {'google', 'twitter', 'x'}.contains(provider)) {
+      return 'パスワードの再設定はGoogleまたはXでログインしたアカウントのみ対応しています。';
+    }
     try {
-      final provider = currentUser?.appMetadata['provider']?.toString() ?? '';
+      // The database records the current UID/provider/time before redirecting.
+      // The password can only be changed after a *fresh* matching OAuth login.
       await _client!.rpc('begin_privacy_password_recovery');
-      switch (provider) {
-        case 'google':
-          return _signInWithSocialProvider(
-            OAuthProvider.google,
-            label: 'Google',
-            privacyRecovery: true,
-          );
-        case 'twitter':
-        case 'x':
-          return _signInWithSocialProvider(
-            OAuthProvider.x,
-            label: 'X',
-            privacyRecovery: true,
-          );
-        case 'facebook':
-          return signInWithFacebook(privacyRecovery: true);
-        case 'apple':
-          return signInWithApple(privacyRecovery: true);
-        case 'discord':
-          return signInWithDiscord(privacyRecovery: true);
-        default:
-          return 'このログイン方法では再認証できません。お問い合わせからご連絡ください。';
+      if (provider == 'google') {
+        return _signInWithSocialProvider(
+          OAuthProvider.google,
+          label: 'Google',
+          privacyRecovery: true,
+        );
       }
+      return _signInWithSocialProvider(
+        OAuthProvider.x,
+        label: 'X',
+        privacyRecovery: true,
+      );
+    } on AuthException catch (e) {
+      debugPrint('Privacy OAuth reauthentication failed: ${e.message}');
+      return '連携サービスでの本人確認を開始できませんでした。';
     } on PostgrestException catch (e) {
-      return e.message;
-    } catch (e) {
+      if (e.code == '22023') {
+        return 'Google・X以外のログイン方法では再設定できません。';
+      }
       return '本人確認を開始できませんでした。';
+    } catch (e) {
+      debugPrint('Privacy password recovery start failed: $e');
+      return '本人確認を開始できませんでした。時間をおいて再度お試しください。';
     }
   }
 
@@ -2155,7 +2180,13 @@ class SupabaseService extends ChangeNotifier {
           );
         }),
       );
-      return resolved.where((book) => book.id.isNotEmpty).toList();
+      final books = resolved
+          .where((book) => book.id.isNotEmpty)
+          .toList(growable: false);
+      if (await canViewAdultContent()) return books;
+      return books
+          .where((book) => !ContentSafetyService.isAdultBook(book))
+          .toList(growable: false);
     } catch (e) {
       debugPrint('Error fetching want-to-read shelf: $e');
       return [];
@@ -2447,7 +2478,10 @@ class SupabaseService extends ChangeNotifier {
         ),
       );
     }
-    return books;
+    if (await canViewAdultContent()) return books;
+    return books
+        .where((book) => !ContentSafetyService.isAdultBook(book))
+        .toList(growable: false);
   }
 
   Future<void> _upsertReadCollection({

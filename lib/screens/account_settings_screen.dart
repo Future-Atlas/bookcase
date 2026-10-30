@@ -25,10 +25,12 @@ class AccountSettingsScreen extends StatefulWidget {
     super.key,
     required this.onAccountDeleted,
     this.openPrivacyPasswordRecovery = false,
+    this.onPrivacyPasswordRecoveryCompleted,
   });
 
   final VoidCallback onAccountDeleted;
   final bool openPrivacyPasswordRecovery;
+  final VoidCallback? onPrivacyPasswordRecoveryCompleted;
 
   @override
   State<AccountSettingsScreen> createState() => _AccountSettingsScreenState();
@@ -37,6 +39,7 @@ class AccountSettingsScreen extends StatefulWidget {
 class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   late bool _showRecovery = widget.openPrivacyPasswordRecovery;
   bool _deleting = false;
+  bool _startingPrivacyRecovery = false;
 
   void _push(Widget screen) {
     Navigator.of(context).push(
@@ -48,9 +51,15 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     final password = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _PrivacyPasswordDialog(onForgot: _startRecovery),
+      builder: (_) => const _PrivacyPasswordDialog(),
     );
     if (!mounted || password == null) return;
+    // The dialog returns an empty string only when the user chooses recovery.
+    // A valid privacy password is always at least eight characters.
+    if (password.isEmpty) {
+      await _startRecovery();
+      return;
+    }
     final service = Provider.of<SupabaseService>(context, listen: false);
     final verified = await service.verifyPrivacyPassword(password);
     if (!mounted) return;
@@ -64,10 +73,51 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   }
 
   Future<void> _startRecovery() async {
+    if (_startingPrivacyRecovery) return;
     final service = Provider.of<SupabaseService>(context, listen: false);
+    final providerLabel = service.currentOAuthProviderLabel;
+    if (providerLabel == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('パスワードの再設定はGoogleまたはXで登録したアカウントのみ対応しています。'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('連携サービスで本人確認'),
+        content: Text(
+          '登録時と同じ$providerLabelアカウントで本人確認します。\n\n'
+          '本人確認方法は$providerLabel側が決定するため、パスワード、パスキー、MFA、端末確認などが使われる場合があります。Sharemariumが$providerLabelのパスワードを入力・保存することはありません。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('$providerLabelで本人確認'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+
+    setState(() => _startingPrivacyRecovery = true);
+
     final error = await service.beginPrivacyPasswordRecovery();
-    if (!mounted || error == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+    if (!mounted) return;
+    setState(() => _startingPrivacyRecovery = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(error ?? 'GoogleまたはXで本人確認してください。'),
+      ),
+    );
   }
 
   Future<void> _deleteAccount() async {
@@ -112,8 +162,12 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       return const Center(child: Text('設定を利用するにはログインしてください。'));
     }
     if (_showRecovery) {
-      return _PrivacyPasswordRecoveryScreen(
-        onCompleted: () => setState(() => _showRecovery = false),
+      return PrivacyPasswordSetupScreen(
+        isRecovery: true,
+        onCompleted: () {
+          setState(() => _showRecovery = false);
+          widget.onPrivacyPasswordRecoveryCompleted?.call();
+        },
       );
     }
 
@@ -1174,9 +1228,7 @@ class _BlockedAccountsScreenState extends State<_BlockedAccountsScreen> {
 }
 
 class _PrivacyPasswordDialog extends StatefulWidget {
-  const _PrivacyPasswordDialog({required this.onForgot});
-
-  final VoidCallback onForgot;
+  const _PrivacyPasswordDialog();
 
   @override
   State<_PrivacyPasswordDialog> createState() => _PrivacyPasswordDialogState();
@@ -1215,12 +1267,9 @@ class _PrivacyPasswordDialogState extends State<_PrivacyPasswordDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              widget.onForgot();
-            });
-          },
+          // Return a distinct invalid password sentinel to the parent dialog
+          // caller; do not schedule recovery after a disposed dialog's frame.
+          onPressed: () => Navigator.of(context).pop(''),
           child: const Text('パスワードを忘れた方'),
         ),
         TextButton(
@@ -1325,109 +1374,6 @@ class _ChangePrivacyPasswordScreenState
               child: const Text('変更する'),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PrivacyPasswordRecoveryScreen extends StatefulWidget {
-  const _PrivacyPasswordRecoveryScreen({required this.onCompleted});
-
-  final VoidCallback onCompleted;
-
-  @override
-  State<_PrivacyPasswordRecoveryScreen> createState() =>
-      _PrivacyPasswordRecoveryScreenState();
-}
-
-class _PrivacyPasswordRecoveryScreenState
-    extends State<_PrivacyPasswordRecoveryScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _passwordController = TextEditingController();
-  final _confirmationController = TextEditingController();
-  bool _obscure = true;
-  bool _saving = false;
-
-  @override
-  void dispose() {
-    _passwordController.dispose();
-    _confirmationController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
-    final error = await Provider.of<SupabaseService>(
-      context,
-      listen: false,
-    ).resetPrivacyPasswordAfterReauthentication(_passwordController.text);
-    if (!mounted) return;
-    setState(() => _saving = false);
-    if (error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error)));
-      return;
-    }
-    widget.onCompleted();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('パスワードを再設定しました。')));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              const Text(
-                'パスワードを再設定',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text('連携サービスでの本人確認が完了しました。15分以内に再設定してください。'),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: _obscure,
-                decoration: InputDecoration(
-                  labelText: '新しいパスワード',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    onPressed: () => setState(() => _obscure = !_obscure),
-                    icon: Icon(
-                      _obscure ? Icons.visibility : Icons.visibility_off,
-                    ),
-                  ),
-                ),
-                validator: validatePrivacyPassword,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _confirmationController,
-                obscureText: _obscure,
-                decoration: const InputDecoration(
-                  labelText: '新しいパスワード（確認）',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) =>
-                    value != _passwordController.text ? 'パスワードが一致しません。' : null,
-              ),
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: _saving ? null : _save,
-                child: const Text('再設定する'),
-              ),
-            ],
-          ),
         ),
       ),
     );

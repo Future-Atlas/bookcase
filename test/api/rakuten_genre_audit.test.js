@@ -23,3 +23,17 @@ test('restrictions must use a verified registry, not a generic adult keyword gue
   assert.match(safety, /RestrictedRakutenGenres\.blockedIds/);
   assert.match(safety, /containsAdultContentTerms/);
 });
+
+test('minor filtering covers direct details, featured books and profile shelves', () => {
+  const home = readFileSync('lib/screens/book_list_screen.dart', 'utf8');
+  const controller = readFileSync('lib/controllers/book_list_controller.dart', 'utf8');
+  const profile = readFileSync('lib/screens/user_profile_screen.dart', 'utf8');
+  const service = readFileSync('lib/services/supabase_service.dart', 'utf8');
+
+  assert.match(home, /ContentSafetyService\.isAdultBook\(book\)[\s\S]*canViewAdultContent\(\)/);
+  assert.match(home, /openedFromDirectUrl[\s\S]*_replaceBrowserPath\('\/'\)/);
+  assert.match(controller, /featuredBooks[\s\S]*ContentSafetyService\.isAdultBook\(book\)/);
+  assert.match(profile, /_showSearchedBookDetailDialog[\s\S]*ContentSafetyService\.isAdultBook\(book\)/);
+  assert.match(service, /fetchUserWantToRead[\s\S]*ContentSafetyService\.isAdultBook\(book\)/);
+  assert.match(service, /_resolveBooksByIds[\s\S]*ContentSafetyService\.isAdultBook\(book\)/);
+});

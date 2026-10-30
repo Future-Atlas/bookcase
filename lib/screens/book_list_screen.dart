@@ -18,6 +18,7 @@ import '../models/book.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
 import '../models/social_models.dart';
+import '../services/content_safety_service.dart';
 import '../services/supabase_service.dart';
 import '../widgets/post_composer_dialog.dart';
 import '../widgets/post_reply_dialog.dart';
@@ -397,6 +398,18 @@ class _BookListScreenState extends State<BookListScreen> {
     Book book, {
     bool openedFromDirectUrl = false,
   }) async {
+    if (ContentSafetyService.isAdultBook(book)) {
+      final service = Provider.of<SupabaseService>(context, listen: false);
+      final canView = await service.canViewAdultContent();
+      if (!mounted) return;
+      if (!canView) {
+        if (openedFromDirectUrl) _replaceBrowserPath('/');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('この書籍は18歳未満の利用者には表示できません。')),
+        );
+        return;
+      }
+    }
     if (_openingBookId != null && !openedFromDirectUrl) return;
     final previousPath = _currentAppPath();
     final canonicalBookId = (book.isbn.isNotEmpty ? book.isbn : book.id).trim();
