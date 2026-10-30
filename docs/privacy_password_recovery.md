@@ -1,37 +1,31 @@
-# 個人情報変更用パスワードの復旧
+# プライバシー設定用パスワードの再設定（Google / X）
 
 ## 対象
 
-プライバシー設定を開くための **別パスワード** です。Supabase Authのログイン用パスワードではありません。
-既存のハッシュから平文の元パスワードを取り出したり、パスワードをメールで送付したりしません。
+Sharemariumのログイン方法は現在 **Google / Xのみ**。メールアドレスによるパスワードログインや、メールリンクによる復旧は提供しない。
 
-## フロー
+このパスワードはログイン用ではなく、**プライバシー設定を開くための別パスワード**。以前の値を表示・メール送信・自動発行することはない。
 
-1. ログイン済みユーザーが「プライバシー設定」→「パスワードを忘れた方」を押す。
-2. `begin_privacy_password_recovery` が、ログイン済みのUID、Authのメインproviderと開始時刻を保存。
-3. providerが `email` の場合は、**登録済み**かつ確認済みのメールアドレスへ、Supabase Auth `signInWithOtp`（`shouldCreateUser:false`）でワンタイムリンクを送る。Google/X/Apple/Facebook/Discordの場合は同じOAuthサービスで再ログイン。
-4. メールのリンク/外部認証の戻り先は `/?privacy_password_recovery=1`。アプリが設定内の再設定フォームを開く。
-5. 新しいパスワードをユーザーが設定する。SQL RPC `reset_privacy_password_after_reauthentication` が、**同一UID**・**同一provider**・15分以内の要求・要求時刻以降の新しい `amr` (email → `otp`/`magiclink`, OAuth → `oauth`) を確認した場合だけ、プライバシーパスワードを新しくハッシュ化して更新する。
+## 画面フロー
 
-URLに`privacy_password_recovery=1`と入力するだけではRPCの本人確認を通れません。
+1. ログイン済みの利用者が「プライバシー設定」→「パスワードを忘れた方」を押す。
+2. サーバーの `begin_privacy_password_recovery` が、現在のUID・GoogleまたはXのprovider・要求時刻を記録。
+3. **ログイン時と同じGoogle / X** で本人確認する。
+4. OAuth終了後、`/?privacy_password_recovery=1` に戻り、**初回の個人情報変更用パスワード設定画面と同じレイアウト**で「**新しいパスワードを設定**」ページを開く。
+5. 新しいパスワードと確認用パスワードを入力 →「再設定する」。
+6. サーバーで同一ユーザー・同一provider・15分以内の要求・要求開始以降の `amr.method=oauth` を検証し、合格の場合にのみ新パスワードのハッシュを保存。元のプライバシー設定に戻る。
 
-## Supabase Auth 側で確認する設定
+**URLを手動で開いても本人確認は省略できず、SQL側で未認証の更新を拒否する。**
 
-- 本番 `https://www.sharemarium.com/?privacy_password_recovery=1` と、同じパス・クエリのステージングURLを **Auth → URL Configuration → Redirect URLs** の許可対象に追加する（または明確に一致する許可パターンを設定）。OAuth側の許可リダイレクトURLも確認する。
-- メールプロバイダを有効化し、利用者のメールを確認済みにする。Magic Linkテンプレートとメール送信ドメインの設定が必要。
-- Magic Linkを使う場合、メールクライアントの事前アクセスによる使い捨てリンク消費に注意。必要ならSupabaseのメールOTPテンプレートと入力画面への切り替えを検討する。
-- 実際のGoogle/X/メールアカウントで、リダイレクト後のJWT `amr` がサーバー条件に合うことをステージングで確認する。サービスキー、JWT、本文のパスワードをログに出さない。
+## Supabase Authの設定
 
-## リリース順序（必須）
+- 本番用 `https://www.sharemarium.com/?privacy_password_recovery=1` とステージングの同等URLを、Auth → URL Configuration → Redirect URLsに許可する（または明確に一致する許可パターン）。
+- Google/XのOAuth接続設定を確認。実際のログインでリダイレクト・JWT `amr`・同一ユーザー条件をステージングでテストする。
+- OAuthトークン・機密情報・パスワードをログに記録しない。
 
-1. 新migration `20261030130000_allow_email_privacy_password_recovery.sql` のCI検証。
-2. **本番DBにmigrationを適用**する。GitHub Actions `Deploy Database to Supabase` を手動起動し、`apply_migrations=true`, `deploy_edge_functions=false` を設定する。既に本番に未適用の別migrationがある場合、合わせて適用されうるため、必ずドライラン計画を先に確認する。
-3. 新しいFlutter UIを `main` にマージ・CloudflareとVercelに配信する。
-4. メール、Google、Xの実アカウントでテスト。15分超過、古いログイン、別ユーザー、失効リンク、同一アカウントの二重操作の失敗を確認する。
+## マイグレーションと本番公開の順番
 
-**SQLを先に適用しない場合、旧RPCはemailプロバイダを拒否する。**
-
-## 注意点
-
-- OAuthリダイレクト後の`app_metadata.provider`がメール以外の場合は、メールリンクへフォールバックしない。本人が元のログイン方法で認証し直すこと。
-- 本人確認をしない自動パスワード発行・メール配送はしない。
+- `20261030130000_allow_email_privacy_password_recovery.sql` は過去にステージングへ適用済みのため**編集しない**。本番では新しいマイグレーションを含めて実行すると順に適用される。
+- `20261030130100_restrict_privacy_password_recovery_to_oauth.sql` が最終仕様（Google / X限定）。**後のマイグレーションがメールによる復旧を無効化する**。
+- 本番DBへ実適用を確認してから、Flutter UIを本番 `main` に反映する。通常のpushではドライランだけであり、`Deploy Database to Supabase` を `main`・`apply_migrations=true`・`deploy_edge_functions=false` で手動起動する。
+- Webの動作確認はGoogle・X両方、既存のログインセッションのみ、異なるOAuthアカウント、15分経過、再設定後のログイン・プライバシー設定で実施する。
