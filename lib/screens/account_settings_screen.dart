@@ -37,6 +37,7 @@ class AccountSettingsScreen extends StatefulWidget {
 class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   late bool _showRecovery = widget.openPrivacyPasswordRecovery;
   bool _deleting = false;
+  bool _startingPrivacyRecovery = false;
 
   void _push(Widget screen) {
     Navigator.of(context).push(
@@ -48,9 +49,15 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     final password = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _PrivacyPasswordDialog(onForgot: _startRecovery),
+      builder: (_) => const _PrivacyPasswordDialog(),
     );
     if (!mounted || password == null) return;
+    // The dialog returns an empty string only when the user chooses recovery.
+    // A valid privacy password is always at least eight characters.
+    if (password.isEmpty) {
+      await _startRecovery();
+      return;
+    }
     final service = Provider.of<SupabaseService>(context, listen: false);
     final verified = await service.verifyPrivacyPassword(password);
     if (!mounted) return;
@@ -64,10 +71,21 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
   }
 
   Future<void> _startRecovery() async {
+    if (_startingPrivacyRecovery) return;
+    setState(() => _startingPrivacyRecovery = true);
     final service = Provider.of<SupabaseService>(context, listen: false);
+    final emailRecovery = service.currentUser?.appMetadata['provider'] == 'email';
     final error = await service.beginPrivacyPasswordRecovery();
-    if (!mounted || error == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+    if (!mounted) return;
+    setState(() => _startingPrivacyRecovery = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(error ??
+            (emailRecovery
+                ? '登録メールアドレスに確認用リンクを送信しました。メールから本人確認を完了してください。'
+                : '連携アカウントで本人確認してください。')),
+      ),
+    );
   }
 
   Future<void> _deleteAccount() async {
@@ -1184,9 +1202,7 @@ class _BlockedAccountsScreenState extends State<_BlockedAccountsScreen> {
 }
 
 class _PrivacyPasswordDialog extends StatefulWidget {
-  const _PrivacyPasswordDialog({required this.onForgot});
-
-  final VoidCallback onForgot;
+  const _PrivacyPasswordDialog();
 
   @override
   State<_PrivacyPasswordDialog> createState() => _PrivacyPasswordDialogState();
@@ -1225,12 +1241,9 @@ class _PrivacyPasswordDialogState extends State<_PrivacyPasswordDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              widget.onForgot();
-            });
-          },
+          // Return a distinct invalid password sentinel to the parent dialog
+          // caller; do not schedule recovery after a disposed dialog's frame.
+          onPressed: () => Navigator.of(context).pop(''),
           child: const Text('パスワードを忘れた方'),
         ),
         TextButton(
@@ -1403,7 +1416,7 @@ class _PrivacyPasswordRecoveryScreenState
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text('連携サービスでの本人確認が完了しました。15分以内に再設定してください。'),
+              const Text('登録メールまたは連携アカウントで本人確認した後、15分以内に新しい個人情報変更用パスワードを設定してください。本人確認が完了していない場合、再設定は拒否されます。'),
               const SizedBox(height: 20),
               TextFormField(
                 controller: _passwordController,
