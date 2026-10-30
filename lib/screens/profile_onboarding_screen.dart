@@ -116,6 +116,11 @@ class _GuardianConsentScreenState extends State<GuardianConsentScreen> {
       ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
+    if (widget.isRecovery) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('パスワードを再設定しました。')),
+      );
+    }
     widget.onCompleted();
   }
 
@@ -197,9 +202,15 @@ class _GuardianConsentScreenState extends State<GuardianConsentScreen> {
 }
 
 class PrivacyPasswordSetupScreen extends StatefulWidget {
-  const PrivacyPasswordSetupScreen({super.key, required this.onCompleted});
+  const PrivacyPasswordSetupScreen({
+    super.key,
+    required this.onCompleted,
+    this.isRecovery = false,
+  });
 
   final VoidCallback onCompleted;
+  /// Reuse the original first-time password setup page for a verified reset.
+  final bool isRecovery;
 
   @override
   State<PrivacyPasswordSetupScreen> createState() =>
@@ -224,10 +235,12 @@ class _PrivacyPasswordSetupScreenState
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
-    final error = await Provider.of<SupabaseService>(
-      context,
-      listen: false,
-    ).initializePrivacyPassword(_passwordController.text);
+    final service = Provider.of<SupabaseService>(context, listen: false);
+    final error = widget.isRecovery
+        ? await service.resetPrivacyPasswordAfterReauthentication(
+            _passwordController.text,
+          )
+        : await service.initializePrivacyPassword(_passwordController.text);
     if (!mounted) return;
     setState(() => _saving = false);
     if (error != null) {
@@ -257,23 +270,27 @@ class _PrivacyPasswordSetupScreenState
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                const Text(
-                  '個人情報変更用パスワードを設定してください',
-                  style: TextStyle(
+                Text(
+                  widget.isRecovery
+                      ? '新しいパスワードを設定'
+                      : '個人情報変更用パスワードを設定してください',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'ログインには使用しません。プライバシー設定を開くときに使用します。',
-                  style: TextStyle(color: Colors.white70, height: 1.6),
+                Text(
+                  widget.isRecovery
+                      ? 'GoogleまたはXでの本人確認後、15分以内に新しい個人情報変更用パスワードを設定してください。ログイン用パスワードとは別です。'
+                      : 'ログインには使用しません。プライバシー設定を開くときに使用します。',
+                  style: const TextStyle(color: Colors.white70, height: 1.6),
                 ),
                 const SizedBox(height: 24),
                 _PasswordField(
                   controller: _passwordController,
-                  label: 'パスワード',
+                  label: widget.isRecovery ? '新しいパスワード' : 'パスワード',
                   obscureText: _obscurePassword,
                   onToggleVisibility: () =>
                       setState(() => _obscurePassword = !_obscurePassword),
@@ -282,7 +299,9 @@ class _PrivacyPasswordSetupScreenState
                 const SizedBox(height: 14),
                 _PasswordField(
                   controller: _confirmationController,
-                  label: 'パスワード（確認）',
+                  label: widget.isRecovery
+                      ? '新しいパスワード（確認）'
+                      : 'パスワード（確認）',
                   obscureText: _obscurePassword,
                   onToggleVisibility: () =>
                       setState(() => _obscurePassword = !_obscurePassword),
@@ -299,7 +318,7 @@ class _PrivacyPasswordSetupScreenState
                   ),
                   child: _saving
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('設定する'),
+                      : Text(widget.isRecovery ? '再設定する' : '設定する'),
                 ),
               ],
             ),
