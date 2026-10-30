@@ -32,6 +32,9 @@ test('after OAuth return, use the exact first-time password setup layout', () =>
   assert.match(setup, /Text\(widget\.isRecovery \? '再設定する' : '設定する'\)/);
   const main = readFileSync('lib/main.dart', 'utf8');
   assert.match(main, /openPrivacyPasswordRecovery:/);
+  assert.match(main, /onPrivacyPasswordRecoveryCompleted:/);
+  assert.match(main, /_openPrivacyPasswordRecovery = false/);
+  assert.match(account, /widget\.onPrivacyPasswordRecoveryCompleted\?\.call\(\)/);
   assert.match(main, /privacy_password_recovery/);
 });
 
