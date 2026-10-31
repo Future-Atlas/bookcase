@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../models/book.dart';
+import '../api/rakuten_api.dart';
 import '../repositories/book_repository.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
@@ -59,6 +60,7 @@ class BookListController extends ChangeNotifier {
 
   List<Book> featuredBooks = [];
   bool isLoadingFeatured = true;
+  int _featuredLookupGeneration = 0;
 
   // タイムライン用
   List<Post> timelinePosts = [];
@@ -115,6 +117,7 @@ class BookListController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _featuredLookupGeneration++;
     searchController.removeListener(_onSearchChanged);
     _searchDebounce?.cancel();
     searchController.dispose();
@@ -247,6 +250,46 @@ class BookListController extends ChangeNotifier {
     await _searchBooks(reset: false);
   }
 
+  // Curated ISBN, title and order are durable; provider artwork and synopsis
+  // are short-lived. Resolve them only in memory for the current screen.
+  // On API failure the existing curated book entry remains available.
+  Future<void> _hydrateFeaturedBooks(int generation) async {
+    final snapshot = List<Book>.of(featuredBooks);
+    for (final original in snapshot) {
+      if (generation != _featuredLookupGeneration) return;
+      final normalizedId = (original.isbn.isNotEmpty
+              ? original.isbn
+              : original.id)
+          .replaceAll('-', '');
+      if (!RegExp(r'^(?:\d{13}|\d{9}[\dXx])$').hasMatch(normalizedId)) {
+        continue;
+      }
+      Book? fresh;
+      try {
+        fresh = await RakutenApi.fetchBookById(normalizedId);
+      } catch (_) {
+        continue;
+      }
+      if (generation != _featuredLookupGeneration) return;
+      if (fresh == null || fresh.isbn.replaceAll('-', '') != normalizedId) {
+        continue;
+      }
+      final index = featuredBooks.indexWhere((book) => book.id == original.id);
+      if (index < 0) continue;
+      final hydrated = original.copyWith(
+        coverUrl: fresh.coverUrl,
+        description: fresh.description,
+        rakutenAffiliateUrl: fresh.rakutenAffiliateUrl,
+      );
+      if (!_allowAdultContent && ContentSafetyService.isAdultBook(hydrated)) {
+        featuredBooks = List<Book>.of(featuredBooks)..removeAt(index);
+      } else {
+        featuredBooks = List<Book>.of(featuredBooks)..[index] = hydrated;
+      }
+      notifyListeners();
+    }
+  }
+
   Future<void> _loadData(BuildContext context) async {
     if (_timelineOnly) {
       isLoadingTimeline = true;
@@ -281,6 +324,7 @@ class BookListController extends ChangeNotifier {
     westernBooks = [];
     popularBooks = [];
     featuredBooks = [];
+    final featuredGeneration = ++_featuredLookupGeneration;
     timelinePosts = [];
     timelineReplies = {};
     notifyListeners();
@@ -299,6 +343,9 @@ class BookListController extends ChangeNotifier {
     } finally {
       isLoadingFeatured = false;
       notifyListeners();
+    }
+    if (featuredBooks.isNotEmpty) {
+      unawaited(_hydrateFeaturedBooks(featuredGeneration));
     }
 
     try {
