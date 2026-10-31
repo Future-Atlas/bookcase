@@ -64,6 +64,22 @@ test("Rakuten proxy validates endpoint and pagination", async () => {
   assert.equal(invalidPage.body.error, "invalid_pagination");
 });
 
+test("legacy Rakuten API routes cannot bypass the shared quota coordinator", async () => {
+  const res = responseRecorder();
+  const handler = loadRakuten({
+    RAKUTEN_APP_ID: "test-app",
+    RAKUTEN_ACCESS_KEY: "test-key",
+  });
+  await handler({
+    method: "GET",
+    query: { endpoint: "book", isbn: "9784101010014" },
+    headers: {},
+  }, res);
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.error, "rakuten_quota_unavailable");
+  assert.equal(res.headers["Retry-After"], "5");
+});
+
 test("Rakuten proxy returns 502 when upstream request fails", async () => {
   const handler = loadRakuten({
     RAKUTEN_APP_ID: "app",
