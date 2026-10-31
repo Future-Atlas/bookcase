@@ -4,8 +4,20 @@ import '../models/book.dart';
 import '../api/ndl_api.dart';
 import '../api/openbd_api.dart';
 import '../services/content_safety_service.dart';
+import '../services/supabase_service.dart';
 
 enum BookSearchField { title, author, publisher }
+
+/// Injectable only so paging/ranking behavior can be tested without network.
+typedef NdlFieldFetcher = Future<NdlSearchBatch> Function(
+  BookSearchField field, String term, String provider, int start, int count,
+);
+
+class BookSearchBatch {
+  const BookSearchBatch({required this.books, required this.hasMore});
+  final List<Book> books;
+  final bool hasMore;
+}
 
 extension BookSearchFieldApiName on BookSearchField {
   String get apiName => switch (this) {
@@ -18,9 +30,15 @@ extension BookSearchFieldApiName on BookSearchField {
 class BookRepository {
   static final Random _homeRandom = Random();
 
-  BookRepository({this.allowAdultContent = false});
+  BookRepository({this.allowAdultContent = false, this.fieldFetcher});
 
   final bool allowAdultContent;
+  final NdlFieldFetcher? fieldFetcher;
+  String _activeQuery = '';
+  int _nextSearchPage = 1;
+  List<_NdlFieldCursor> _cursors = [];
+  final Set<String> _searchSeenIds = <String>{};
+  Future<List<Book>>? _popularCache;
 
   static String _normalizeForSearch(String input) =>
       input.toLowerCase().replaceAll(RegExp(r'[^0-9a-zぁ-んァ-ヶ一-龥]+'), '');
@@ -193,96 +211,190 @@ class BookRepository {
     return output;
   }
 
-  List<Book> _filterForViewer(List<Book> books) {
-    return ContentSafetyService.filterBooks(
-      books,
-      allowAdultContent: allowAdultContent,
-    );
-  }
+  List<Book> _filterForViewer(List<Book> books) =>
+      ContentSafetyService.filterBooks(
+        books, allowAdultContent: allowAdultContent,
+      );
 
-  /// Keeps existing home page sizes and random-selection behavior.
+  /// The home page keeps 9 cards, the three existing section labels and
+  /// previous/next controls. Popular is now first-party review popularity.
   Future<List<Book>> fetchBooksByGenre(String genre, {int page = 1}) async {
     try {
+      if (genre.contains('ベストセラー') || genre.contains('人気')) {
+        final ranked = await (_popularCache ??=
+            SupabaseService().fetchPopularBooks(limit: 200));
+        final start = (page - 1) * 9;
+        if (start >= ranked.length) return const <Book>[];
+        final chosen = ranked.skip(start).take(9).toList(growable: false);
+        return _filterForViewer(await OpenBdApi.enrich(chosen));
+      }
       final incoming = await NdlApi.searchBySelectedGenre(
-        selectedGenre: genre, page: page, count: 27,
+        selectedGenre: genre, page: page, count: 30,
       );
       final enriched = await OpenBdApi.enrich(incoming);
       final filtered = _filterForViewer(enriched);
       if (genre.contains('新着')) {
+        // The source is NDL in-process records, not a release-day feed.
+        // Sort the returned *page*, never claim a global release-date sort.
         filtered.sort((a, b) => b.pubDate.compareTo(a.pubDate));
         return filtered.take(9).toList(growable: false);
       }
-      if (genre.contains('話題') || genre.contains('おすすめ') ||
-          genre.contains('ベストセラー') || genre.contains('人気')) {
-        filtered.sort((a, b) {
-          final reviews = b.reviewCount.compareTo(a.reviewCount);
-          return reviews != 0 ? reviews : b.ratingAvg.compareTo(a.ratingAvg);
-        });
-      }
       return _randomRankedSelection(filtered, count: 9);
     } catch (_) {
-      return [];
+      return const <Book>[];
     }
   }
 
-  /// Selects a different subset for each home visit while preserving the
-  /// ranking order supplied by the existing API and section-specific sort.
-  List<Book> _randomRankedSelection(List<Book> ranked, {required int count}) {
+  List<Book> _randomRankedSelection(List<Book> ranked, {
+    required int count,
+  }) {
     if (ranked.length <= count) return List<Book>.from(ranked);
-
-    final selectedIndexes = List<int>.generate(ranked.length, (index) => index)
+    final indexes = List<int>.generate(ranked.length, (index) => index)
       ..shuffle(_homeRandom);
-    selectedIndexes
-      ..removeRange(count, selectedIndexes.length)
+    indexes
+      ..removeRange(count, indexes.length)
       ..sort();
-    return selectedIndexes.map((index) => ranked[index]).toList();
+    return indexes.map((index) => ranked[index]).toList(growable: false);
   }
 
   Future<List<Book>> fetchAllBooks() async {
     try {
-      final books = await NdlApi.searchBySelectedGenre(
-        selectedGenre: '', page: 1, count: 10,
+      final books = await NdlApi.search(
+        any: '本', provider: NdlApi.national, count: 20,
       );
       return _filterForViewer(await OpenBdApi.enrich(books));
     } catch (_) {
-      return [];
+      return const <Book>[];
     }
   }
 
-  /// Preserve existing title/author/publisher priority and 10/5/5 ranking.
-  Future<List<Book>> searchBooks(
-    String query, {int page = 1, int count = 20}
-  ) async {
-    if (query.trim().isEmpty) return fetchAllBooks();
-    if (!allowAdultContent && ContentSafetyService.isAdultSearchQuery(query)) {
-      return [];
+  void _resetSearch(String query) {
+    _activeQuery = query;
+    _nextSearchPage = 1;
+    _searchSeenIds.clear();
+    final fields = searchFieldPriority(query);
+    final variants = _keywordVariants(query);
+    _cursors = fields.map((field) =>
+        _NdlFieldCursor(field, variants)).toList(growable: false);
+  }
+
+  Future<NdlSearchBatch> _fetchField(
+    _NdlFieldCursor cursor, int start, int count,
+  ) {
+    if (fieldFetcher != null) {
+      return fieldFetcher!(cursor.field, cursor.variant,
+          cursor.provider, start, count);
     }
+    return NdlApi.searchPage(
+      title: cursor.field == BookSearchField.title ? cursor.variant : null,
+      creator: cursor.field == BookSearchField.author ? cursor.variant : null,
+      publisher: cursor.field == BookSearchField.publisher ? cursor.variant : null,
+      provider: cursor.provider,
+      start: start,
+      count: count,
+    );
+  }
+
+  /// Pull results from a source cursor without losing the unused half of a
+  /// source page. Only upstream rawCount advances the NDL offset; ISBN-less
+  /// records still occupy upstream slots.
+  Future<List<Book>> _takeFromCursor(
+    _NdlFieldCursor cursor, int wanted,
+  ) async {
+    final collected = <Book>[];
+    var upstreamRequests = 0;
+    while (collected.length < wanted) {
+      if (cursor.buffer.isNotEmpty) {
+        final book = cursor.buffer.removeAt(0);
+        if (_searchSeenIds.add(book.id)) collected.add(book);
+        continue;
+      }
+      if (cursor.finished || upstreamRequests >= 3) break;
+      if (cursor.offset > 480) {
+        cursor.nextVariantOrProvider();
+        continue;
+      }
+      final requestCount = min(20, 501 - cursor.offset);
+      if (requestCount < 1) {
+        cursor.nextVariantOrProvider();
+        continue;
+      }
+      final batch = await _fetchField(
+        cursor, cursor.offset, requestCount,
+      );
+      upstreamRequests++;
+      cursor.offset += batch.rawCount;
+      cursor.buffer.addAll(batch.books);
+      if (!batch.hasMore || batch.rawCount == 0) {
+        cursor.nextVariantOrProvider();
+      }
+    }
+    return collected;
+  }
+
+  /// Stable cursor-based pagination with existing title/author/publisher
+  /// priority and 10/5/5 allocation for a 20-book result page. This avoids
+  /// discarding items #11-20 after fetching 20 upstream records for 10 slots.
+  Future<BookSearchBatch> searchBooksPage(
+    String query, {int page = 1, int count = 20},
+  ) async {
+    final clean = query.trim();
+    if (clean.isEmpty) {
+      return BookSearchBatch(books: await fetchAllBooks(), hasMore: false);
+    }
+    if (!allowAdultContent &&
+        ContentSafetyService.isAdultSearchQuery(clean)) {
+      return const BookSearchBatch(books: [], hasMore: false);
+    }
+    if (page == 1 || clean != _activeQuery || page != _nextSearchPage) {
+      _resetSearch(clean);
+    }
+    final quotas = <int>[
+      (count * 0.5).ceil(),
+      (count * 0.25).ceil(),
+      count - (count * 0.5).ceil() - (count * 0.25).ceil(),
+    ];
+    final candidates = <Book>[];
     try {
-      final priorities = searchFieldPriority(query);
-      final variants = _keywordVariants(query);
-      final candidates = <String, Book>{};
-      // Query each field independently. NDL's results are reranked by the
-      // same field-quality rules used before the provider migration.
-      for (final field in priorities) {
-        for (final value in variants) {
-          final matches = await NdlApi.search(
-            title: field == BookSearchField.title ? value : null,
-            creator: field == BookSearchField.author ? value : null,
-            publisher: field == BookSearchField.publisher ? value : null,
-            page: page, count: count,
-          );
-          for (final book in matches) {
-            candidates.putIfAbsent(book.id, () => book);
+      for (var i = 0; i < _cursors.length; i++) {
+        candidates.addAll(await _takeFromCursor(_cursors[i], quotas[i]));
+      }
+      // If one field is exhausted, fill its spare slots from the others.
+      var attemptsWithoutProgress = 0;
+      while (candidates.length < count && attemptsWithoutProgress < 3) {
+        var madeProgress = false;
+        for (final cursor in _cursors) {
+          if (candidates.length >= count) break;
+          final next = await _takeFromCursor(cursor, 1);
+          if (next.isNotEmpty) {
+            candidates.addAll(next);
+            madeProgress = true;
           }
         }
+        if (madeProgress) {
+          attemptsWithoutProgress = 0;
+        } else {
+          attemptsWithoutProgress++;
+        }
       }
-      final enriched = await OpenBdApi.enrich(candidates.values.toList());
-      return rankSearchResults(_filterForViewer(enriched), query)
+      _nextSearchPage = page + 1;
+      final enriched = await OpenBdApi.enrich(candidates);
+      final filtered = _filterForViewer(enriched);
+      final result = rankSearchResults(filtered, clean)
           .take(count).toList(growable: false);
+      final more = result.isNotEmpty && _cursors.any(
+        (cursor) => cursor.buffer.isNotEmpty || !cursor.finished,
+      );
+      return BookSearchBatch(books: result, hasMore: more);
     } catch (_) {
-      return [];
+      return const BookSearchBatch(books: [], hasMore: false);
     }
   }
+
+  /// Compatibility entrypoint for admin lookup and existing search screens.
+  Future<List<Book>> searchBooks(
+    String query, {int page = 1, int count = 20},
+  ) async => (await searchBooksPage(query, page: page, count: count)).books;
 
   static List<String> _keywordVariants(String query) {
     final original = query.trim();
@@ -296,7 +408,7 @@ class BookRepository {
         RegExp(r'[ぁ-んァ-ヶ一-龥]').hasMatch(compact)) {
       variants.add(compact.substring(0, 6));
     }
-    return variants.where((x) => x.isNotEmpty).toList();
+    return variants.where((x) => x.isNotEmpty).toList(growable: false);
   }
 
 }
@@ -313,4 +425,31 @@ class _RankedBook {
   final int priorityIndex;
   final int quality;
   final bool isExact;
+}
+
+class _NdlFieldCursor {
+  _NdlFieldCursor(this.field, this.variants);
+  final BookSearchField field;
+  final List<String> variants;
+  final List<Book> buffer = <Book>[];
+  int offset = 1;
+  int providerIndex = 0;
+  int variantIndex = 0;
+  bool finished = false;
+
+  String get provider =>
+      providerIndex == 0 ? NdlApi.national : NdlApi.inProcess;
+  String get variant => variants[variantIndex];
+
+  void nextVariantOrProvider() {
+    if (variantIndex + 1 < variants.length) {
+      variantIndex++;
+    } else if (providerIndex == 0) {
+      providerIndex = 1;
+      variantIndex = 0;
+    } else {
+      finished = true;
+    }
+    offset = 1;
+  }
 }
