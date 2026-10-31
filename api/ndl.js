@@ -2,7 +2,7 @@
 // or provider IDs: partner-supplied records can have different reuse terms.
 const NDL_URL = "https://ndlsearch.ndl.go.jp/api/opensearch";
 const PROVIDERS = new Set([
-  "open",
+  "iss-ndl-opac-national", "iss-ndl-opac-inprocess",
 ]);
 const SEARCH_KEYS = ["any", "title", "creator", "publisher", "ndc", "from", "until", "isbn"];
 
@@ -13,7 +13,7 @@ function createHandler({ request = (...args) => fetch(...args) } = {}) {
       return res.status(405).json({ error: "method_not_allowed" });
     }
     const input = req.query || {};
-    const provider = String(input.dpid || "open");
+    const provider = String(input.dpid || "iss-ndl-opac-national");
     const cnt = Number(input.cnt || 20);
     const idx = Number(input.idx || 1);
     if (!PROVIDERS.has(provider) || !Number.isInteger(cnt) ||
