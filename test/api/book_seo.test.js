@@ -10,7 +10,7 @@ function res() { return {
   status(s) { this.statusCode = s; return this; },
   send(b) { this.body = b; return this; },
 }; }
-function setup({ reviews = [], featured = [], production = true, error = false } = {}) {
+function setup({ reviews = [], featured = [], production = true, error = false, itemUrl = "https://books.rakuten.co.jp/rb/12345/" } = {}) {
   process.env.VERCEL_ENV = production ? "production" : "preview";
   process.env.RAKUTEN_APP_ID = "test";
   process.env.RAKUTEN_ACCESS_KEY = "test";
@@ -21,7 +21,7 @@ function setup({ reviews = [], featured = [], production = true, error = false }
     return { ok:true, text:async () => JSON.stringify({Items:[{Item:{
       isbn:"9784101010014",title:'本<title>',author:"著者",
       itemCaption:"紹介文",publisherName:"出版社",
-      itemUrl:"https://books.rakuten.co.jp/rb/12345/",
+      itemUrl,
     }}]}) };
   };
   global.fetch = async url => {
@@ -111,4 +111,39 @@ test("book SEO ignores a query string forwarded with the rewritten path", async 
     out.body,
     /https:\/\/www\.sharemarium\.com\/book\/9784101010014/,
   );
+});
+
+
+test("Rakuten outage does not erase substantive user-authored public reviews", async () => {
+  const handler = setup({
+    error: true,
+    reviews: [
+      { id: "original", comment: "ユーザー自身が書いた感想。".repeat(25), profiles: { username: "reader" } },
+      { id: "spoiler", is_spoiler: true, comment: "非公開にすべきネタバレ".repeat(25) },
+    ],
+  });
+  const out = res();
+  await handler({ query: { path: "/book/9784101010014" } }, out);
+  assert.equal(out.statusCode, 200);
+  assert.match(out.body, /ISBN 9784101010014/);
+  assert.match(out.body, /ユーザー自身が書いた感想/);
+  assert.match(out.body, /content="index,follow"/);
+  assert.equal(out.headers["Cache-Control"], "no-store");
+  assert.doesNotMatch(out.body, /非公開にすべきネタバレ/);
+  assert.doesNotMatch(out.body, /楽天ブックス提供の情報/);
+});
+
+test("unlinked Rakuten catalog content is not republished on indexed review pages", async () => {
+  const handler = setup({
+    itemUrl: "https://outside.example.test/unrelated",
+    reviews: [{ id: "review", comment: "自分で書いたレビューです。".repeat(25), profiles: { username: "reader" } }],
+  });
+  const out = res();
+  await handler({ query: { path: "/book/9784101010014" } }, out);
+  assert.equal(out.statusCode, 200);
+  assert.match(out.body, /自分で書いたレビューです/);
+  assert.match(out.body, /書籍 ISBN 9784101010014/);
+  assert.doesNotMatch(out.body, /紹介文/);
+  assert.doesNotMatch(out.body, /本&lt;title&gt;/);
+  assert.doesNotMatch(out.body, /outside\.example\.test/);
 });
