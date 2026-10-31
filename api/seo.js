@@ -99,11 +99,9 @@ function renderFeaturedBookList(books) {
   return books
     .map(
       (book) => `<article class="book-item">
-        ${book.book_cover_url ? `<a href="/book/${encodeURIComponent(book.book_id)}"><img class="book-cover" src="${escapeHtml(book.book_cover_url)}" alt="${escapeHtml(book.book_title)}の表紙"></a>` : ""}
         <div class="book-details">
           <h3 class="book-title"><a href="/book/${encodeURIComponent(book.book_id)}">${escapeHtml(book.book_title)}</a></h3>
           ${book.book_author ? `<p class="book-author">著者：${escapeHtml(book.book_author)}</p>` : ""}
-          ${book.book_description ? `<p>${escapeHtml(truncateForMeta(book.book_description, 180))}</p>` : ""}
           <p><a href="/book/${encodeURIComponent(book.book_id)}">作品概要・レビューを見る</a></p>
         </div>
       </article>`,
