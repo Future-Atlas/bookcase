@@ -268,6 +268,14 @@ class BookRepository {
   String _homeKey(String genre) =>
       _isNewArrivalsGenre(genre) ? 'new-arrivals' : 'foreign-language';
 
+  /// Explicit user retry starts again at the first, complete-bibliography
+  /// source, without invalidating the currently displayed page until fetched.
+  void resetHomeBooks(String genre) {
+    if (_isNewArrivalsGenre(genre) || _isForeignGenre(genre)) {
+      _homeCatalogCursors.remove(_homeKey(genre));
+    }
+  }
+
   bool hasMoreHomeBooks(String genre) {
     if (!_isNewArrivalsGenre(genre) && !_isForeignGenre(genre)) return true;
     final cursor = _homeCatalogCursors[_homeKey(genre)];
@@ -277,14 +285,16 @@ class BookRepository {
 
   _HomeCatalogCursor _createHomeCursor(String genre) {
     if (_isNewArrivalsGenre(genre)) {
+      // Keep the first query narrow: a one-year unqualified publication-date
+      // scan frequently times out and creates repeated 502s on pagination.
+      // Published national records are more likely to include ISBNs than
+      // draft in-process records. Both are within the recent publication window.
       final from = DateTime.now()
-          .subtract(const Duration(days: 365))
+          .subtract(const Duration(days: 90))
           .toIso8601String().substring(0, 10);
       return _HomeCatalogCursor([
-        _HomeCatalogSource(provider: NdlApi.inProcess, from: from),
-        // In-process records can lack ISBNs. Only fall back to published,
-        // nationally catalogued records when necessary.
         _HomeCatalogSource(provider: NdlApi.national, from: from),
+        _HomeCatalogSource(provider: NdlApi.inProcess, from: from),
       ]);
     }
     return _HomeCatalogCursor([
@@ -341,7 +351,7 @@ class BookRepository {
     var requests = 0;
     // Network is bounded to avoid hammering NDL or blocking the home screen
     // indefinitely. Already-retrieved eligible books are never discarded.
-    const maxRawWindowsPerPage = 6;
+    const maxRawWindowsPerPage = 4;
     const legacyCandidateWindow = 27;
 
     while (page.length < 9) {
@@ -363,6 +373,16 @@ class BookRepository {
         source, count, newArrivals: newArrivals,
       );
       requests++;
+      if (response.temporarilyUnavailable) {
+        // A 502/503/504 must not advance the raw offset or be interpreted
+        // as the end of the catalogue. Try the alternative provider once;
+        // if both fail, the UI offers a manual retry rather than looping.
+        if (cursor.sourceIndex + 1 < cursor.sources.length) {
+          cursor.sourceIndex++;
+          continue;
+        }
+        break;
+      }
       source.offset += response.rawCount;
 
       final candidates = <Book>[];
@@ -395,9 +415,10 @@ class BookRepository {
         cursor.sourceIndex++;
       } else if (safe.isEmpty) {
         source.emptyWindows++;
-        // A source producing repeated ISBN-less or filtered results should
-        // not prevent another verified source from filling the nine cards.
-        if (source.emptyWindows >= 2) cursor.sourceIndex++;
+        // A first window containing only draft, ISBN-less or restricted
+        // records is not useful for the home section. Switch providers now
+        // instead of issuing an expensive unqualified idx=28 request.
+        if (source.emptyWindows >= 1) cursor.sourceIndex++;
       } else {
         source.emptyWindows = 0;
       }
