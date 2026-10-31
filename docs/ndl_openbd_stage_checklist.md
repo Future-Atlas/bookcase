@@ -19,7 +19,7 @@ Compare ISBNs, order and screenshots for 20-30 old/new searches:
 ## Home sections
 - 新着: when fewer than nine usable records appear in one 27-item raw NDL window, verify next-window refill and source fallback; each page must preserve any unused ISBNs and never repeat across pages. Compare publication dates with publishers: NDL in-process is not publication-day inventory.
 - 人気作品: the new metric is eligible public Sharemarium post counts, not Rakuten's external bestseller ranking.
-- 洋書: confirm `ndl-boj` candidates, holdings fallback, 27-item refill, 9 cards when possible, next-page deduplication and explicit non-Japanese language codes (`eng`, `spa`, etc.). Never display Japanese-only or missing-language titles solely because `English` appears in the title. Complete worldwide foreign-book coverage remains a known limitation.
+- 洋書: confirm `ndl-boj` candidates, holdings fallback, 27-item refill, 9 cards when possible, next-page deduplication and explicit non-Japanese language codes (`eng`, `spa`, etc.) or verified `ndl-boj` provider provenance for unknown tags. Never display Japanese-only holdings or unclassified missing-language holdings merely because `English` appears in the title. Complete worldwide foreign-book coverage remains a known limitation.
 - NDC genres: sample manga 726.1, fiction NDC 9, business/industry and history; NDC is not the Rakuten genre system.
 
 ## Safety/account states
