@@ -64,3 +64,14 @@ test("public featured SEO never republishes unverified legacy cover and descript
   assert.doesNotMatch(list, /book\.book_cover_url/);
   assert.doesNotMatch(list, /book\.book_description/);
 });
+
+
+test("browser Rakuten quota failures trigger local cooldown instead of retry storms", () => {
+  const client = readFileSync("lib/api/rakuten_api.dart", "utf8");
+  assert.match(client, /_quotaCooldownUntil/);
+  assert.match(client, /response\.statusCode == 429/);
+  assert.match(client, /response\.statusCode == 503/);
+  assert.match(client, /response\.headers\['retry-after'\]/);
+  assert.doesNotMatch(client, /_getWithRateLimitRetry/);
+  assert.doesNotMatch(client, /Retrying in/);
+});
