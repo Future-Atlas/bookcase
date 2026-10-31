@@ -21,6 +21,8 @@ class Book {
   // separate from permanent user-authored review data and ISBN identity.
   final bool adultContentFlag;
   final String ageRatingSource;
+  final String languageCode;
+  final String ndcCode;
   final String catalogSource;
   final DateTime? catalogFetchedAt;
 
@@ -41,6 +43,8 @@ class Book {
     this.itemPrice = 0,
     this.adultContentFlag = false,
     this.ageRatingSource = 'unknown',
+    this.languageCode = '',
+    this.ndcCode = '',
     this.catalogSource = 'unverified',
     this.catalogFetchedAt,
   });
@@ -157,6 +161,8 @@ class Book {
     int? itemPrice,
     bool? adultContentFlag,
     String? ageRatingSource,
+    String? languageCode,
+    String? ndcCode,
     String? catalogSource,
     DateTime? catalogFetchedAt,
   }) {
@@ -177,6 +183,8 @@ class Book {
       itemPrice: itemPrice ?? this.itemPrice,
       adultContentFlag: adultContentFlag ?? this.adultContentFlag,
       ageRatingSource: ageRatingSource ?? this.ageRatingSource,
+      languageCode: languageCode ?? this.languageCode,
+      ndcCode: ndcCode ?? this.ndcCode,
       catalogSource: catalogSource ?? this.catalogSource,
       catalogFetchedAt: catalogFetchedAt ?? this.catalogFetchedAt,
     );
