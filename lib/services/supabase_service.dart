@@ -5,7 +5,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../api/rakuten_api.dart';
+import '../api/ndl_api.dart';
 import '../models/book.dart';
 import 'legal_document_versions.dart';
 import '../models/user_profile.dart';
@@ -1625,7 +1625,8 @@ class SupabaseService extends ChangeNotifier {
             bookId.isNotEmpty) {
           bookTitle = bookCache[bookId];
           if (bookTitle == null) {
-            final book = await RakutenApi.fetchBookById(bookId);
+            final candidates = await NdlApi.search(isbn: bookId, count: 1);
+            final book = candidates.isEmpty ? null : candidates.first;
             bookTitle = book?.title ?? bookId;
             bookCache[bookId] = bookTitle;
           }
