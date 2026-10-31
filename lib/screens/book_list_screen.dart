@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
 import '../config/feature_flags.dart';
 import '../widgets/book_search_results.dart';
-import '../widgets/rakuten_credit.dart';
+import '../widgets/catalog_credit.dart';
 import '../models/profile_page_color.dart';
 import '../api/ndl_api.dart';
 import '../api/openbd_api.dart';
@@ -1865,7 +1865,7 @@ class _BookListScreenState extends State<BookListScreen> {
             style: TextStyle(color: Colors.grey[400], fontSize: 11),
           ),
           const SizedBox(height: 8),
-          const RakutenCredit(),
+          const CatalogCredit(),
           const SizedBox(height: 4),
           Text(
             'Powered by Supabase & PostgreSQL',
