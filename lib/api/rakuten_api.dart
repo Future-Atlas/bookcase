@@ -293,6 +293,8 @@ class RakutenApi {
       description: description,
       rakutenAffiliateUrl: bookData['affiliateUrl'] as String? ?? '',
       itemPrice: parsedItemPrice,
+      catalogSource: 'rakuten',
+      catalogFetchedAt: DateTime.now().toUtc(),
     );
   }
 
