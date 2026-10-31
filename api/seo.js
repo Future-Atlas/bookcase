@@ -1310,10 +1310,47 @@ module.exports = async (req, res) => {
     const slug = decodedPath.replace("/book/", "").split("/")[0];
     if (/^(\d{13}|\d{9}[\dXx])$/.test(slug)) {
       try {
-        if (!rakutenEnabled()) throw new Error("book_api_unconfigured");
-        const book = await resolveBookByIsbn(slug, diagnostics, rakutenRequest);
-        if (!book && diagnostics.rakutenIsbnFailures > 0) {
-          throw new Error("book_api_unavailable");
+        // Reviews are independent user content. A temporary Rakuten outage
+        // must not hide already-public reviews, or force us to persist catalog
+        // text just to keep this page available.
+        let book = rakutenEnabled()
+          ? await resolveBookByIsbn(slug, diagnostics, rakutenRequest)
+          : null;
+        if (!book) {
+          const fallbackRows = await fetchPublicReviewsForBook(slug, diagnostics);
+          const fallbackReviews = fallbackRows.filter(isIndexableReview);
+          if (fallbackReviews.length > 0) {
+            const fallbackHtml = renderPage({
+              title: `ISBN ${slug}｜読者レビュー｜Sharemarium`,
+              description: `ISBN ${slug}の公開レビュー。Sharemariumのユーザーが書いた感想を紹介しています。`,
+              pagePath: `/book/${slug}`,
+              robots: "index,follow",
+              jsonLd: {
+                "@context": "https://schema.org",
+                "@type": "Book",
+                isbn: slug,
+                url: toAbsoluteUrl(`/book/${slug}`),
+              },
+              content: `<h1>書籍 ISBN ${escapeHtml(slug)}</h1>
+                <p>書誌情報は一時的に取得できませんが、公開されている読者の感想は閲覧できます。</p>
+                <h2>読者の感想</h2>
+                ${fallbackReviews.map(p => `<article><h3>${escapeHtml(p.profiles?.username || "読者")}さんの感想</h3><p>${escapeHtml(p.comment)}</p><a href="/posts/${encodeURIComponent(p.id)}">投稿を見る</a></article>`).join("")}
+                <p><a href="/">Sharemariumで本を探す</a></p>`,
+            });
+            res.setHeader("Content-Type", "text/html; charset=utf-8");
+            res.setHeader("Cache-Control", "no-store");
+            setDiagnosticsHeader(res, diagnostics);
+            return res.status(200).send(fallbackHtml);
+          }
+          if (!rakutenEnabled() || diagnostics.rakutenIsbnFailures > 0) {
+            throw new Error("book_api_unavailable");
+          }
+        }
+        if (book && !book.rakutenUrl) {
+          // Do not surface unlinked third-party catalog text when the API
+          // returns a record without a verified Rakuten product destination.
+          book = { ...book, title: `書籍 ISBN ${slug}`, author: "",
+            publisher: "", coverUrl: "", description: "", rakutenUrl: "" };
         }
         if (book) {
           let featured = null;
@@ -1340,7 +1377,7 @@ module.exports = async (req, res) => {
             description, pagePath: `/book/${slug}`,
             // Editorially selected books and books with an original public
             // review are indexable. Catalog-only pages stay out of the index.
-            robots: book.rakutenUrl && (reviews.length || featured) ? "index,follow" : "noindex,follow",
+            robots: reviews.length || (featured && book.rakutenUrl) ? "index,follow" : "noindex,follow",
             ogType: "book",
             ogImageUrl: book.coverUrl || OG_IMAGE_URL,
             content: `<h1>${escapeHtml(book.title)}</h1>
