@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../api/rakuten_api.dart';
 import '../models/book.dart';
 
 class RakutenBookLink extends StatefulWidget {
@@ -68,21 +67,9 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
         return uri;
       }
 
-      final bookId = widget.book.isbn.isNotEmpty
-          ? widget.book.isbn
-          : widget.book.id;
-      final resolvedBook = await RakutenApi.fetchBookById(bookId);
-      final resolvedUri = RakutenBookLink.validatedDestination(
-        resolvedBook?.rakutenAffiliateUrl,
-      );
-      if (resolvedUri != null) {
-        return resolvedUri;
-      }
-
-      final fallbackUri = RakutenBookLink.validatedDestination(
-        await RakutenApi.fetchAffiliateUrlForBook(widget.book),
-      );
-      return fallbackUri;
+      // No Rakuten Web Service lookup. Only previously verified, officially
+      // generated affiliate URLs (or a supplied resolver) may be displayed.
+      return null;
     } catch (_) {
       return null;
     }
