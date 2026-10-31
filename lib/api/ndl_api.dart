@@ -130,6 +130,8 @@ class NdlApi {
             description:
                 element.findElements('dc:description').firstOrNull?.innerText ??
                 '',
+            catalogSource: 'ndl',
+            catalogFetchedAt: DateTime.now().toUtc(),
           ),
         );
       }
