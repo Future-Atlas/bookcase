@@ -364,7 +364,18 @@ class BookRepository {
 
       final candidates = <Book>[];
       for (final book in response.books) {
-        if (!newArrivals && !NdlApi.isForeignLanguage(book)) continue;
+        // NDL's ndl-boj is itself a foreign-language bibliography.
+        // Missing item-level language metadata is acceptable only from this
+        // provider, never from the generic Japanese/foreign holdings search.
+        final language = book.languageCode.trim().toLowerCase();
+        final providerClassifiedForeign =
+            source.provider == NdlApi.foreignBibliography &&
+            (language.isEmpty || language == 'und' || language == 'unknown');
+        if (!newArrivals &&
+            !NdlApi.isForeignLanguage(book) &&
+            !providerClassifiedForeign) {
+          continue;
+        }
         if (cursor.seenIsbns.add(book.id)) candidates.add(book);
       }
       final enriched = await OpenBdApi.enrich(candidates);
