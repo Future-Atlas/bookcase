@@ -42,3 +42,10 @@ Compare ISBNs, order and screenshots for 20-30 old/new searches:
 - NDL unavailable: existing reviews remain accessible; no cacheable permanent missing-book error.
 - openBD unavailable: NDL book titles still display.
 - Staging worker CSP, routing and noindex response headers.
+
+## Regression: NDL gateway timeout and new-arrivals retry
+- Verify the NDL proxy can distinguish 504 `ndl_timeout`, upstream overload 503 and generic 502; none should be cached or equated with no results.
+- Check a recent (90-day) NDL national query at `idx=1`, then confirm in-process fallback when the national provider fails or its first window has no eligible ISBNs.
+- On 502/504, confirm the NDL cursor does **not** increment its offset and that the home section can be retried via **もう一度取得する** without reloading the rest of the home page.
+- When NDL returns ISBNs, confirm up to 9 safe covers/cards, correct next-page deduplication, no foreign/Japanese cross-contamination, and no display of unverified fabricated books.
+- Record upstream status/response time without logging the user query or access keys; inspect Chrome Network and do not assume a green HTTP-only smoke test covers NDL integration.
