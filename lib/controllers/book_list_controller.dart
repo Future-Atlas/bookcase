@@ -427,6 +427,54 @@ class BookListController extends ChangeNotifier {
     }
   }
 
+  /// Retry a transient NDL failure without reloading the timeline or popular
+  /// section. The repository starts over from the preferred source.
+  Future<void> retryRecommended() async {
+    if (isLoadingRecommended || isLoadingMoreRecommended) return;
+    isLoadingRecommended = true;
+    notifyListeners();
+    try {
+      _repository.resetHomeBooks('新着');
+      final books = await _repository.fetchBooksByGenre('新着', page: 1);
+      recommendedBooks = books;
+      recommendedPage = 1;
+      _recommendedPageCache
+        ..clear()
+        ..[1] = books;
+      _recommendedReachedEnd =
+          books.isEmpty || !_repository.hasMoreHomeBooks('新着');
+      hasMoreRecommended = !_recommendedReachedEnd;
+    } catch (_) {
+      hasMoreRecommended = false;
+    } finally {
+      isLoadingRecommended = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> retryWestern() async {
+    if (isLoadingWestern || isLoadingMoreWestern) return;
+    isLoadingWestern = true;
+    notifyListeners();
+    try {
+      _repository.resetHomeBooks('English');
+      final books = await _repository.fetchBooksByGenre('English', page: 1);
+      westernBooks = books;
+      westernPage = 1;
+      _westernPageCache
+        ..clear()
+        ..[1] = books;
+      _westernReachedEnd =
+          books.isEmpty || !_repository.hasMoreHomeBooks('English');
+      hasMoreWestern = !_westernReachedEnd;
+    } catch (_) {
+      hasMoreWestern = false;
+    } finally {
+      isLoadingWestern = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> loadMoreRecommended() async {
     if (isLoadingMoreRecommended || !hasMoreRecommended) return;
     final nextPage = recommendedPage + 1;
