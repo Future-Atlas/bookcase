@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../models/book.dart';
-import '../api/rakuten_api.dart';
+import '../api/ndl_api.dart';
+import '../api/openbd_api.dart';
 import '../repositories/book_repository.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
@@ -266,7 +267,9 @@ class BookListController extends ChangeNotifier {
       }
       Book? fresh;
       try {
-        fresh = await RakutenApi.fetchBookById(normalizedId);
+        final books = await NdlApi.search(isbn: normalizedId, count: 1);
+        final enhanced = await OpenBdApi.enrich(books);
+        fresh = enhanced.isEmpty ? null : enhanced.first;
       } catch (_) {
         continue;
       }
