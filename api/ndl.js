@@ -6,6 +6,9 @@ const PROVIDERS = new Set([
   "ndl-boj",
 ]);
 const SEARCH_KEYS = ["any", "title", "creator", "publisher", "ndc", "from", "until", "isbn"];
+// Give slow NDL searches more time, but cap each attempt to protect Workers.
+// The Flutter client timeout must exceed this value.
+const NDL_TIMEOUT_MS = 18000;
 
 function createHandler({ request = (...args) => fetch(...args) } = {}) {
   return async (req, res) => {
@@ -59,10 +62,16 @@ function createHandler({ request = (...args) => fetch(...args) } = {}) {
     try {
       const response = await request(`${NDL_URL}?${query}`, {
         headers: { Accept: "application/rss+xml, application/xml;q=0.9" },
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(NDL_TIMEOUT_MS),
       });
       if (!response.ok) {
         res.setHeader("Cache-Control", "no-store");
+        // Rate limiting / upstream temporary downtime should not be cached
+        // or misrepresented as a valid empty RSS page.
+        if (response.status === 429 || response.status === 503) {
+          res.setHeader("Retry-After", "3");
+          return res.status(503).json({ error: "ndl_unavailable" });
+        }
         return res.status(502).json({ error: "ndl_unavailable" });
       }
       const xml = await response.text();
@@ -72,8 +81,12 @@ function createHandler({ request = (...args) => fetch(...args) } = {}) {
       res.setHeader("Content-Type", "application/xml; charset=utf-8");
       res.setHeader("Cache-Control", "public, max-age=0, s-maxage=600");
       return res.status(200).send(xml);
-    } catch {
+    } catch (error) {
       res.setHeader("Cache-Control", "no-store");
+      if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+        res.setHeader("Retry-After", "3");
+        return res.status(504).json({ error: "ndl_timeout" });
+      }
       return res.status(502).json({ error: "ndl_unavailable" });
     }
   };
