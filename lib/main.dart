@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -448,6 +450,17 @@ class _MainNavigationShellState extends State<MainNavigationShell>
     _applyScreenStateFromPath(currentPath, replaceUrl: replaceUrl);
   }
 
+  Future<void> _restorePendingPrivacyPasswordRecovery() async {
+    final pending = _openPrivacyPasswordRecovery ||
+        await supabaseService.hasPendingPrivacyPasswordRecoveryIntent();
+    if (!mounted || !pending) return;
+    setState(() {
+      _openPrivacyPasswordRecovery = true;
+      _currentScreenIndex = 2;
+    });
+    _syncBrowserUrlForScreen(2, replace: true);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -459,11 +472,17 @@ class _MainNavigationShellState extends State<MainNavigationShell>
     _openPrivacyPasswordRecovery =
         (currentUri.queryParameters['privacy_password_recovery'] == '1') ||
         (fragmentQuery['privacy_password_recovery'] == '1');
-    _currentScreenIndex = 0;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    _currentScreenIndex = _openPrivacyPasswordRecovery ? 2 : 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       // A direct /posts URL can place a post route above the initial home
       // route. Do not let the hidden home shell overwrite that URL with '/'.
       if (!mounted || ModalRoute.of(context)?.isCurrent == false) return;
+      await _restorePendingPrivacyPasswordRecovery();
+      if (!mounted ||
+          ModalRoute.of(context)?.isCurrent == false ||
+          _openPrivacyPasswordRecovery) {
+        return;
+      }
       _applyRouteFromUri(currentUri, replaceUrl: true);
     });
   }
@@ -851,6 +870,10 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                             openPrivacyPasswordRecovery:
                                 _openPrivacyPasswordRecovery,
                             onPrivacyPasswordRecoveryCompleted: () {
+                              unawaited(
+                                supabaseService
+                                    .clearPrivacyPasswordRecoveryIntent(),
+                              );
                               setState(
                                 () => _openPrivacyPasswordRecovery = false,
                               );

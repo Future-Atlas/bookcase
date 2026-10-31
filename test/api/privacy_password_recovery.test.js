@@ -41,6 +41,13 @@ test('after OAuth return, use the exact first-time password setup layout', () =>
   assert.match(main, /_openPrivacyPasswordRecovery = false/);
   assert.match(account, /widget\.onPrivacyPasswordRecoveryCompleted\?\.call\(\)/);
   assert.match(main, /privacy_password_recovery/);
+  assert.match(main, /hasPendingPrivacyPasswordRecoveryIntent\(\)/);
+  assert.match(main, /_openPrivacyPasswordRecovery = true/);
+  assert.match(main, /_currentScreenIndex = 2/);
+  assert.match(main, /_currentScreenIndex = _openPrivacyPasswordRecovery \? 2 : 0/);
+  assert.match(main, /await _restorePendingPrivacyPasswordRecovery\(\)/);
+  assert.match(main, /ModalRoute\.of\(context\)\?\.isCurrent == false \|\|\s+_openPrivacyPasswordRecovery/);
+  assert.match(main, /clearPrivacyPasswordRecoveryIntent\(\)/);
 });
 
 test('recovery only supports currently enabled OAuth providers; never email OTP', () => {
@@ -52,6 +59,10 @@ test('recovery only supports currently enabled OAuth providers; never email OTP'
   assert.match(beginning, /OAuthProvider\.x/);
   assert.match(beginning, /privacyRecovery: true/);
   assert.match(service, /privacy_password_recovery': '1'/);
+  assert.match(service, /privacy_password_recovery_started_at/);
+  assert.match(service, /_privacyRecoveryIntentLifetime = Duration\(minutes: 15\)/);
+  assert.match(service, /await _rememberPrivacyPasswordRecoveryIntent\(\)/);
+  assert.match(service, /if \(error != null\) await clearPrivacyPasswordRecoveryIntent\(\)/);
   assert.doesNotMatch(beginning, /signInWithOtp|case 'email'|currentUser\?\.email/);
 });
 
