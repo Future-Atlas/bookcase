@@ -151,6 +151,47 @@ class _PrivateAccountAdminPanelState extends State<PrivateAccountAdminPanel> {
     _showMessage('訂正しました。変更項目と操作理由を監査記録へ保存しました。');
   }
 
+  Future<void> _resetTotp() async {
+    if (!_validateRequest()) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('認証アプリを解除しますか？'),
+        content: const Text(
+          '対象アカウントの登録済み認証アプリをすべて解除します。'
+          '本人確認済みの復旧依頼に限って使用してください。担当管理者、理由、受付番号、日時を監査記録へ保存します。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('監査記録を残して解除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _processing = true);
+    final succeeded = await context.read<SupabaseService>().adminResetTotpFactor(
+      targetIdentifier: _targetController.text,
+      adminPassword: _passwordController.text,
+      reason: _reasonController.text,
+      requestReference: _referenceController.text,
+    );
+    if (!mounted) return;
+    setState(() => _processing = false);
+    _passwordController.clear();
+    _showMessage(
+      succeeded
+          ? '認証アプリを解除し、操作理由を監査記録へ保存しました。対象者は次回ログイン時に再登録が必要です。'
+          : '解除できませんでした。管理者権限、追加パスワード、入力内容を確認してください。',
+    );
+  }
+
   bool _validateRequest() {
     if (_targetController.text.trim().isEmpty ||
         _referenceController.text.trim().isEmpty ||
@@ -252,6 +293,12 @@ class _PrivateAccountAdminPanelState extends State<PrivateAccountAdminPanel> {
                     onPressed: _processing ? null : _read,
                     icon: const Icon(Icons.lock_open_outlined),
                     label: const Text('理由を記録して閲覧'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _processing ? null : _resetTotp,
+                    icon: const Icon(Icons.phonelink_erase_outlined),
+                    label: const Text('監査記録を残して認証アプリを解除'),
                   ),
                   if (_loadedProfileId != null) ...[
                     const Divider(height: 32),

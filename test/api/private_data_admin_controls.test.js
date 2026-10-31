@@ -37,8 +37,8 @@ test("legal versions disclose the audited correction process", () => {
   const versions = read("lib/services/legal_document_versions.dart");
   const privacy = read("lib/screens/privacy_policy_screen.dart");
 
-  assert.match(versions, /static const terms = '1\.15\.0'/);
-  assert.match(versions, /static const privacy = '1\.14\.0'/);
+  assert.match(versions, /static const terms = '1\.16\.0'/);
+  assert.match(versions, /static const privacy = '1\.15\.0'/);
   assert.match(privacy, /追加パスワード/);
   assert.match(privacy, /監査記録には、個人情報の値そのものを重複して保存しません/);
 });

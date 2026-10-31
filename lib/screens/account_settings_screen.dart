@@ -19,6 +19,7 @@ import 'privacy_policy_screen.dart';
 import 'profile_onboarding_screen.dart';
 import 'subscription_status_screen.dart';
 import 'terms_screen.dart';
+import 'totp_authentication_screen.dart';
 
 class AccountSettingsScreen extends StatefulWidget {
   const AccountSettingsScreen({
@@ -162,6 +163,12 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       return const Center(child: Text('設定を利用するにはログインしてください。'));
     }
     if (_showRecovery) {
+      if (!service.isPrivacyRecoveryTotpVerified) {
+        return TotpChallengeScreen(
+          purpose: 'privacy_recovery',
+          onCompleted: () => setState(() {}),
+        );
+      }
       return PrivacyPasswordSetupScreen(
         isRecovery: true,
         onCompleted: () {
@@ -197,6 +204,14 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                     subtitle: const Text('氏名・性別・生年月日・電話番号・メールアドレス'),
                     trailing: const Icon(Icons.lock_outline),
                     onTap: _openPrivacySettings,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.phonelink_lock_outlined),
+                    title: const Text('認証アプリ・二段階認証'),
+                    subtitle: const Text('登録状態の確認・認証用QRコードの再取得'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _push(const TotpManagementScreen()),
                   ),
                   const Divider(height: 1),
                   ListTile(

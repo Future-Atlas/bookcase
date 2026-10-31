@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const STAGING_PROJECT = 'wpoigmywpewrrbudqhgh';
-export const FUNCTIONS = ['session-guard', 'delete-account', 'admin-delete-account', 'billing-checkout', 'billing-cancel-subscription', 'billing-change-plan', 'billing-webhook'];
+export const FUNCTIONS = ['session-guard', 'delete-account', 'admin-delete-account', 'totp-recovery', 'billing-checkout', 'billing-cancel-subscription', 'billing-change-plan', 'billing-webhook'];
 
 export function validateDatabaseUrl(env) {
   const raw = env.SUPABASE_DB_URL;

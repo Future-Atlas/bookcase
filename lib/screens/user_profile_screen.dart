@@ -17,6 +17,7 @@ import '../widgets/post_reply_dialog.dart';
 import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
 import '../widgets/rakuten_book_link.dart';
+import '../widgets/book_detail_dialog.dart';
 import 'profile_book_search_screen.dart';
 import 'report_post_dialog.dart';
 import 'follow_list_screen.dart';
@@ -1455,7 +1456,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           isbn: post.bookId,
           coverUrl: post.bookCoverUrl,
         );
-    await _showSearchedBookDetailDialog(book);
+    await _showCanonicalBookDetailDialog(book);
   }
 
   Widget _buildGridTab(
@@ -1497,7 +1498,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               coverHeightRatio: showDescription ? (2 / 3) : (1 / 3),
               showDescription: showDescription,
               descriptionMaxLines: 3,
-              onTap: () => _showSearchedBookDetailDialog(book),
+              onTap: () => _showCanonicalBookDetailDialog(book),
             );
           },
         );
@@ -1560,7 +1561,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 ? 0.0
                 : matchingPosts.first.rating;
             return GestureDetector(
-              onTap: () => _showSearchedBookDetailDialog(book),
+              onTap: () => _showCanonicalBookDetailDialog(book),
               child: Container(
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
@@ -1750,7 +1751,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final service = Provider.of<SupabaseService>(context, listen: false);
 
     return InkWell(
-      onTap: () => _showSearchedBookDetailDialog(book),
+      onTap: () => _showCanonicalBookDetailDialog(book),
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.all(8),
@@ -1800,7 +1801,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             ),
                             onPressed: isRead
                                 ? null
-                                : () => _showSearchedBookDetailDialog(book),
+                                : () => _showCanonicalBookDetailDialog(book),
                             child: BookActionLabel(
                               bookId: book.id,
                               label: isRead ? '読了済み' : '読了',
@@ -1854,14 +1855,67 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
+  Future<bool> _ensureBookDetailAuthenticated() async {
+    final service = Provider.of<SupabaseService>(context, listen: false);
+    if (service.canWrite) return true;
+    final result = await Navigator.of(context).pushNamed('/login');
+    return mounted && (result == true || service.canWrite);
+  }
+
+  Future<void> _showCanonicalBookDetailDialog(Book book) async {
+    final service = Provider.of<SupabaseService>(context, listen: false);
+    if (ContentSafetyService.isAdultBook(book) &&
+        !await service.canViewAdultContent()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('この書籍は18歳未満の利用者には表示できません。')));
+      return;
+    }
+    if (!mounted) return;
+
+    // Keep the former profile-specific dialog available as a release fallback,
+    // but use the canonical Home/search detail surface by default.
+    if (const bool.fromEnvironment('USE_LEGACY_PROFILE_BOOK_DETAIL')) {
+      await _showSearchedBookDetailDialog(book);
+      return;
+    }
+
+    final preferredProfileId =
+        (_profile?.id ?? widget.profileId ?? service.activeProfileId).trim();
+    await showDialog<void>(
+      context: context,
+      builder: (_) => BookDetailDialog(
+        book: book,
+        preferredProfileId: preferredProfileId.isEmpty
+            ? null
+            : preferredProfileId,
+        ensureAuthenticated: _ensureBookDetailAuthenticated,
+        onRead: () async {
+          final posted = await showPostComposerDialog(
+            context: context,
+            book: book,
+          );
+          if (posted && mounted) await _loadProfileData();
+        },
+        onDataChanged: _loadProfileData,
+        onUserTap: _openReplyProfile,
+        onReaction: (post, reaction) => _toggleReaction(post.id, reaction),
+        onReport: (post) => _reportPost(post.id),
+        onReply: (post, parentReply) => _replyToPost(post, parentReply),
+        onReplyReport: _reportReply,
+      ),
+    );
+  }
+
   Future<void> _showSearchedBookDetailDialog(Book book) async {
     final service = Provider.of<SupabaseService>(context, listen: false);
     if (ContentSafetyService.isAdultBook(book) &&
         !await service.canViewAdultContent()) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('この書籍は18歳未満の利用者には表示できません。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('この書籍は18歳未満の利用者には表示できません。')));
       return;
     }
     if (!mounted) return;

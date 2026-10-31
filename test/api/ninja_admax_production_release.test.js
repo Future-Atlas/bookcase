@@ -7,7 +7,7 @@ const projectRoot = path.join(__dirname, "../..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(projectRoot, relativePath), "utf8").replace(/\r\n/g, "\n");
 
-test("Ninja AdMax loads in production Flutter Web builds only", () => {
+test("Ninja AdMax integration stays configured while delivery is temporarily paused", () => {
   const production = read(".github/workflows/deploy.yaml");
   const staging = read(".github/workflows/deploy-staging.yaml");
   const policy = read("lib/widgets/timeline_ad_policy.dart");
@@ -28,6 +28,7 @@ test("Ninja AdMax loads in production Flutter Web builds only", () => {
   assert.match(production, /--dart-define=NINJA_ADMAX_ASYNC_ID=/);
   assert.match(production, /--dart-define=NINJA_ADMAX_ASYNC_TYPE=/);
   assert.match(policy, /timelineAdReady/);
+  assert.match(policy, /const bool timelineAdDeliveryPaused = true/);
   assert.match(policy, /NINJA_ADMAX_ASYNC_ID/);
   assert.ok(tag.includes(target), "the original issued synchronous tag must remain verbatim");
 
@@ -41,6 +42,14 @@ test("Ninja AdMax loads in production Flutter Web builds only", () => {
   assert.ok(tag.includes(asyncTag), "the issuer's asynchronous tag must remain verbatim");
 
   const slot = read("lib/widgets/timeline_ad_slot_web.dart");
+  assert.match(slot, /if \(timelineAdDeliveryPaused\)/);
+  assert.match(slot, /ValueKey\('paused-ad-\$slotIndex'\)/);
+  assert.match(slot, /child: Text\(\s*'広告'/);
+  assert.ok(
+    slot.indexOf("if (timelineAdDeliveryPaused)") <
+      slot.indexOf("_ensureEntitlementListener();"),
+    "paused slots must return before the provider SDK can be requested",
+  );
   assert.match(slot, /'728px'/);
   assert.match(slot, /'90px'/);
   assert.match(slot, /'admax-switch' : 'admax-ads'/);

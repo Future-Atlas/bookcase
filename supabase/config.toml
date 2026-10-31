@@ -388,6 +388,9 @@ verify_jwt = true
 [functions.admin-delete-account]
 verify_jwt = true
 
+[functions.totp-recovery]
+verify_jwt = true
+
 [functions.billing-checkout]
 verify_jwt = true
 
