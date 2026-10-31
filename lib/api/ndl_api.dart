@@ -12,11 +12,15 @@ class NdlSearchBatch {
     required this.books,
     required this.rawCount,
     required this.hasMore,
+    this.temporarilyUnavailable = false,
   });
 
   final List<Book> books;
   final int rawCount;
   final bool hasMore;
+  /// A gateway timeout, transport failure or temporary upstream outage.
+  /// Never treat this as normal end-of-catalog data.
+  final bool temporarilyUnavailable;
 }
 
 class NdlApi {
@@ -75,15 +79,23 @@ class NdlApi {
         any: any, title: title, creator: creator, publisher: publisher,
         isbn: isbn, ndc: ndc, from: from, until: until,
         provider: provider, start: start, count: count,
-      )).timeout(const Duration(seconds: 15));
+      )).timeout(const Duration(seconds: 22));
       if (response.statusCode != 200) {
-        return const NdlSearchBatch(books: [], rawCount: 0, hasMore: false);
+        return NdlSearchBatch(
+          books: const [], rawCount: 0, hasMore: false,
+          temporarilyUnavailable: response.statusCode == 429 ||
+              response.statusCode >= 500,
+        );
       }
       return parseSearchPage(utf8.decode(response.bodyBytes),
           start: start, count: count, genre: genre);
     } catch (_) {
-      // Do not display unverified or fallback data on an upstream failure.
-      return const NdlSearchBatch(books: [], rawCount: 0, hasMore: false);
+      // A transport timeout is NOT an empty NDL result. The home cursor
+      // may retry the same raw offset without losing fetched ISBNs.
+      return const NdlSearchBatch(
+        books: [], rawCount: 0, hasMore: false,
+        temporarilyUnavailable: true,
+      );
     }
   }
 
