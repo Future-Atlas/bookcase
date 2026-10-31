@@ -15,7 +15,10 @@ class RakutenApi {
   static const String _proxyBaseUrl = String.fromEnvironment(
     'RAKUTEN_PROXY_BASE_URL',
   );
-  static final Map<String, Book?> _bookByIdCache = <String, Book?>{};
+  // API catalog snapshots are transient and must not remain cached indefinitely.
+  static const _bookCacheTtl = Duration(minutes: 15);
+  static final Map<String, ({Book book, DateTime expiresAt})> _bookByIdCache =
+      <String, ({Book book, DateTime expiresAt})>{};
 
   static bool _canRequestRakuten() {
     return kIsWeb || _proxyBaseUrl.trim().isNotEmpty;
@@ -106,8 +109,12 @@ class RakutenApi {
 
     final trimmed = bookId.trim();
     final cacheKey = trimmed.replaceAll('-', '');
-    if (_bookByIdCache.containsKey(cacheKey)) {
-      return _bookByIdCache[cacheKey];
+    final cached = _bookByIdCache[cacheKey];
+    if (cached != null) {
+      if (cached.expiresAt.isAfter(DateTime.now().toUtc())) {
+        return cached.book;
+      }
+      _bookByIdCache.remove(cacheKey);
     }
 
     final isbnLike = RegExp(r'^[0-9Xx-]{10,17}$').hasMatch(trimmed);
@@ -137,7 +144,10 @@ class RakutenApi {
         fallbackId: trimmed,
         genre: '',
       );
-      _bookByIdCache[cacheKey] = result;
+      _bookByIdCache[cacheKey] = (
+        book: result,
+        expiresAt: DateTime.now().toUtc().add(_bookCacheTtl),
+      );
       return result;
     } catch (e) {
       debugPrint('Rakuten book lookup failed: $e');
