@@ -132,7 +132,7 @@ class _BookListScreenState extends State<BookListScreen> {
   }
 
   Future<void> _openBookFromPost(Post post) async {
-    final resolvedBook = await RakutenApi.fetchBookById(post.bookId);
+    final resolvedBook = await NdlApi.fetchBookById(post.bookId);
     if (!mounted) return;
     final book =
         resolvedBook ??
