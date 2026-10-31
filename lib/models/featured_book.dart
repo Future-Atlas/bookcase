@@ -28,8 +28,10 @@ class FeaturedBook {
         author: json['book_author']?.toString() ?? '',
         publisher: json['book_publisher']?.toString() ?? '',
         pubDate: '',
-        coverUrl: json['book_cover_url']?.toString() ?? '',
-        description: json['book_description']?.toString() ?? '',
+        // Existing rows may include legacy provider-sourced snapshots with no
+        // provenance or expiry. Never render them as current metadata.
+        coverUrl: '',
+        description: '',
       ),
       priority: (json['priority'] as num?)?.toInt() ?? 0,
       startsAt: DateTime.tryParse(json['starts_at']?.toString() ?? ''),
