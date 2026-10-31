@@ -51,8 +51,8 @@ test("featured books persist editorial identity but not third-party description 
   assert.match(model, /description: ''/);
   const controller = readFileSync("lib/controllers/book_list_controller.dart", "utf8");
   assert.match(controller, /_hydrateFeaturedBooks/);
-  assert.match(controller, /NdlApi\.search\(isbn: normalizedId/);
-  assert.match(controller, /OpenBdApi\.enrich\(books\)/);
+  assert.match(controller, /NdlApi\.fetchBookById\(normalizedId\)/);
+  assert.match(controller, /OpenBdApi\.enrich\(<Book>\[found\]\)/);
 });
 
 test("public featured SEO never republishes unverified legacy cover and description snapshots", () => {
