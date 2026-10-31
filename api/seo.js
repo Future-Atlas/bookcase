@@ -731,9 +731,9 @@ module.exports = async (req, res) => {
       <footer>
         <p><a href="${SITE_URL}/about">運営者情報</a> | <a href="${SITE_URL}/contact">お問い合わせ</a></p>
         <p>© 2026 ${SITE_BRAND}. All rights reserved.</p>
-        <!-- Rakuten Web Services Attribution Snippet FROM HERE -->
-        <a href="https://webservice.rakuten.co.jp/" target="_blank"><img src="https://webservice.rakuten.co.jp/img/credit/200709/credit_22121.gif" border="0" alt="Rakuten Web Service Center" title="Rakuten Web Service Center" width="221" height="21"/></a>
-        <!-- Rakuten Web Services Attribution Snippet TO HERE -->
+        <p>書誌情報の一部は<a href="https://ndlsearch.ndl.go.jp/">国立国会図書館サーチ（国立国会図書館）</a>から取得しています。
+        <a href="https://creativecommons.org/licenses/by/4.0/deed.ja">CC BY 4.0</a></p>
+        <p>書影等の一部は<a href="https://openbd.jp/">openBD</a>から取得しています。</p>
       </footer>
     </body>
     </html>
