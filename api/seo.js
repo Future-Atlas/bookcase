@@ -12,6 +12,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
 const RAKUTEN_APP_ID = process.env.RAKUTEN_APP_ID || "";
 const RAKUTEN_ACCESS_KEY = process.env.RAKUTEN_ACCESS_KEY || "";
+const RAKUTEN_AFFILIATE_ID = (process.env.RAKUTEN_AFFILIATE_ID || "").trim();
 const RAKUTEN_REFERER =
   process.env.RAKUTEN_REFERER || "https://www.sharemarium.com/";
 const IS_PRODUCTION = process.env.VERCEL_ENV === "production";
@@ -117,14 +118,39 @@ function rakutenEnabled() {
 function rakutenBaseParams() {
   return `format=json&applicationId=${encodeURIComponent(
     RAKUTEN_APP_ID,
-  )}&accessKey=${encodeURIComponent(RAKUTEN_ACCESS_KEY)}`;
+  )}&accessKey=${encodeURIComponent(RAKUTEN_ACCESS_KEY)}${RAKUTEN_AFFILIATE_ID ? `&affiliateId=${encodeURIComponent(RAKUTEN_AFFILIATE_ID)}` : ""}`;
 }
 
-async function rakutenFetch(url) {
-  return requestRakuten(url, {
+async function rakutenFetch(url, request = requestRakuten) {
+  return request(url, {
     origin: RAKUTEN_REFERER,
     userAgent: "Sharemarium-SEO-Bot/1.0 (+https://www.sharemarium.com)",
   });
+}
+
+// Only a genuine, HTTPS Rakuten book-product link can be paired with the
+// API-provided description / cover on publicly crawled catalog pages.
+function validRakutenProductUrl(item) {
+  const validProduct = (value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && url.hostname === "books.rakuten.co.jp" &&
+        !url.username && !url.password && !url.port &&
+        /^\/rb\/\d+\/?$/.test(url.pathname);
+    } catch {
+      return false;
+    }
+  };
+  try {
+    const affiliate = new URL(item?.affiliateUrl || "");
+    if (affiliate.protocol === "https:" && affiliate.hostname === "hb.afl.rakuten.co.jp" &&
+        !affiliate.username && !affiliate.password && !affiliate.port &&
+        affiliate.pathname.startsWith("/hgc/") &&
+        validProduct(affiliate.searchParams.get("pc"))) {
+      return affiliate.toString();
+    }
+  } catch { /* Missing affiliate URL: a verified direct product URL is possible. */ }
+  return validProduct(item?.itemUrl) ? item.itemUrl : "";
 }
 
 function normalizeRakutenBooks(items, sectionTitle) {
@@ -136,6 +162,7 @@ function normalizeRakutenBooks(items, sectionTitle) {
       coverUrl: data.largeImageUrl || "",
       genre: sectionTitle,
       description: data.itemCaption || "",
+      rakutenUrl: validRakutenProductUrl(data),
     };
   });
 }
@@ -177,7 +204,7 @@ function normalizeNdlBooks(xmlText, sectionTitle) {
   });
 }
 
-async function fetchRakutenSection(sectionTitle, diagnostics) {
+async function fetchRakutenSection(sectionTitle, diagnostics, request = requestRakuten) {
   if (!rakutenEnabled()) {
     diagnostics.rakutenSectionFailures.push(`${sectionTitle}:disabled`);
     return [];
@@ -199,7 +226,7 @@ async function fetchRakutenSection(sectionTitle, diagnostics) {
   }
 
   const url = `${endpoint}?${rakutenBaseParams()}&${extra}`;
-  const response = await rakutenFetch(url);
+  const response = await rakutenFetch(url, request);
   const body = await response.text();
   if (!response.ok) {
     diagnostics.rakutenSectionFailures.push(
@@ -241,7 +268,7 @@ async function fetchNdlSection(sectionTitle, diagnostics) {
   return books;
 }
 
-async function fetchRakutenBookByIsbn(isbn, diagnostics) {
+async function fetchRakutenBookByIsbn(isbn, diagnostics, request = requestRakuten) {
   if (!rakutenEnabled()) return null;
   if (!isbn) return null;
 
@@ -251,7 +278,7 @@ async function fetchRakutenBookByIsbn(isbn, diagnostics) {
   const url = `${RAKUTEN_BOOK_API}?${rakutenBaseParams()}&isbn=${encodeURIComponent(
     compact,
   )}&hits=1&page=1`;
-  const response = await rakutenFetch(url);
+  const response = await rakutenFetch(url, request);
   const body = await response.text();
   if (!response.ok) {
     diagnostics.rakutenIsbnFailures += 1;
@@ -269,6 +296,7 @@ async function fetchRakutenBookByIsbn(isbn, diagnostics) {
     description: first.itemCaption || "",
     publisher: first.publisherName || "",
     isbn: compact,
+    rakutenUrl: validRakutenProductUrl(first),
   };
 }
 
@@ -301,8 +329,8 @@ async function fetchNdlBookByIsbn(isbn, diagnostics) {
   };
 }
 
-async function resolveBookByIsbn(isbn, diagnostics) {
-  const rakuten = await fetchRakutenBookByIsbn(isbn, diagnostics);
+async function resolveBookByIsbn(isbn, diagnostics, request = requestRakuten) {
+  const rakuten = await fetchRakutenBookByIsbn(isbn, diagnostics, request);
   if (rakuten) return rakuten;
   if (!ENABLE_NDL_FALLBACK) return null;
   return fetchNdlBookByIsbn(isbn, diagnostics);
@@ -337,7 +365,8 @@ function renderBookList(books) {
       <div class="book-details">
         <h4 class="book-title">${escapeHtml(book.title)}</h4>
         <p class="book-author">著者: ${escapeHtml(book.author)}</p>
-        ${book.description ? `<p style="font-size:0.9em; color:#555;">${escapeHtml(book.description)}</p>` : ""}
+        ${book.description && book.rakutenUrl ? `<p style="font-size:0.9em; color:#555;">${escapeHtml(book.description)}</p>` : ""}
+        ${book.rakutenUrl ? `<p>楽天ブックス提供の情報 <a href="${escapeHtml(book.rakutenUrl)}" target="_blank" rel="sponsored noopener noreferrer">楽天ブックスの商品ページを見る</a></p>` : ""}
       </div>
     </div>
   `,
@@ -573,6 +602,7 @@ function buildBookDescription(book) {
 
 module.exports = async (req, res) => {
   const { path } = req.query;
+  const rakutenRequest = typeof req.rakutenRequest === "function" ? req.rakutenRequest : requestRakuten;
   // Vercel may forward the original query string together with the rewritten
   // path. It is not part of the canonical route and must not become part of an
   // ISBN/profile slug.
@@ -758,7 +788,7 @@ module.exports = async (req, res) => {
                 const rawBookId = p.book_id || "書籍ID未設定";
                 let resolved = isbnCache.get(rawBookId);
                 if (resolved === undefined) {
-                  resolved = await resolveBookByIsbn(rawBookId, diagnostics);
+                  resolved = await resolveBookByIsbn(rawBookId, diagnostics, rakutenRequest);
                   isbnCache.set(rawBookId, resolved || null);
                 }
 
@@ -789,7 +819,7 @@ module.exports = async (req, res) => {
                 const rawBookId = row.book_id || "書籍ID未設定";
                 let resolved = isbnCache.get(rawBookId);
                 if (resolved === undefined) {
-                  resolved = await resolveBookByIsbn(rawBookId, diagnostics);
+                  resolved = await resolveBookByIsbn(rawBookId, diagnostics, rakutenRequest);
                   isbnCache.set(rawBookId, resolved || null);
                 }
 
@@ -1234,7 +1264,7 @@ module.exports = async (req, res) => {
   if (genreSection) {
     let books = [];
     try {
-      books = await fetchRakutenSection(genreSection, diagnostics);
+      books = await fetchRakutenSection(genreSection, diagnostics, rakutenRequest);
     } catch {
       books = [];
     }
@@ -1282,7 +1312,7 @@ module.exports = async (req, res) => {
     if (/^(\d{13}|\d{9}[\dXx])$/.test(slug)) {
       try {
         if (!rakutenEnabled()) throw new Error("book_api_unconfigured");
-        const book = await resolveBookByIsbn(slug, diagnostics);
+        const book = await resolveBookByIsbn(slug, diagnostics, rakutenRequest);
         if (!book && diagnostics.rakutenIsbnFailures > 0) {
           throw new Error("book_api_unavailable");
         }
@@ -1311,14 +1341,15 @@ module.exports = async (req, res) => {
             description, pagePath: `/book/${slug}`,
             // Editorially selected books and books with an original public
             // review are indexable. Catalog-only pages stay out of the index.
-            robots: reviews.length || featured ? "index,follow" : "noindex,follow",
+            robots: book.rakutenUrl && (reviews.length || featured) ? "index,follow" : "noindex,follow",
             ogType: "book",
             ogImageUrl: book.coverUrl || OG_IMAGE_URL,
             content: `<h1>${escapeHtml(book.title)}</h1>
               ${book.author ? `<p>著者：${escapeHtml(book.author)}</p>` : ""}
               <p>${book.publisher ? `出版社：${escapeHtml(book.publisher)} ／ ` : ""}ISBN：${escapeHtml(slug)}</p>
-              ${book.coverUrl ? `<img width="150" src="${escapeHtml(book.coverUrl)}" alt="${escapeHtml(book.title)}の表紙">` : ""}
-              <h2>書籍紹介</h2><p>${escapeHtml(book.description || "紹介文は準備中です。")}</p>
+              ${book.coverUrl && book.rakutenUrl ? `<img width="150" src="${escapeHtml(book.coverUrl)}" alt="${escapeHtml(book.title)}の表紙">` : ""}
+              <h2>書籍紹介</h2><p>${escapeHtml(book.rakutenUrl ? (book.description || "紹介文は準備中です。") : "書籍情報を確認できませんでした。")}</p>
+              ${book.rakutenUrl ? `<p>楽天ブックス提供の情報：<a href="${escapeHtml(book.rakutenUrl)}" target="_blank" rel="sponsored noopener noreferrer">楽天ブックスの商品ページを見る</a></p>` : ""}
               ${relatedScreenTitles.length ? `<h2>関連する映像化作品</h2><ul>${relatedScreenTitles.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ul>` : ""}
               <h2>読者の感想</h2>
               ${reviews.length ? reviews.map(p => `<article><h3>${escapeHtml(p.profiles?.username || "読者")}さんの感想</h3><p>${escapeHtml(p.comment)}</p><a href="/posts/${encodeURIComponent(p.id)}">投稿を見る</a></article>`).join("") : "<p>公開されている感想はまだありません。</p>"}
@@ -1334,8 +1365,8 @@ module.exports = async (req, res) => {
               ...(book.publisher
                 ? { publisher: { "@type": "Organization", name: book.publisher } }
                 : {}),
-              ...(book.description ? { description: book.description } : {}),
-              ...(book.coverUrl ? { image: book.coverUrl } : {}),
+              ...(book.description && book.rakutenUrl ? { description: book.description } : {}),
+              ...(book.coverUrl && book.rakutenUrl ? { image: book.coverUrl } : {}),
               url: toAbsoluteUrl(`/book/${slug}`),
             },
             extraJsonLd: [
@@ -1405,7 +1436,7 @@ module.exports = async (req, res) => {
           const rawBookId = p.book_id || "書籍ID未設定";
           let resolved = isbnCache.get(rawBookId);
           if (resolved === undefined) {
-            resolved = await resolveBookByIsbn(rawBookId, diagnostics);
+            resolved = await resolveBookByIsbn(rawBookId, diagnostics, rakutenRequest);
             isbnCache.set(rawBookId, resolved || null);
           }
 
