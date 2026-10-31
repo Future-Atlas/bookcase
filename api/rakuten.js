@@ -99,7 +99,8 @@ function createHandler({ request = requestRakuten, env = process.env } = {}) {
   const url = `${baseUrl}?${query.toString()}`;
 
   try {
-    const response = await request(url, {
+    const upstreamRequest = typeof req.rakutenRequest === "function" ? req.rakutenRequest : request;
+    const response = await upstreamRequest(url, {
       origin: referer,
       userAgent:
         "Sharemarium-Rakuten-Proxy/1.0 (+https://www.sharemarium.com)",
@@ -108,8 +109,12 @@ function createHandler({ request = requestRakuten, env = process.env } = {}) {
     const body = await response.text();
     res.setHeader(
       "Cache-Control",
-      "public, s-maxage=120, stale-while-revalidate=300",
+      response.status === 200 ? "public, s-maxage=120" : "no-store",
     );
+    if (response.status === 429) {
+      const retryAfter = response.headers?.get?.("retry-after");
+      res.setHeader("Retry-After", retryAfter || "5");
+    }
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader("X-Rakuten-Proxy-Transport", "fetch");
     return res.status(response.status).send(body);
