@@ -9,7 +9,8 @@ import '../config/feature_flags.dart';
 import '../widgets/book_search_results.dart';
 import '../widgets/rakuten_credit.dart';
 import '../models/profile_page_color.dart';
-import '../api/rakuten_api.dart';
+import '../api/ndl_api.dart';
+import '../api/openbd_api.dart';
 import '../widgets/post_card.dart';
 import '../widgets/timeline_ad_slot.dart';
 import '../widgets/timeline_ad_policy.dart';
@@ -75,7 +76,9 @@ class _BookListScreenState extends State<BookListScreen> {
     final initialBookId = widget.initialBookId?.trim() ?? '';
     if (initialBookId.isEmpty || _openingBookId == initialBookId) return;
     _openingBookId = initialBookId;
-    final book = await RakutenApi.fetchBookById(initialBookId);
+    final matches = await NdlApi.search(isbn: initialBookId, count: 1);
+    final enriched = await OpenBdApi.enrich(matches);
+    final book = enriched.isEmpty ? null : enriched.first;
     if (!mounted) return;
     if (book != null) {
       await _showBookDetailDialog(book, openedFromDirectUrl: true);
