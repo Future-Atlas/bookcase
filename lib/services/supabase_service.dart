@@ -3263,7 +3263,10 @@ class SupabaseService extends ChangeNotifier {
           'book_title': book.title,
           'book_author': book.author,
           'book_publisher': book.publisher,
-          'book_description': book.description,
+          // Product descriptions can be Rakuten-owned API data. Do not create
+          // new permanent copies in public posts; the user-authored comment
+          // and book ISBN/title/author remain intact.
+          'book_description': '',
           'is_age_restricted': isAgeRestricted,
           'rating': rating,
           'comment': normalizedComment,
