@@ -31,71 +31,15 @@ function loadRakuten(env = {}) {
   return createHandler({ env });
 }
 
-test("Rakuten proxy rejects non-GET requests", async () => {
+test("retired Rakuten proxy returns 410 without requesting upstream", async () => {
   const res = responseRecorder();
-  await loadRakuten()({ method: "POST", query: {}, headers: {} }, res);
-  assert.equal(res.statusCode, 405);
-  assert.equal(res.body.error, "method_not_allowed");
-});
-
-test("Rakuten proxy rejects missing credentials", async () => {
-  const res = responseRecorder();
-  await loadRakuten()({ method: "GET", query: {}, headers: {} }, res);
-  assert.equal(res.statusCode, 500);
-  assert.equal(res.body.error, "rakuten_credentials_missing");
-});
-
-test("Rakuten proxy validates endpoint and pagination", async () => {
-  const env = { RAKUTEN_APP_ID: "app", RAKUTEN_ACCESS_KEY: "key" };
-  const invalidEndpoint = responseRecorder();
-  await loadRakuten(env)(
-    { method: "GET", query: { endpoint: "invalid" }, headers: {} },
-    invalidEndpoint,
-  );
-  assert.equal(invalidEndpoint.statusCode, 400);
-  assert.equal(invalidEndpoint.body.error, "invalid_endpoint");
-
-  const invalidPage = responseRecorder();
-  await loadRakuten(env)(
-    { method: "GET", query: { page: "0" }, headers: {} },
-    invalidPage,
-  );
-  assert.equal(invalidPage.statusCode, 400);
-  assert.equal(invalidPage.body.error, "invalid_pagination");
-});
-
-test("legacy Rakuten API routes cannot bypass the shared quota coordinator", async () => {
-  const res = responseRecorder();
-  const handler = loadRakuten({
-    RAKUTEN_APP_ID: "test-app",
-    RAKUTEN_ACCESS_KEY: "test-key",
-  });
-  await handler({
-    method: "GET",
-    query: { endpoint: "book", isbn: "9784101010014" },
+  await loadRakuten({ RAKUTEN_APP_ID: "test" })({
+    method: "GET", query: { endpoint: "book", isbn: "9784101010014" },
     headers: {},
   }, res);
-  assert.equal(res.statusCode, 503);
-  assert.equal(res.body.error, "rakuten_quota_unavailable");
-  assert.equal(res.headers["Retry-After"], "5");
-});
-
-test("Rakuten proxy returns 502 when upstream request fails", async () => {
-  const handler = loadRakuten({
-    RAKUTEN_APP_ID: "app",
-    RAKUTEN_ACCESS_KEY: "key",
-  });
-  const res = responseRecorder();
-  const request = require("../../api/rakuten").createHandler({
-    env: { RAKUTEN_APP_ID: "app", RAKUTEN_ACCESS_KEY: "key" },
-    request: async () => {
-      throw new Error("timeout");
-    },
-  });
-  assert.ok(handler);
-  await request({ method: "GET", query: {}, headers: {} }, res);
-  assert.equal(res.statusCode, 502);
-  assert.equal(res.body.error, "rakuten_proxy_failed");
+  assert.equal(res.statusCode, 410);
+  assert.equal(res.body.error, "catalog_migrated");
+  assert.equal(res.headers["Cache-Control"], "no-store");
 });
 
 test("sitemap returns XML and hides non-production pages from robots", async () => {
