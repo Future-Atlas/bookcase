@@ -194,7 +194,7 @@ function normalizeNdlBooks(xmlText, sectionTitle) {
     const title = extractXmlTag(itemBlock, ["title", "dc:title"]);
     const author = extractXmlTag(itemBlock, ["author", "dc:creator"]);
     const description = extractXmlTag(itemBlock, ["dc:description"]);
-    const isbnIds = [...itemBlock.matchAll(/<dc:identifier\\b[^>]*>([^<]+)<\\/dc:identifier>/gi)]
+    const isbnIds = [...itemBlock.matchAll(new RegExp("<dc:identifier[^>]*>([^<]+)</dc:identifier>", "gi"))]
       .map((match) => match[1].trim().toUpperCase());
     const isbn = isbnIds.find((value) => /^(?:[0-9]{13}|[0-9]{9}[0-9X])$/.test(value)) || "";
     return {
