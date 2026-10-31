@@ -280,6 +280,8 @@ class BookListController extends ChangeNotifier {
         coverUrl: fresh.coverUrl,
         description: fresh.description,
         rakutenAffiliateUrl: fresh.rakutenAffiliateUrl,
+        catalogSource: fresh.catalogSource,
+        catalogFetchedAt: fresh.catalogFetchedAt,
       );
       if (!_allowAdultContent && ContentSafetyService.isAdultBook(hydrated)) {
         featuredBooks = List<Book>.of(featuredBooks)..removeAt(index);
