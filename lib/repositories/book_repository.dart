@@ -247,7 +247,7 @@ class BookRepository {
         return _filterForViewer(await OpenBdApi.enrich(chosen));
       }
       if (_isNewArrivalsGenre(genre) || _isForeignGenre(genre)) {
-        return _fetchHomeSection(genre, page: page);
+        return await _fetchHomeSection(genre, page: page);
       }
       final incoming = await NdlApi.searchBySelectedGenre(
         selectedGenre: genre, page: page, count: 27,
@@ -314,7 +314,7 @@ class BookRepository {
   }
 
   Future<List<Book>> _fetchHomeSection(
-    String genre, {required int page},
+    String genre, {required int page}
   ) async {
     final key = _homeKey(genre);
     final cursor = _homeCatalogCursors.putIfAbsent(
@@ -334,7 +334,7 @@ class BookRepository {
   }
 
   Future<List<Book>> _nextHomePage(
-    _HomeCatalogCursor cursor, {required bool newArrivals},
+    _HomeCatalogCursor cursor, {required bool newArrivals}
   ) async {
     final page = <Book>[];
     var requests = 0;
