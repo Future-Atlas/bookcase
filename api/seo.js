@@ -601,7 +601,15 @@ function buildBookDescription(book) {
 
 module.exports = async (req, res) => {
   const { path } = req.query;
-  const rakutenRequest = typeof req.rakutenRequest === "function" ? req.rakutenRequest : requestRakuten;
+  // Only Cloudflare's bound coordinator may make outbound Rakuten calls.
+  // Legacy Vercel requests fail closed rather than bypassing the app-ID quota.
+  const rakutenRequest = typeof req.rakutenRequest === "function"
+    ? req.rakutenRequest
+    : async () => ({
+        ok: false,
+        status: 503,
+        text: async () => '{"error":"rakuten_quota_unavailable"}',
+      });
   // Vercel may forward the original query string together with the rewritten
   // path. It is not part of the canonical route and must not become part of an
   // ISBN/profile slug.
