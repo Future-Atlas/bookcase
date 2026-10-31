@@ -99,7 +99,17 @@ function createHandler({ request = requestRakuten, env = process.env } = {}) {
   const url = `${baseUrl}?${query.toString()}`;
 
   try {
-    const upstreamRequest = typeof req.rakutenRequest === "function" ? req.rakutenRequest : request;
+    // The Vercel/legacy HTTP entrypoint has no Durable Object binding.
+    // Never silently bypass the per-application-ID coordinator in production.
+    // An injected request is only accepted for in-process tests; Cloudflare
+    // supplies req.rakutenRequest from its bound coordinator.
+    const upstreamRequest = typeof req.rakutenRequest === "function"
+      ? req.rakutenRequest : request !== requestRakuten ? request : null;
+    if (!upstreamRequest) {
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Retry-After", "5");
+      return res.status(503).json({ error: "rakuten_quota_unavailable" });
+    }
     const response = await upstreamRequest(url, {
       origin: referer,
       userAgent:
