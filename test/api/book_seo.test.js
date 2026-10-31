@@ -30,7 +30,7 @@ function setup({ reviews = [], featured = [], production = true, error = false, 
       return {ok:true,text:async () => JSON.stringify(featured)};
     }
     assert.match(requested, /book_id=eq\.9784101010014/);
-    assert.match(requested, /profiles:profiles!posts_profile_id_fkey/);
+    assert.match(requested, /profiles:profiles!posts_profile_id_fkey!inner/);
     assert.match(requested, /profiles.is_private=eq.false/);
     return {ok:true,text:async () => JSON.stringify(reviews)};
   };
@@ -45,7 +45,7 @@ test.afterEach(() => {
 });
 test("book SEO serves title, canonical, schema and only non-spoiler reviews", async () => {
   const handler = setup({reviews:[
-    {id:"public",comment:"読書感想".repeat(30),profiles:{username:"reader"}},
+    {id:"public",comment:"読書感想".repeat(30),profiles:{username:"reader",is_private:false,is_suspended:false}},
     {id:"spoiler",is_spoiler:true,comment:"secret".repeat(40)},
   ]});
   const out = res(); await handler({query:{path:"/book/9784101010014"}},out);
@@ -119,7 +119,7 @@ test("Rakuten outage does not erase substantive user-authored public reviews", a
   const handler = setup({
     error: true,
     reviews: [
-      { id: "original", comment: "ユーザー自身が書いた感想。".repeat(25), profiles: { username: "reader" } },
+      { id: "original", comment: "ユーザー自身が書いた感想。".repeat(25), profiles: { username: "reader", is_private: false, is_suspended: false } },
       { id: "spoiler", is_spoiler: true, comment: "非公開にすべきネタバレ".repeat(25) },
     ],
   });
@@ -137,7 +137,7 @@ test("Rakuten outage does not erase substantive user-authored public reviews", a
 test("unlinked Rakuten catalog content is not republished on indexed review pages", async () => {
   const handler = setup({
     itemUrl: "https://outside.example.test/unrelated",
-    reviews: [{ id: "review", comment: "自分で書いたレビューです。".repeat(25), profiles: { username: "reader" } }],
+    reviews: [{ id: "review", comment: "自分で書いたレビューです。".repeat(25), profiles: { username: "reader", is_private: false, is_suspended: false } }],
   });
   const out = res();
   await handler({ query: { path: "/book/9784101010014" } }, out);
@@ -147,4 +147,24 @@ test("unlinked Rakuten catalog content is not republished on indexed review page
   assert.doesNotMatch(out.body, /紹介文/);
   assert.doesNotMatch(out.body, /本&lt;title&gt;/);
   assert.doesNotMatch(out.body, /outside\.example\.test/);
+});
+
+
+test("private and suspended profile reviews are excluded even if a mock backend returns them", async () => {
+  const handler = setup({
+    reviews: [
+      { id: "private", comment: "非公開ユーザーの感想".repeat(25),
+        profiles: { username: "private", is_private: true, is_suspended: false } },
+      { id: "suspended", comment: "停止済みユーザーの感想".repeat(25),
+        profiles: { username: "stopped", is_private: false, is_suspended: true } },
+      { id: "public", comment: "一般公開の感想".repeat(25),
+        profiles: { username: "reader", is_private: false, is_suspended: false } },
+    ],
+  });
+  const out = res();
+  await handler({ query: { path: "/book/9784101010014" } }, out);
+  assert.equal(out.statusCode, 200);
+  assert.match(out.body, /一般公開の感想/);
+  assert.doesNotMatch(out.body, /非公開ユーザーの感想/);
+  assert.doesNotMatch(out.body, /停止済みユーザーの感想/);
 });
