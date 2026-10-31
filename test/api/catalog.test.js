@@ -36,6 +36,22 @@ test('NDL proxy allows NDL-owned foreign-book catalog records',async()=>{
   assert.equal(res.statusCode,200);
 });
 
+test('NDL proxy accepts the bounded Japan-related foreign bibliography without a keyword',async()=>{
+  let upstream='';
+  const handler=ndl.createHandler({request:async url=>{
+    upstream=url;
+    return {ok:true,text:async()=>'<rss><channel></channel></rss>'};
+  }});
+  const res=recorder();
+  await handler({method:'GET',query:{dpid:'ndl-boj',mediatype:'books',cnt:'27',idx:'1'}},res);
+  assert.equal(res.statusCode,200);
+  const url=new URL(upstream);
+  assert.equal(url.searchParams.get('dpid'),'ndl-boj');
+  assert.equal(url.searchParams.get('mediatype'),'books');
+  assert.equal(url.searchParams.get('cnt'),'27');
+  assert.equal(url.searchParams.get('any'),null);
+});
+
 test('NDL proxy rejects provider injection and missing search fields',async()=>{
   const handler=ndl.createHandler({request:async()=>{throw Error('unexpected');}});
   const invalid=recorder();
