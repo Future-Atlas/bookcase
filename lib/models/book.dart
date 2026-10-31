@@ -19,6 +19,8 @@ class Book {
   final int itemPrice;
   // Provenance of catalog values: rakuten, ndl, or unverified. This is
   // separate from permanent user-authored review data and ISBN identity.
+  final bool adultContentFlag;
+  final String ageRatingSource;
   final String catalogSource;
   final DateTime? catalogFetchedAt;
 
@@ -37,6 +39,8 @@ class Book {
     this.description = '',
     this.rakutenAffiliateUrl = '',
     this.itemPrice = 0,
+    this.adultContentFlag = false,
+    this.ageRatingSource = 'unknown',
     this.catalogSource = 'unverified',
     this.catalogFetchedAt,
   });
@@ -151,6 +155,8 @@ class Book {
     String? description,
     String? rakutenAffiliateUrl,
     int? itemPrice,
+    bool? adultContentFlag,
+    String? ageRatingSource,
     String? catalogSource,
     DateTime? catalogFetchedAt,
   }) {
@@ -169,6 +175,8 @@ class Book {
       description: description ?? this.description,
       rakutenAffiliateUrl: rakutenAffiliateUrl ?? this.rakutenAffiliateUrl,
       itemPrice: itemPrice ?? this.itemPrice,
+      adultContentFlag: adultContentFlag ?? this.adultContentFlag,
+      ageRatingSource: ageRatingSource ?? this.ageRatingSource,
       catalogSource: catalogSource ?? this.catalogSource,
       catalogFetchedAt: catalogFetchedAt ?? this.catalogFetchedAt,
     );
