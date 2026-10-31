@@ -363,7 +363,8 @@ class BookListController extends ChangeNotifier {
         page: recommendedPage,
       );
       _recommendedPageCache[recommendedPage] = recommendedBooks;
-      _recommendedReachedEnd = recommendedBooks.isEmpty;
+      _recommendedReachedEnd = recommendedBooks.isEmpty ||
+          !repository.hasMoreHomeBooks('新着');
       hasMoreRecommended = !_recommendedReachedEnd;
     } catch (_) {
       recommendedBooks = [];
@@ -379,7 +380,8 @@ class BookListController extends ChangeNotifier {
         page: westernPage,
       );
       _westernPageCache[westernPage] = westernBooks;
-      _westernReachedEnd = westernBooks.isEmpty;
+      _westernReachedEnd = westernBooks.isEmpty ||
+          !repository.hasMoreHomeBooks('English');
       hasMoreWestern = !_westernReachedEnd;
     } catch (_) {
       westernBooks = [];
@@ -455,7 +457,7 @@ class BookListController extends ChangeNotifier {
         _recommendedPageCache[nextPage] = newBooks;
         recommendedBooks = newBooks;
         recommendedPage = nextPage;
-        _recommendedReachedEnd = false;
+        _recommendedReachedEnd = !_repository.hasMoreHomeBooks('新着');
         hasMoreRecommended = !_recommendedReachedEnd;
       }
     } finally {
@@ -504,7 +506,7 @@ class BookListController extends ChangeNotifier {
         _westernPageCache[nextPage] = newBooks;
         westernBooks = newBooks;
         westernPage = nextPage;
-        _westernReachedEnd = false;
+        _westernReachedEnd = !_repository.hasMoreHomeBooks('English');
         hasMoreWestern = !_westernReachedEnd;
       }
     } finally {
