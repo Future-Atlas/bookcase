@@ -156,13 +156,14 @@ function validRakutenProductUrl(item) {
 function normalizeRakutenBooks(items, sectionTitle) {
   return (items || []).map((item) => {
     const data = item?.Item || {};
+    const rakutenUrl = validRakutenProductUrl(data);
     return {
       title: data.title || "不明なタイトル",
       author: data.author || "不明な著者",
-      coverUrl: data.largeImageUrl || "",
+      coverUrl: rakutenUrl ? (data.largeImageUrl || "") : "",
       genre: sectionTitle,
-      description: data.itemCaption || "",
-      rakutenUrl: validRakutenProductUrl(data),
+      description: rakutenUrl ? (data.itemCaption || "") : "",
+      rakutenUrl,
     };
   });
 }
