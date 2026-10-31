@@ -1,4 +1,6 @@
 import adEntitlement from "../api/ad-entitlement.js";
+import ndl from "../api/ndl.js";
+import openbd from "../api/openbd.js";
 import homeAdEligibility from "../api/home-ad-eligibility.js";
 import legalSeo from "../api/legal-seo.js";
 import postSeo from "../api/post-seo.js";
@@ -208,7 +210,9 @@ async function routeRequest(request, env) {
   if (path === "/sitemap.xml" || path === "/api/sitemap") {
     return invoke(sitemap, request);
   }
-  if (path === "/api/rakuten") return invoke(rakuten, request, {}, env);
+  if (path === "/api/ndl") return invoke(ndl, request);
+  if (path === "/api/openbd") return invoke(openbd, request);
+  if (path === "/api/rakuten") return new Response(JSON.stringify({error:"catalog_migrated"}), {status:410,headers:{"Content-Type":"application/json"}});
   if (path === "/api/ad-entitlement") {
     return invoke(adEntitlement, request);
   }
