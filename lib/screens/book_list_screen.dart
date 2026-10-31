@@ -7,9 +7,10 @@ import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
 import '../config/feature_flags.dart';
 import '../widgets/book_search_results.dart';
-import '../widgets/rakuten_credit.dart';
+import '../widgets/catalog_credit.dart';
 import '../models/profile_page_color.dart';
-import '../api/rakuten_api.dart';
+import '../api/ndl_api.dart';
+import '../api/openbd_api.dart';
 import '../widgets/post_card.dart';
 import '../widgets/timeline_ad_slot.dart';
 import '../widgets/timeline_ad_policy.dart';
@@ -75,7 +76,11 @@ class _BookListScreenState extends State<BookListScreen> {
     final initialBookId = widget.initialBookId?.trim() ?? '';
     if (initialBookId.isEmpty || _openingBookId == initialBookId) return;
     _openingBookId = initialBookId;
-    final book = await RakutenApi.fetchBookById(initialBookId);
+    final found = await NdlApi.fetchBookById(initialBookId);
+    final enriched = await OpenBdApi.enrich(
+      found == null ? <Book>[] : <Book>[found],
+    );
+    final book = enriched.isEmpty ? null : enriched.first;
     if (!mounted) return;
     if (book != null) {
       await _showBookDetailDialog(book, openedFromDirectUrl: true);
@@ -129,7 +134,7 @@ class _BookListScreenState extends State<BookListScreen> {
   }
 
   Future<void> _openBookFromPost(Post post) async {
-    final resolvedBook = await RakutenApi.fetchBookById(post.bookId);
+    final resolvedBook = await NdlApi.fetchBookById(post.bookId);
     if (!mounted) return;
     final book =
         resolvedBook ??
@@ -1475,7 +1480,7 @@ class _BookListScreenState extends State<BookListScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              '楽天APIキー未設定、または通信エラーの可能性があります。',
+              '書籍データの取得先に接続できない可能性があります。',
               style: TextStyle(color: Colors.grey[500], fontSize: 11),
             ),
           ],
@@ -1862,7 +1867,7 @@ class _BookListScreenState extends State<BookListScreen> {
             style: TextStyle(color: Colors.grey[400], fontSize: 11),
           ),
           const SizedBox(height: 8),
-          const RakutenCredit(),
+          const CatalogCredit(),
           const SizedBox(height: 4),
           Text(
             'Powered by Supabase & PostgreSQL',

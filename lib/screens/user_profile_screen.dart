@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/feature_flags.dart';
 import '../services/supabase_service.dart';
-import '../api/rakuten_api.dart';
+import '../api/ndl_api.dart';
+import '../api/openbd_api.dart';
 import '../models/book.dart';
 import '../models/user_profile.dart';
 import '../models/post.dart';
@@ -1442,7 +1443,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _openBookFromPost(Post post) async {
-    final resolvedBook = await RakutenApi.fetchBookById(post.bookId);
+    final matches = await NdlApi.search(isbn: post.bookId, count: 1);
+    final enriched = await OpenBdApi.enrich(matches);
+    final resolvedBook = enriched.isEmpty ? null : enriched.first;
     if (!mounted) return;
     final book =
         resolvedBook ??

@@ -5,7 +5,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../api/rakuten_api.dart';
+import '../api/ndl_api.dart';
 import '../models/book.dart';
 import 'legal_document_versions.dart';
 import '../models/user_profile.dart';
@@ -1625,7 +1625,8 @@ class SupabaseService extends ChangeNotifier {
             bookId.isNotEmpty) {
           bookTitle = bookCache[bookId];
           if (bookTitle == null) {
-            final book = await RakutenApi.fetchBookById(bookId);
+            final candidates = await NdlApi.search(isbn: bookId, count: 1);
+            final book = candidates.isEmpty ? null : candidates.first;
             bookTitle = book?.title ?? bookId;
             bookCache[bookId] = bookTitle;
           }
@@ -1858,6 +1859,66 @@ class SupabaseService extends ChangeNotifier {
   Future<List<Book>> fetchBooksByGenre(String genre) async {
     // No direct books table; return empty list.
     return [];
+  }
+
+  /// Public Sharemarium activity, not a store bestseller list.
+  /// Do not count private, suspended or age-restricted profiles/posts.
+  Future<List<Book>> fetchPopularBooks({int limit = 100}) async {
+    if (!_isInitialized || _client == null) return const <Book>[];
+    try {
+      final rows = await _client!
+          .from('posts')
+          .select(
+            'book_id,book_title,book_author,rating,'
+            'profiles:profiles!posts_profile_id_fkey!inner(is_private,is_suspended)',
+          )
+          .eq('is_age_restricted', false)
+          .eq('profiles.is_private', false)
+          .eq('profiles.is_suspended', false)
+          .order('created_at', ascending: false)
+          .limit(300);
+      final counts = <String, int>{};
+      final scores = <String, double>{};
+      final firstSeen = <String, int>{};
+      final titles = <String, String>{};
+      final authors = <String, String>{};
+      for (final row in rows as List<dynamic>) {
+        if (row is! Map) continue;
+        final isbn = (row['book_id']?.toString() ?? '').trim();
+        if (!RegExp(r'^(?:[0-9]{13}|[0-9]{9}[0-9Xx])$').hasMatch(isbn)) continue;
+        counts[isbn] = (counts[isbn] ?? 0) + 1;
+        final rating = row['rating'];
+        scores[isbn] = (scores[isbn] ?? 0) + (rating is num ? rating.toDouble() : 0);
+        firstSeen.putIfAbsent(isbn, () => firstSeen.length);
+        final title = (row['book_title']?.toString() ?? '').trim();
+        if (title.isNotEmpty) titles.putIfAbsent(isbn, () => title);
+        final author = (row['book_author']?.toString() ?? '').trim();
+        if (author.isNotEmpty) authors.putIfAbsent(isbn, () => author);
+      }
+      final sorted = counts.keys.toList()
+        ..sort((a, b) {
+          final popularity = (counts[b] ?? 0).compareTo(counts[a] ?? 0);
+          return popularity != 0
+              ? popularity
+              : (firstSeen[a] ?? 99999).compareTo(firstSeen[b] ?? 99999);
+        });
+      return sorted.take(limit).map((isbn) => Book(
+        id: isbn,
+        isbn: isbn,
+        title: titles[isbn] ?? 'ISBN $isbn',
+        author: authors[isbn] ?? '',
+        publisher: '',
+        pubDate: '',
+        coverUrl: '',
+        reviewCount: counts[isbn] ?? 0,
+        ratingAvg: counts[isbn] == null ? 0 : (scores[isbn] ?? 0) / counts[isbn]!,
+        genre: '人気作品',
+        catalogSource: 'user_post',
+      )).toList(growable: false);
+    } catch (e) {
+      debugPrint('Unable to rank public books by Sharemarium activity: $e');
+      return const <Book>[];
+    }
   }
 
   Future<List<Post>> fetchTimelinePosts() async {
@@ -2210,7 +2271,7 @@ class SupabaseService extends ChangeNotifier {
       final resolved = await Future.wait(
         rows.map((row) async {
           final id = row['book_id']?.toString() ?? '';
-          final apiBook = await RakutenApi.fetchBookById(id);
+          final apiBook = await NdlApi.fetchBookById(id);
           if (apiBook != null) return apiBook;
           return Book(
             id: id,
@@ -2293,7 +2354,7 @@ class SupabaseService extends ChangeNotifier {
 
     Future<Book?> getBook(String bookId) async {
       if (cache.containsKey(bookId)) return cache[bookId];
-      final found = await RakutenApi.fetchBookById(bookId);
+      final found = await NdlApi.fetchBookById(bookId);
       cache[bookId] = found;
       return found;
     }
@@ -2493,7 +2554,7 @@ class SupabaseService extends ChangeNotifier {
     if (bookIds.isEmpty) return [];
 
     final results = await Future.wait(
-      bookIds.map((id) => RakutenApi.fetchBookById(id)),
+      bookIds.map((id) => NdlApi.fetchBookById(id)),
     );
 
     final books = <Book>[];
@@ -2932,8 +2993,13 @@ class SupabaseService extends ChangeNotifier {
         'book_title': book.title.trim(),
         'book_author': book.author.trim(),
         'book_publisher': book.publisher.trim(),
-        'book_cover_url': book.coverUrl.trim(),
-        'book_description': book.description.trim(),
+        // Keep curated book identity and editorial choices, not the
+        // third-party Rakuten cover/description as permanent database copies.
+        // Fresh catalog images and descriptions are resolved on demand.
+        'book_cover_url': '',
+        'book_description': '',
+        'book_metadata_source': book.catalogSource,
+        'book_metadata_observed_at': book.catalogFetchedAt?.toUtc().toIso8601String(),
         'related_screen_titles': relatedScreenTitles
             .map((value) => value.trim())
             .where((value) => value.isNotEmpty)
@@ -3306,7 +3372,12 @@ class SupabaseService extends ChangeNotifier {
           'book_title': book.title,
           'book_author': book.author,
           'book_publisher': book.publisher,
-          'book_description': book.description,
+          // Product descriptions can be Rakuten-owned API data. Do not create
+          // new permanent copies in public posts; the user-authored comment
+          // and book ISBN/title/author remain intact.
+          'book_description': '',
+          'book_metadata_source': book.catalogSource,
+          'book_metadata_observed_at': book.catalogFetchedAt?.toUtc().toIso8601String(),
           'is_age_restricted': isAgeRestricted,
           'rating': rating,
           'comment': normalizedComment,

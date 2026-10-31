@@ -15,7 +15,10 @@ class RakutenApi {
   static const String _proxyBaseUrl = String.fromEnvironment(
     'RAKUTEN_PROXY_BASE_URL',
   );
-  static final Map<String, Book?> _bookByIdCache = <String, Book?>{};
+  // API catalog snapshots are transient and must not remain cached indefinitely.
+  static const _bookCacheTtl = Duration(minutes: 15);
+  static final Map<String, ({Book book, DateTime expiresAt})> _bookByIdCache =
+      <String, ({Book book, DateTime expiresAt})>{};
 
   static bool _canRequestRakuten() {
     return kIsWeb || _proxyBaseUrl.trim().isNotEmpty;
@@ -43,7 +46,7 @@ class RakutenApi {
     String endpoint,
     Map<String, String> queryParameters,
   ) {
-    return _getWithRateLimitRetry(_buildProxyUri(endpoint, queryParameters));
+    return _getWithQuotaCooldown(_buildProxyUri(endpoint, queryParameters));
   }
 
   static List<String> buildSearchKeywordVariants(String keyword) {
@@ -70,33 +73,36 @@ class RakutenApi {
     return variants.where((value) => value.isNotEmpty).toList();
   }
 
-  static Future<http.Response?> _getWithRateLimitRetry(
-    Uri uri, {
-    int maxRetries = 3,
-  }) async {
-    for (var attempt = 0; attempt <= maxRetries; attempt++) {
+  // A 429 is a *shared application-ID quota* event, not an invitation to
+  // retry independently from every browser tab. Return fallback data promptly
+  // and temporarily suppress further requests from this client instance.
+  static DateTime? _quotaCooldownUntil;
+
+  static Future<http.Response?> _getWithQuotaCooldown(Uri uri) async {
+    final now = DateTime.now().toUtc();
+    if (_quotaCooldownUntil?.isAfter(now) ?? false) return null;
+    try {
       final response = await http.get(uri);
-
-      if (response.statusCode != 429) {
-        return response;
+      if (response.statusCode == 429 ||
+          response.statusCode == 502 ||
+          response.statusCode == 503 ||
+          response.statusCode == 504) {
+        final raw = int.tryParse(response.headers['retry-after'] ?? '');
+        final seconds = (raw ?? (response.statusCode == 429 ? 30 : 5))
+            .clamp(1, 120)
+            .toInt();
+        _quotaCooldownUntil = DateTime.now().toUtc().add(
+          Duration(seconds: seconds),
+        );
+        debugPrint('Rakuten temporarily unavailable; using book fallbacks.');
       }
-
-      if (attempt == maxRetries) {
-        return response;
-      }
-
-      final retryAfterHeader = response.headers['retry-after'];
-      final retryAfterSeconds = int.tryParse(retryAfterHeader ?? '') ?? 1;
-      final safeWait = retryAfterSeconds < 1 ? 1 : retryAfterSeconds;
-
-      debugPrint(
-        'Rakuten rate limit reached. Retrying in ${safeWait}s '
-        '(${attempt + 1}/$maxRetries).',
+      return response;
+    } catch (_) {
+      _quotaCooldownUntil = DateTime.now().toUtc().add(
+        const Duration(seconds: 5),
       );
-      await Future.delayed(Duration(seconds: safeWait));
+      rethrow;
     }
-
-    return null;
   }
 
   static Future<Book?> fetchBookById(String bookId) async {
@@ -106,8 +112,12 @@ class RakutenApi {
 
     final trimmed = bookId.trim();
     final cacheKey = trimmed.replaceAll('-', '');
-    if (_bookByIdCache.containsKey(cacheKey)) {
-      return _bookByIdCache[cacheKey];
+    final cached = _bookByIdCache[cacheKey];
+    if (cached != null) {
+      if (cached.expiresAt.isAfter(DateTime.now().toUtc())) {
+        return cached.book;
+      }
+      _bookByIdCache.remove(cacheKey);
     }
 
     final isbnLike = RegExp(r'^[0-9Xx-]{10,17}$').hasMatch(trimmed);
@@ -137,7 +147,10 @@ class RakutenApi {
         fallbackId: trimmed,
         genre: '',
       );
-      _bookByIdCache[cacheKey] = result;
+      _bookByIdCache[cacheKey] = (
+        book: result,
+        expiresAt: DateTime.now().toUtc().add(_bookCacheTtl),
+      );
       return result;
     } catch (e) {
       debugPrint('Rakuten book lookup failed: $e');
@@ -283,6 +296,8 @@ class RakutenApi {
       description: description,
       rakutenAffiliateUrl: bookData['affiliateUrl'] as String? ?? '',
       itemPrice: parsedItemPrice,
+      catalogSource: 'rakuten',
+      catalogFetchedAt: DateTime.now().toUtc(),
     );
   }
 

@@ -17,6 +17,14 @@ class Book {
   final String description;
   final String rakutenAffiliateUrl;
   final int itemPrice;
+  // Provenance of catalog values: rakuten, ndl, or unverified. This is
+  // separate from permanent user-authored review data and ISBN identity.
+  final bool adultContentFlag;
+  final String ageRatingSource;
+  final String languageCode;
+  final String ndcCode;
+  final String catalogSource;
+  final DateTime? catalogFetchedAt;
 
   const Book({
     required this.id,
@@ -33,6 +41,12 @@ class Book {
     this.description = '',
     this.rakutenAffiliateUrl = '',
     this.itemPrice = 0,
+    this.adultContentFlag = false,
+    this.ageRatingSource = 'unknown',
+    this.languageCode = '',
+    this.ndcCode = '',
+    this.catalogSource = 'unverified',
+    this.catalogFetchedAt,
   });
 
   /// Parse the Rakuten Books `booksGenreId` field without losing leading zeros.
@@ -81,6 +95,8 @@ class Book {
       coverUrl: '',
       genre: '',
       description: '',
+      catalogSource: 'ndl',
+      catalogFetchedAt: DateTime.now().toUtc(),
     );
   }
 
@@ -123,6 +139,8 @@ class Book {
       rakutenGenreIds: parseRakutenGenreIds(json['booksGenreId']),
       description: '',
       itemPrice: itemPrice,
+      catalogSource: 'rakuten',
+      catalogFetchedAt: DateTime.now().toUtc(),
     );
   }
 
@@ -141,6 +159,12 @@ class Book {
     String? description,
     String? rakutenAffiliateUrl,
     int? itemPrice,
+    bool? adultContentFlag,
+    String? ageRatingSource,
+    String? languageCode,
+    String? ndcCode,
+    String? catalogSource,
+    DateTime? catalogFetchedAt,
   }) {
     return Book(
       id: id ?? this.id,
@@ -157,6 +181,12 @@ class Book {
       description: description ?? this.description,
       rakutenAffiliateUrl: rakutenAffiliateUrl ?? this.rakutenAffiliateUrl,
       itemPrice: itemPrice ?? this.itemPrice,
+      adultContentFlag: adultContentFlag ?? this.adultContentFlag,
+      ageRatingSource: ageRatingSource ?? this.ageRatingSource,
+      languageCode: languageCode ?? this.languageCode,
+      ndcCode: ndcCode ?? this.ndcCode,
+      catalogSource: catalogSource ?? this.catalogSource,
+      catalogFetchedAt: catalogFetchedAt ?? this.catalogFetchedAt,
     );
   }
 }

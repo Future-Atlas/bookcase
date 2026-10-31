@@ -1,5 +1,5 @@
 // Vercel serverless function to return crawler-friendly HTML for Sharemarium.
-// Policy: no Google APIs. Data source order is Rakuten first, then NDL fallback.
+// Policy: NDL open-licensed bibliographic data; no Rakuten Web Service calls.
 
 const { requestRakuten } = require("./_rakuten_request");
 const { isSubstantivePublicReview } = require("./_home_ad_eligibility");
@@ -12,6 +12,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
 const RAKUTEN_APP_ID = process.env.RAKUTEN_APP_ID || "";
 const RAKUTEN_ACCESS_KEY = process.env.RAKUTEN_ACCESS_KEY || "";
+const RAKUTEN_AFFILIATE_ID = (process.env.RAKUTEN_AFFILIATE_ID || "").trim();
 const RAKUTEN_REFERER =
   process.env.RAKUTEN_REFERER || "https://www.sharemarium.com/";
 const IS_PRODUCTION = process.env.VERCEL_ENV === "production";
@@ -89,7 +90,8 @@ async function fetchFeaturedBooks() {
       "featured_books?select=book_id,book_title,book_author,book_publisher,book_cover_url,book_description,related_screen_titles,priority,starts_at,ends_at&order=priority.asc,created_at.desc",
     )) || [];
   return rows.filter(
-    (row) => row && row.book_id && row.book_title,
+    (row) => row && row.book_id && row.book_title &&
+      !containsAdultTerms([row.book_title, row.book_author, row.book_description]),
   );
 }
 
@@ -98,11 +100,9 @@ function renderFeaturedBookList(books) {
   return books
     .map(
       (book) => `<article class="book-item">
-        ${book.book_cover_url ? `<a href="/book/${encodeURIComponent(book.book_id)}"><img class="book-cover" src="${escapeHtml(book.book_cover_url)}" alt="${escapeHtml(book.book_title)}の表紙"></a>` : ""}
         <div class="book-details">
           <h3 class="book-title"><a href="/book/${encodeURIComponent(book.book_id)}">${escapeHtml(book.book_title)}</a></h3>
           ${book.book_author ? `<p class="book-author">著者：${escapeHtml(book.book_author)}</p>` : ""}
-          ${book.book_description ? `<p>${escapeHtml(truncateForMeta(book.book_description, 180))}</p>` : ""}
           <p><a href="/book/${encodeURIComponent(book.book_id)}">作品概要・レビューを見る</a></p>
         </div>
       </article>`,
@@ -117,25 +117,52 @@ function rakutenEnabled() {
 function rakutenBaseParams() {
   return `format=json&applicationId=${encodeURIComponent(
     RAKUTEN_APP_ID,
-  )}&accessKey=${encodeURIComponent(RAKUTEN_ACCESS_KEY)}`;
+  )}&accessKey=${encodeURIComponent(RAKUTEN_ACCESS_KEY)}${RAKUTEN_AFFILIATE_ID ? `&affiliateId=${encodeURIComponent(RAKUTEN_AFFILIATE_ID)}` : ""}`;
 }
 
-async function rakutenFetch(url) {
-  return requestRakuten(url, {
+async function rakutenFetch(url, request = requestRakuten) {
+  return request(url, {
     origin: RAKUTEN_REFERER,
     userAgent: "Sharemarium-SEO-Bot/1.0 (+https://www.sharemarium.com)",
   });
 }
 
+// Only a genuine, HTTPS Rakuten book-product link can be paired with the
+// API-provided description / cover on publicly crawled catalog pages.
+function validRakutenProductUrl(item) {
+  const validProduct = (value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && url.hostname === "books.rakuten.co.jp" &&
+        !url.username && !url.password && !url.port &&
+        /^\/rb\/\d+\/?$/.test(url.pathname);
+    } catch {
+      return false;
+    }
+  };
+  try {
+    const affiliate = new URL(item?.affiliateUrl || "");
+    if (affiliate.protocol === "https:" && affiliate.hostname === "hb.afl.rakuten.co.jp" &&
+        !affiliate.username && !affiliate.password && !affiliate.port &&
+        affiliate.pathname.startsWith("/hgc/") &&
+        validProduct(affiliate.searchParams.get("pc"))) {
+      return affiliate.toString();
+    }
+  } catch { /* Missing affiliate URL: a verified direct product URL is possible. */ }
+  return validProduct(item?.itemUrl) ? item.itemUrl : "";
+}
+
 function normalizeRakutenBooks(items, sectionTitle) {
   return (items || []).map((item) => {
     const data = item?.Item || {};
+    const rakutenUrl = validRakutenProductUrl(data);
     return {
       title: data.title || "不明なタイトル",
       author: data.author || "不明な著者",
-      coverUrl: data.largeImageUrl || "",
+      coverUrl: rakutenUrl ? (data.largeImageUrl || "") : "",
       genre: sectionTitle,
-      description: data.itemCaption || "",
+      description: rakutenUrl ? (data.itemCaption || "") : "",
+      rakutenUrl,
     };
   });
 }
@@ -167,17 +194,21 @@ function normalizeNdlBooks(xmlText, sectionTitle) {
     const title = extractXmlTag(itemBlock, ["title", "dc:title"]);
     const author = extractXmlTag(itemBlock, ["author", "dc:creator"]);
     const description = extractXmlTag(itemBlock, ["dc:description"]);
+    const isbnIds = [...itemBlock.matchAll(new RegExp("<dc:identifier[^>]*>([^<]+)</dc:identifier>", "gi"))]
+      .map((match) => match[1].trim().toUpperCase());
+    const isbn = isbnIds.find((value) => /^(?:[0-9]{13}|[0-9]{9}[0-9X])$/.test(value)) || "";
     return {
       title: title || "不明なタイトル",
       author: author || "不明な著者",
       coverUrl: "",
       genre: sectionTitle,
       description,
+      isbn,
     };
   });
 }
 
-async function fetchRakutenSection(sectionTitle, diagnostics) {
+async function fetchRakutenSection(sectionTitle, diagnostics, request = requestRakuten) {
   if (!rakutenEnabled()) {
     diagnostics.rakutenSectionFailures.push(`${sectionTitle}:disabled`);
     return [];
@@ -199,7 +230,7 @@ async function fetchRakutenSection(sectionTitle, diagnostics) {
   }
 
   const url = `${endpoint}?${rakutenBaseParams()}&${extra}`;
-  const response = await rakutenFetch(url);
+  const response = await rakutenFetch(url, request);
   const body = await response.text();
   if (!response.ok) {
     diagnostics.rakutenSectionFailures.push(
@@ -213,7 +244,7 @@ async function fetchRakutenSection(sectionTitle, diagnostics) {
 }
 
 async function fetchNdlSection(sectionTitle, diagnostics) {
-  let queryParams = "cnt=6&startPage=1&mediatype=1";
+  let queryParams = "cnt=6&idx=1&dpid=iss-ndl-opac-national";
 
   if (sectionTitle === "おすすめの本") {
     queryParams += "&any=%E8%A9%B1%E9%A1%8C%20%E6%9C%AC";
@@ -241,7 +272,7 @@ async function fetchNdlSection(sectionTitle, diagnostics) {
   return books;
 }
 
-async function fetchRakutenBookByIsbn(isbn, diagnostics) {
+async function fetchRakutenBookByIsbn(isbn, diagnostics, request = requestRakuten) {
   if (!rakutenEnabled()) return null;
   if (!isbn) return null;
 
@@ -251,7 +282,7 @@ async function fetchRakutenBookByIsbn(isbn, diagnostics) {
   const url = `${RAKUTEN_BOOK_API}?${rakutenBaseParams()}&isbn=${encodeURIComponent(
     compact,
   )}&hits=1&page=1`;
-  const response = await rakutenFetch(url);
+  const response = await rakutenFetch(url, request);
   const body = await response.text();
   if (!response.ok) {
     diagnostics.rakutenIsbnFailures += 1;
@@ -269,50 +300,65 @@ async function fetchRakutenBookByIsbn(isbn, diagnostics) {
     description: first.itemCaption || "",
     publisher: first.publisherName || "",
     isbn: compact,
+    rakutenUrl: validRakutenProductUrl(first),
   };
 }
 
 async function fetchNdlBookByIsbn(isbn, diagnostics) {
-  if (!isbn) return null;
-
-  const compact = String(isbn).replace(/[^0-9Xx]/g, "");
-  if (compact.length !== 10 && compact.length !== 13) return null;
-
-  const url = `${NDL_OPENSEARCH_API}?cnt=1&startPage=1&mediatype=1&any=${encodeURIComponent(
-    compact,
-  )}`;
-  const response = await fetch(url);
-  const body = await response.text();
-  if (!response.ok) {
-    diagnostics.ndlIsbnFailures += 1;
-    return null;
+  const compact = String(isbn || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+  if (!/^(?:[0-9]{13}|[0-9]{9}[0-9X])$/.test(compact)) return null;
+  // In-process records may appear before national bibliography completion.
+  for (const provider of [
+    "iss-ndl-opac-inprocess", "iss-ndl-opac-national", "iss-ndl-opac",
+  ]) {
+    try {
+      const url = NDL_OPENSEARCH_API + "?cnt=6&idx=1&mediatype=books&dpid=" +
+        provider + "&isbn=" + encodeURIComponent(compact);
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      const books = normalizeNdlBooks(await response.text(), "isbn");
+      const matched = books.find((book) => book.isbn === compact);
+      if (!matched) continue;
+      return {
+        title: matched.title,
+        author: matched.author,
+        coverUrl: "",
+        description: matched.description,
+        publisher: "",
+        isbn: compact,
+        rakutenUrl: "",
+      };
+    } catch {
+      // A single NDL provider outage must not erase existing reviews.
+    }
   }
-
-  const books = normalizeNdlBooks(body, "isbn");
-  if (!books.length) {
-    diagnostics.ndlIsbnFailures += 1;
-    return null;
-  }
-
-  return {
-    title: books[0].title,
-    author: books[0].author,
-    coverUrl: "",
-  };
+  diagnostics.ndlIsbnFailures += 1;
+  return null;
 }
 
 async function resolveBookByIsbn(isbn, diagnostics) {
-  const rakuten = await fetchRakutenBookByIsbn(isbn, diagnostics);
-  if (rakuten) return rakuten;
-  if (!ENABLE_NDL_FALLBACK) return null;
   return fetchNdlBookByIsbn(isbn, diagnostics);
+}
+
+function containsAdultTerms(values) {
+  const text = values.join(" ").toLowerCase().replace(/[\s\u3000_\-・･.／\/]+/g,"");
+  return ["成人向け","成人指定","成年向け","成年コミック","18禁","r18",
+    "アダルト","ポルノ","pornography","sexuallyexplicit"]
+    .some(term => text.includes(term));
+}
+
+function isEligiblePublicBookReview(post) {
+  // PostgREST's regular embed is a LEFT join. Require a matching public,
+  // non-suspended profile here too, even when the SQL relationship changes.
+  return post?.profiles?.is_private === false &&
+    post?.profiles?.is_suspended === false && isIndexableReview(post);
 }
 
 async function fetchPublicReviewsForBook(bookId, diagnostics) {
   try {
     return (
       (await supabaseGet(
-        `posts?book_id=eq.${encodeURIComponent(bookId)}&select=id,comment,is_spoiler,created_at,profiles:profiles!posts_profile_id_fkey(username,is_private,is_suspended)&profiles.is_private=eq.false&profiles.is_suspended=eq.false&order=created_at.desc&limit=50`,
+        `posts?book_id=eq.${encodeURIComponent(bookId)}&is_age_restricted=eq.false&select=id,comment,is_spoiler,created_at,profiles:profiles!posts_profile_id_fkey!inner(username,is_private,is_suspended)&profiles.is_private=eq.false&profiles.is_suspended=eq.false&order=created_at.desc&limit=50`,
       )) || []
     );
   } catch (err) {
@@ -573,6 +619,15 @@ function buildBookDescription(book) {
 
 module.exports = async (req, res) => {
   const { path } = req.query;
+  // Only Cloudflare's bound coordinator may make outbound Rakuten calls.
+  // Legacy Vercel requests fail closed rather than bypassing the app-ID quota.
+  const rakutenRequest = typeof req.rakutenRequest === "function"
+    ? req.rakutenRequest
+    : async () => ({
+        ok: false,
+        status: 503,
+        text: async () => '{"error":"rakuten_quota_unavailable"}',
+      });
   // Vercel may forward the original query string together with the rewritten
   // path. It is not part of the canonical route and must not become part of an
   // ISBN/profile slug.
@@ -679,9 +734,9 @@ module.exports = async (req, res) => {
       <footer>
         <p><a href="${SITE_URL}/about">運営者情報</a> | <a href="${SITE_URL}/contact">お問い合わせ</a></p>
         <p>© 2026 ${SITE_BRAND}. All rights reserved.</p>
-        <!-- Rakuten Web Services Attribution Snippet FROM HERE -->
-        <a href="https://webservice.rakuten.co.jp/" target="_blank"><img src="https://webservice.rakuten.co.jp/img/credit/200709/credit_22121.gif" border="0" alt="Rakuten Web Service Center" title="Rakuten Web Service Center" width="221" height="21"/></a>
-        <!-- Rakuten Web Services Attribution Snippet TO HERE -->
+        <p>書誌情報の一部は<a href="https://ndlsearch.ndl.go.jp/">国立国会図書館サーチ（国立国会図書館）</a>から取得しています。
+        <a href="https://creativecommons.org/licenses/by/4.0/deed.ja">CC BY 4.0</a></p>
+        <p>書影等の一部は<a href="https://openbd.jp/">openBD</a>から取得しています。</p>
       </footer>
     </body>
     </html>
@@ -789,7 +844,7 @@ module.exports = async (req, res) => {
                 const rawBookId = row.book_id || "書籍ID未設定";
                 let resolved = isbnCache.get(rawBookId);
                 if (resolved === undefined) {
-                  resolved = await resolveBookByIsbn(rawBookId, diagnostics);
+                  resolved = await resolveBookByIsbn(rawBookId, diagnostics, rakutenRequest);
                   isbnCache.set(rawBookId, resolved || null);
                 }
 
@@ -1234,7 +1289,8 @@ module.exports = async (req, res) => {
   if (genreSection) {
     let books = [];
     try {
-      books = await fetchRakutenSection(genreSection, diagnostics);
+      books = (await fetchNdlSection(genreSection, diagnostics))
+        .filter(book => !containsAdultTerms([book.title, book.author, book.description]));
     } catch {
       books = [];
     }
@@ -1281,10 +1337,48 @@ module.exports = async (req, res) => {
     const slug = decodedPath.replace("/book/", "").split("/")[0];
     if (/^(\d{13}|\d{9}[\dXx])$/.test(slug)) {
       try {
-        if (!rakutenEnabled()) throw new Error("book_api_unconfigured");
-        const book = await resolveBookByIsbn(slug, diagnostics);
-        if (!book && diagnostics.rakutenIsbnFailures > 0) {
-          throw new Error("book_api_unavailable");
+        // Reviews are independent user content. A temporary Rakuten outage
+        // must not hide already-public reviews, or force us to persist catalog
+        // text just to keep this page available.
+        let book = null;
+        try {
+          book = await resolveBookByIsbn(slug, diagnostics);
+        } catch {
+          diagnostics.ndlIsbnFailures += 1;
+        }
+        if (book && containsAdultTerms([book.title, book.author, book.description])) {
+          res.setHeader("X-Robots-Tag", "noindex, nofollow");
+          return res.status(404).send("Not Found");
+        }
+        if (!book) {
+          const fallbackRows = await fetchPublicReviewsForBook(slug, diagnostics);
+          const fallbackReviews = fallbackRows.filter(isEligiblePublicBookReview);
+          if (fallbackReviews.length > 0) {
+            const fallbackHtml = renderPage({
+              title: `ISBN ${slug}｜読者レビュー｜Sharemarium`,
+              description: `ISBN ${slug}の公開レビュー。Sharemariumのユーザーが書いた感想を紹介しています。`,
+              pagePath: `/book/${slug}`,
+              robots: "index,follow",
+              jsonLd: {
+                "@context": "https://schema.org",
+                "@type": "Book",
+                isbn: slug,
+                url: toAbsoluteUrl(`/book/${slug}`),
+              },
+              content: `<h1>書籍 ISBN ${escapeHtml(slug)}</h1>
+                <p>書誌情報は一時的に取得できませんが、公開されている読者の感想は閲覧できます。</p>
+                <h2>読者の感想</h2>
+                ${fallbackReviews.map(p => `<article><h3>${escapeHtml(p.profiles?.username || "読者")}さんの感想</h3><p>${escapeHtml(p.comment)}</p><a href="/posts/${encodeURIComponent(p.id)}">投稿を見る</a></article>`).join("")}
+                <p><a href="/">Sharemariumで本を探す</a></p>`,
+            });
+            res.setHeader("Content-Type", "text/html; charset=utf-8");
+            res.setHeader("Cache-Control", "no-store");
+            setDiagnosticsHeader(res, diagnostics);
+            return res.status(200).send(fallbackHtml);
+          }
+          if (diagnostics.ndlIsbnFailures > 0) {
+            throw new Error("book_api_unavailable");
+          }
         }
         if (book) {
           let featured = null;
@@ -1298,7 +1392,7 @@ module.exports = async (req, res) => {
             // A missing optional editorial table must not hide book pages.
           }
           const rows = await fetchPublicReviewsForBook(slug, diagnostics);
-          const reviews = rows.filter(isIndexableReview);
+          const reviews = rows.filter(isEligiblePublicBookReview);
           const authorText = book.author ? `（${book.author}）` : "";
           const description = `${book.title}${authorText}の作品概要・読者レビュー。Sharemariumで読書記録を共有しましょう。`;
           const relatedScreenTitles = Array.isArray(
@@ -1405,10 +1499,11 @@ module.exports = async (req, res) => {
           const rawBookId = p.book_id || "書籍ID未設定";
           let resolved = isbnCache.get(rawBookId);
           if (resolved === undefined) {
-            resolved = await resolveBookByIsbn(rawBookId, diagnostics);
+            resolved = await resolveBookByIsbn(rawBookId, diagnostics, rakutenRequest);
             isbnCache.set(rawBookId, resolved || null);
           }
 
+          if (resolved && containsAdultTerms([resolved.title, resolved.author, resolved.description])) return null;
           return {
             id: p.id,
             username: p.profiles?.username || "匿名ユーザー",
@@ -1428,6 +1523,7 @@ module.exports = async (req, res) => {
   }
 
   const timelineHtml = recentPosts
+    .filter(Boolean)
     .map(
       (p) => `
     <article class="post-card">
