@@ -172,8 +172,8 @@ test("API routes do not fall through to Flutter assets", async () => {
     env,
   );
 
-  assert.equal(response.status, 500);
-  assert.equal((await response.json()).error, "rakuten_credentials_missing");
+  assert.equal(response.status, 410);
+  assert.equal((await response.json()).error, "catalog_migrated");
   assert.equal(requests.length, 0);
 });
 
