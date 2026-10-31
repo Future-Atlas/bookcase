@@ -312,7 +312,7 @@ class BookRepository {
         if (seenIds.add(book.id)) collected.add(book);
         continue;
       }
-      if (cursor.finished || upstreamRequests >= 3) break;
+      if (cursor.finished || upstreamRequests >= 4) break;
       if (cursor.offset > 480) {
         cursor.nextVariantOrProvider();
         continue;
