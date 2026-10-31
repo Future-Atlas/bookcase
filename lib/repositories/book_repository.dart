@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math';
 
 import '../models/book.dart';
@@ -12,6 +13,15 @@ enum BookSearchField { title, author, publisher }
 typedef NdlFieldFetcher = Future<NdlSearchBatch> Function(
   BookSearchField field, String term, String provider, int start, int count,
 );
+
+/// Allows regression tests to simulate sparse NDL metadata without HTTP.
+typedef NdlHomeFetcher = Future<NdlSearchBatch> Function({
+  required String provider,
+  String? any,
+  String? from,
+  required int start,
+  required int count,
+});
 
 class BookSearchBatch {
   const BookSearchBatch({required this.books, required this.hasMore});
@@ -30,10 +40,16 @@ extension BookSearchFieldApiName on BookSearchField {
 class BookRepository {
   static final Random _homeRandom = Random();
 
-  BookRepository({this.allowAdultContent = false, this.fieldFetcher});
+  BookRepository({
+    this.allowAdultContent = false,
+    this.fieldFetcher,
+    this.homeFetcher,
+  });
 
   final bool allowAdultContent;
   final NdlFieldFetcher? fieldFetcher;
+  final NdlHomeFetcher? homeFetcher;
+  final Map<String, _HomeCatalogCursor> _homeCatalogCursors = {};
   String _activeQuery = '';
   int _nextSearchPage = 1;
   List<_NdlFieldCursor> _cursors = [];
@@ -216,9 +232,11 @@ class BookRepository {
         books, allowAdultContent: allowAdultContent,
       );
 
-  /// The home page keeps 9 cards, the three existing section labels and
-  /// previous/next controls. Popular is now first-party review popularity.
+  /// Preserve the legacy nine-card UI without dropping fetched candidates:
+  /// Rakuten retrieved 27 records for nine cards. NDL often provides records
+  /// without ISBN or language codes, so successive raw windows may be needed.
   Future<List<Book>> fetchBooksByGenre(String genre, {int page = 1}) async {
+    if (page < 1 || page > 50) return const <Book>[];
     try {
       if (genre.contains('ベストセラー') || genre.contains('人気')) {
         final ranked = await (_popularCache ??=
@@ -228,24 +246,163 @@ class BookRepository {
         final chosen = ranked.skip(start).take(9).toList(growable: false);
         return _filterForViewer(await OpenBdApi.enrich(chosen));
       }
-      // Do not silently skip 21 out of every 30 new-arrival records when
-      // the home section displays nine books per page.
-      final window = genre.contains('新着') ? 9 : 30;
-      final incoming = await NdlApi.searchBySelectedGenre(
-        selectedGenre: genre, page: page, count: window,
-      );
-      final enriched = await OpenBdApi.enrich(incoming);
-      final filtered = _filterForViewer(enriched);
-      if (genre.contains('新着')) {
-        // The source is NDL in-process records, not a release-day feed.
-        // Sort the returned *page*, never claim a global release-date sort.
-        filtered.sort((a, b) => b.pubDate.compareTo(a.pubDate));
-        return filtered.take(9).toList(growable: false);
+      if (_isNewArrivalsGenre(genre) || _isForeignGenre(genre)) {
+        return await _fetchHomeSection(genre, page: page);
       }
-      return _randomRankedSelection(filtered, count: 9);
+      final incoming = await NdlApi.searchBySelectedGenre(
+        selectedGenre: genre, page: page, count: 27,
+      );
+      return _randomRankedSelection(
+        _filterForViewer(await OpenBdApi.enrich(incoming)), count: 9,
+      );
     } catch (_) {
       return const <Book>[];
     }
+  }
+
+  static bool _isNewArrivalsGenre(String genre) => genre.contains('新着');
+
+  static bool _isForeignGenre(String genre) =>
+      genre.contains('English') || genre.contains('洋書');
+
+  String _homeKey(String genre) =>
+      _isNewArrivalsGenre(genre) ? 'new-arrivals' : 'foreign-language';
+
+  bool hasMoreHomeBooks(String genre) {
+    if (!_isNewArrivalsGenre(genre) && !_isForeignGenre(genre)) return true;
+    final cursor = _homeCatalogCursors[_homeKey(genre)];
+    if (cursor == null) return true;
+    return cursor.ready.isNotEmpty || cursor.sourceIndex < cursor.sources.length;
+  }
+
+  _HomeCatalogCursor _createHomeCursor(String genre) {
+    if (_isNewArrivalsGenre(genre)) {
+      final from = DateTime.now()
+          .subtract(const Duration(days: 365))
+          .toIso8601String().substring(0, 10);
+      return _HomeCatalogCursor([
+        _HomeCatalogSource(provider: NdlApi.inProcess, from: from),
+        // In-process records can lack ISBNs. Only fall back to published,
+        // nationally catalogued records when necessary.
+        _HomeCatalogSource(provider: NdlApi.national, from: from),
+      ]);
+    }
+    return _HomeCatalogCursor([
+      // Japan-related foreign-language books: NDL-maintained CC BY metadata.
+      // Unlike "any=English", this source is selected by catalog provenance.
+      _HomeCatalogSource(provider: NdlApi.foreignBibliography),
+      // Enlarge coverage using holdings; post-filter by explicit language.
+      _HomeCatalogSource(provider: NdlApi.holdings, any: 'English'),
+      _HomeCatalogSource(provider: NdlApi.holdings, any: 'novel'),
+      _HomeCatalogSource(provider: NdlApi.holdings, any: 'Japan'),
+    ]);
+  }
+
+  Future<NdlSearchBatch> _fetchHomeWindow(
+    _HomeCatalogSource source, int count, {required bool newArrivals}
+  ) {
+    if (homeFetcher != null) {
+      return homeFetcher!(
+        provider: source.provider, any: source.any, from: source.from,
+        start: source.offset, count: count,
+      );
+    }
+    return NdlApi.searchPage(
+      provider: source.provider, any: source.any, from: source.from,
+      start: source.offset, count: count,
+      genre: newArrivals ? '新着' : 'English',
+    );
+  }
+
+  Future<List<Book>> _fetchHomeSection(
+    String genre, {required int page}
+  ) async {
+    final key = _homeKey(genre);
+    final cursor = _homeCatalogCursors.putIfAbsent(
+      key, () => _createHomeCursor(genre),
+    );
+    while (cursor.pages.length < page) {
+      if (cursor.ready.isEmpty &&
+          cursor.sourceIndex >= cursor.sources.length) {
+        return const <Book>[];
+      }
+      final next = await _nextHomePage(cursor,
+          newArrivals: _isNewArrivalsGenre(genre));
+      if (next.isEmpty) return const <Book>[];
+      cursor.pages.add(next);
+    }
+    return cursor.pages[page - 1];
+  }
+
+  Future<List<Book>> _nextHomePage(
+    _HomeCatalogCursor cursor, {required bool newArrivals}
+  ) async {
+    final page = <Book>[];
+    var requests = 0;
+    // Network is bounded to avoid hammering NDL or blocking the home screen
+    // indefinitely. Already-retrieved eligible books are never discarded.
+    const maxRawWindowsPerPage = 6;
+    const legacyCandidateWindow = 27;
+
+    while (page.length < 9) {
+      if (cursor.ready.isNotEmpty) {
+        page.add(cursor.ready.removeFirst());
+        continue;
+      }
+      if (cursor.sourceIndex >= cursor.sources.length ||
+          requests >= maxRawWindowsPerPage) {
+        break;
+      }
+      final source = cursor.sources[cursor.sourceIndex];
+      if (source.offset > 500) {
+        cursor.sourceIndex++;
+        continue;
+      }
+      final count = min(legacyCandidateWindow, 501 - source.offset);
+      final response = await _fetchHomeWindow(
+        source, count, newArrivals: newArrivals,
+      );
+      requests++;
+      source.offset += response.rawCount;
+
+      final candidates = <Book>[];
+      for (final book in response.books) {
+        // NDL's ndl-boj is itself a foreign-language bibliography.
+        // Missing item-level language metadata is acceptable only from this
+        // provider, never from the generic Japanese/foreign holdings search.
+        final language = book.languageCode.trim().toLowerCase();
+        final providerClassifiedForeign =
+            source.provider == NdlApi.foreignBibliography &&
+            (language.isEmpty || language == 'und' || language == 'unknown');
+        if (!newArrivals &&
+            !NdlApi.isForeignLanguage(book) &&
+            !providerClassifiedForeign) {
+          continue;
+        }
+        if (cursor.seenIsbns.add(book.id)) candidates.add(book);
+      }
+      final enriched = await OpenBdApi.enrich(candidates);
+      final safe = _filterForViewer(enriched);
+      if (newArrivals) {
+        // NDL OpenSearch is not globally sorted by publication date.
+        // Sort each retrieved window, preserving undisplayed candidates.
+        safe.sort((a, b) => b.pubDate.compareTo(a.pubDate));
+      }
+      cursor.ready.addAll(safe);
+
+      if (!response.hasMore || response.rawCount == 0 ||
+          source.offset > 500) {
+        cursor.sourceIndex++;
+      } else if (safe.isEmpty) {
+        source.emptyWindows++;
+        // A source producing repeated ISBN-less or filtered results should
+        // not prevent another verified source from filling the nine cards.
+        if (source.emptyWindows >= 2) cursor.sourceIndex++;
+      } else {
+        source.emptyWindows = 0;
+      }
+    }
+    return page;
   }
 
   List<Book> _randomRankedSelection(List<Book> ranked, {
@@ -461,4 +618,23 @@ class _NdlFieldCursor {
     }
     offset = 1;
   }
+}
+
+
+class _HomeCatalogSource {
+  _HomeCatalogSource({required this.provider, this.any, this.from});
+  final String provider;
+  final String? any;
+  final String? from;
+  int offset = 1;
+  int emptyWindows = 0;
+}
+
+class _HomeCatalogCursor {
+  _HomeCatalogCursor(this.sources);
+  final List<_HomeCatalogSource> sources;
+  final Queue<Book> ready = Queue<Book>();
+  final Set<String> seenIsbns = <String>{};
+  final List<List<Book>> pages = [];
+  int sourceIndex = 0;
 }

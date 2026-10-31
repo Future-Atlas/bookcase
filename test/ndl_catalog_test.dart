@@ -26,4 +26,12 @@ void main(){
    final result=NdlApi.parseSearchPage(xml,start:20,count:3);
    expect(result.books.length,1);expect(result.rawCount,3);expect(result.hasMore,isTrue);
  });
+ test('multi-language RSS metadata keeps both tags for foreign-book classification',(){
+   const mixed=r'''<rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcndl="http://ndl.go.jp/dcndl/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><channel><item><title>Bilingual Literature</title><dc:identifier xsi:type="dcndl:ISBN">9784101010014</dc:identifier><dc:language>jpn</dc:language><dc:language>eng</dc:language></item></channel></rss>''';
+   final books=NdlApi.parseBooks(mixed);
+   expect(books.length,1);
+   expect(books.single.languageCode,'jpn eng');
+   expect(NdlApi.isForeignLanguage(books.single),true);
+ });
+
 }

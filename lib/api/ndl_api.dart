@@ -24,6 +24,7 @@ class NdlApi {
   static const national = 'iss-ndl-opac-national';
   static const inProcess = 'iss-ndl-opac-inprocess';
   static const holdings = 'iss-ndl-opac';
+  static const foreignBibliography = 'ndl-boj';
 
   static Uri searchUri({
     String? any,
@@ -147,6 +148,38 @@ class NdlApi {
     return '';
   }
 
+  /// Preserve all NDL language values on bilingual records.
+  static String _languages(XmlElement item) {
+    final values = <String>{};
+    for (final child in item.descendants.whereType<XmlElement>()) {
+      if (child.name.local != 'language') continue;
+      final value = child.innerText.trim().toLowerCase();
+      if (value.isNotEmpty) values.add(value);
+    }
+    return values.join(' ');
+  }
+
+  /// Do not infer foreign-language identity from words in a title.
+  static bool isForeignLanguage(Book book) {
+    final value = book.languageCode.toLowerCase().trim();
+    if (value.isEmpty) return false;
+    const ignore = {'ja','jpn','japanese','日本語','und','mul','zxx','unknown','none'};
+    const names = {
+      'english','french','german','spanish','chinese','korean',
+      'russian','italian','portuguese','英語','フランス語',
+      'ドイツ語','スペイン語','中国語','韓国語','ロシア語',
+      'イタリア語'
+    };
+    final codes = value.split(RegExp(r'[\s,;|/]+'));
+    return codes.any((raw) {
+      final part = raw.split('-').first;
+      if (ignore.contains(part) || part.isEmpty) return false;
+      return names.contains(part) ||
+          ((part.length == 2 || part.length == 3) &&
+              RegExp(r'^[a-z]+').stringMatch(part) == part);
+    });
+  }
+
   static String _ndc(XmlElement item) {
     for (final element in item.descendants.whereType<XmlElement>()) {
       if (element.name.local != 'subject' || !_type(element).contains('ndc')) continue;
@@ -179,7 +212,7 @@ class NdlApi {
         coverUrl: '',
         genre: genre,
         description: _value(item, 'description') ?? '',
-        languageCode: (_value(item, 'language') ?? '').toLowerCase(),
+        languageCode: _languages(item),
         ndcCode: _ndc(item),
         catalogSource: 'ndl',
         catalogFetchedAt: DateTime.now().toUtc(),

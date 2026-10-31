@@ -3,6 +3,7 @@
 const NDL_URL = "https://ndlsearch.ndl.go.jp/api/opensearch";
 const PROVIDERS = new Set([
   "iss-ndl-opac", "iss-ndl-opac-national", "iss-ndl-opac-inprocess",
+  "ndl-boj",
 ]);
 const SEARCH_KEYS = ["any", "title", "creator", "publisher", "ndc", "from", "until", "isbn"];
 
@@ -49,7 +50,10 @@ function createHandler({ request = (...args) => fetch(...args) } = {}) {
       }
       query.set(key, value);
     }
-    if (!SEARCH_KEYS.some(key => query.has(key))) {
+    // NDL's Japan-related foreign-language bibliography can be searched by
+    // provider plus the already-enforced mediatype=books constraint.
+    // Never allow unrestricted blank searches against larger providers.
+    if (!SEARCH_KEYS.some(key => query.has(key)) && provider !== "ndl-boj") {
       return res.status(400).json({ error: "missing_catalog_search" });
     }
     try {
