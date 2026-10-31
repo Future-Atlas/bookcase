@@ -1,7 +1,8 @@
 import 'dart:math';
 
 import '../models/book.dart';
-import '../api/rakuten_api.dart';
+import '../api/ndl_api.dart';
+import '../api/openbd_api.dart';
 import '../services/content_safety_service.dart';
 
 enum BookSearchField { title, author, publisher }
@@ -199,33 +200,24 @@ class BookRepository {
     );
   }
 
-  /// 📌 1. トップ画面の各セクション（人気・新着・洋書）の追加読み込み用
-  /// ここでは最初から表紙画像が確実に手に入る楽天APIをページ指定で動かします。
+  /// Keeps existing home page sizes and random-selection behavior.
   Future<List<Book>> fetchBooksByGenre(String genre, {int page = 1}) async {
     try {
-      // ⏱️【429エラー（連打）対策】
-      // コントローラーが一斉に複数のジャンルを要求してきた際、
-      // 楽天APIがパンクして429エラーを返さないよう、通信の直前に必ず「1秒の休憩」を挟みます。
-      await Future.delayed(const Duration(seconds: 1));
-
-      // 楽天APIの searchBySelectedGenre を直接呼び出す
-      final isNewArrivals = genre.contains('新着');
-      final isRecommended = genre.contains('話題の本') || genre.contains('おすすめ');
-      final rakutenBooks = await RakutenApi.searchBySelectedGenre(
-        selectedGenre: genre,
-        page: page,
-        count: 27,
+      final incoming = await NdlApi.searchBySelectedGenre(
+        selectedGenre: genre, page: page, count: 27,
       );
-      final filtered = _filterForViewer(rakutenBooks);
-      if (isRecommended) {
+      final enriched = await OpenBdApi.enrich(incoming);
+      final filtered = _filterForViewer(enriched);
+      if (genre.contains('新着')) {
+        filtered.sort((a, b) => b.pubDate.compareTo(a.pubDate));
+        return filtered.take(9).toList(growable: false);
+      }
+      if (genre.contains('話題') || genre.contains('おすすめ') ||
+          genre.contains('ベストセラー') || genre.contains('人気')) {
         filtered.sort((a, b) {
           final reviews = b.reviewCount.compareTo(a.reviewCount);
-          if (reviews != 0) return reviews;
-          return b.ratingAvg.compareTo(a.ratingAvg);
+          return reviews != 0 ? reviews : b.ratingAvg.compareTo(a.ratingAvg);
         });
-      }
-      if (isNewArrivals) {
-        return filtered.take(9).toList(growable: false);
       }
       return _randomRankedSelection(filtered, count: 9);
     } catch (_) {
@@ -246,50 +238,67 @@ class BookRepository {
     return selectedIndexes.map((index) => ranked[index]).toList();
   }
 
-  /// 📌 2. 全件取得（初期表示用など）
-  /// 楽天APIから取得します。
   Future<List<Book>> fetchAllBooks() async {
     try {
-      final rakutenBooks = await RakutenApi.searchBySelectedGenre(
-        selectedGenre: '',
-        page: 1,
-        count: 10,
+      final books = await NdlApi.searchBySelectedGenre(
+        selectedGenre: '', page: 1, count: 10,
       );
-      return _filterForViewer(rakutenBooks);
+      return _filterForViewer(await OpenBdApi.enrich(books));
     } catch (_) {
       return [];
     }
   }
 
-  /// 📌 3. 検索窓からのキーワード検索（網羅性重視）
-  /// 楽天APIでキーワード検索を行います。
+  /// Preserve existing title/author/publisher priority and 10/5/5 ranking.
   Future<List<Book>> searchBooks(
-    String query, {
-    int page = 1,
-    int count = 20,
-  }) async {
-    if (query.isEmpty) return fetchAllBooks();
+    String query, {int page = 1, int count = 20}
+  ) async {
+    if (query.trim().isEmpty) return fetchAllBooks();
     if (!allowAdultContent && ContentSafetyService.isAdultSearchQuery(query)) {
       return [];
     }
-
     try {
-      final rakutenBooks = await RakutenApi.searchByKeyword(
-        keyword: query,
-        page: page,
-        count: count,
-        searchFields: searchFieldPriority(
-          query,
-        ).map((field) => field.apiName).toList(),
-      );
-      return rankSearchResults(
-        _filterForViewer(rakutenBooks),
-        query,
-      ).take(count).toList();
+      final priorities = searchFieldPriority(query);
+      final variants = _keywordVariants(query);
+      final candidates = <String, Book>{};
+      // Query each field independently. NDL's results are reranked by the
+      // same field-quality rules used before the provider migration.
+      for (final field in priorities) {
+        for (final value in variants) {
+          final matches = await NdlApi.search(
+            title: field == BookSearchField.title ? value : null,
+            creator: field == BookSearchField.author ? value : null,
+            publisher: field == BookSearchField.publisher ? value : null,
+            page: page, count: count,
+          );
+          for (final book in matches) {
+            candidates.putIfAbsent(book.id, () => book);
+          }
+        }
+      }
+      final enriched = await OpenBdApi.enrich(candidates.values.toList());
+      return rankSearchResults(_filterForViewer(enriched), query)
+          .take(count).toList(growable: false);
     } catch (_) {
       return [];
     }
   }
+
+  static List<String> _keywordVariants(String query) {
+    final original = query.trim();
+    final compact = original.replaceAll(RegExp(r'[\s\u3000・･]+'), '');
+    final variants = <String>{original, compact};
+    final segments = original.split(RegExp(r'[\s\u3000・･]+'))
+        .where((part) => part.length >= 2).toList();
+    if (RegExp(r'[・･]').hasMatch(original) && segments.length > 1) {
+      variants.add(segments.first);
+    } else if (compact.length > 6 &&
+        RegExp(r'[ぁ-んァ-ヶ一-龥]').hasMatch(compact)) {
+      variants.add(compact.substring(0, 6));
+    }
+    return variants.where((x) => x.isNotEmpty).toList();
+  }
+
 }
 
 class _RankedBook {
