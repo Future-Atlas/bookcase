@@ -8,10 +8,8 @@ import 'timeline_ad_policy.dart';
 import '../config/app_environment.dart';
 
 const String _viewTypePrefix = 'sharemarium-ninja-admax-native';
-const String _entitlementChangedEvent =
-    'sharemarium:admax-entitlement-changed';
-const String _entitlementRequestEvent =
-    'sharemarium:admax-entitlement-request';
+const String _entitlementChangedEvent = 'sharemarium:admax-entitlement-changed';
+const String _entitlementRequestEvent = 'sharemarium:admax-entitlement-request';
 
 final ValueNotifier<bool> _adEntitlementAllowed = ValueNotifier<bool>(false);
 bool _entitlementListenerRegistered = false;
@@ -30,10 +28,17 @@ void _ensureEntitlementListener() {
 
 /// Actual DOM slot for the Ninja AdMax asynchronous SPA SDK.
 /// Neither the synchronous /s/ tag nor app-created iframes are used.
-class TimelineAdSlot extends StatelessWidget {
+class TimelineAdSlot extends StatefulWidget {
   const TimelineAdSlot({super.key, required this.slotIndex});
 
   final int slotIndex;
+  @override
+  State<TimelineAdSlot> createState() => _TimelineAdSlotState();
+}
+
+class _TimelineAdSlotState extends State<TimelineAdSlot> {
+  int get slotIndex => widget.slotIndex;
+
   static final Set<int> _registered = <int>{};
 
   static String _viewType(int index) => '$_viewTypePrefix-$index';
@@ -52,6 +57,7 @@ class TimelineAdSlot extends StatelessWidget {
           ninjaAdmaxAsyncType,
         );
       root.style
+        ..setProperty('contain', 'layout paint')
         ..width = '100%'
         ..height = ninjaAdmaxAsyncType == 'banner' ? '90px' : '250px'
         ..overflowX = ninjaAdmaxAsyncType == 'banner' ? 'auto' : 'visible'
@@ -90,7 +96,7 @@ class TimelineAdSlot extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
         ),
         alignment: Alignment.center,
-        child: const Text('広告（検証用表示・配信なし）'),
+        child: const Text('広告（検証用表示・配信なし）', textAlign: TextAlign.center),
       );
     }
     if (!timelineAdReady || slotIndex < 0) {
@@ -124,7 +130,11 @@ class TimelineAdSlot extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('広告', style: TextStyle(fontSize: 12)),
+                        const Text(
+                          '広告',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12),
+                        ),
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,

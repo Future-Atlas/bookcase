@@ -57,8 +57,16 @@ test("Vercel fallback keeps the same baseline browser security headers", () => {
     "strict-origin-when-cross-origin",
   );
   assert.match(
-    headers.get("content-security-policy-report-only") || "",
+    headers.get("content-security-policy") || "",
     /frame-ancestors 'none'/,
+  );
+  assert.match(
+    headers.get("content-security-policy") || "",
+    /script-src-attr 'none'/,
+  );
+  assert.match(
+    headers.get("content-security-policy") || "",
+    /upgrade-insecure-requests/,
   );
 });
 

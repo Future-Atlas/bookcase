@@ -38,6 +38,20 @@ test("staging serves Flutter SPA assets with noindex headers", async () => {
   ]);
 });
 
+test("clean app paths are noindex in staging and on production custom domain", async () => {
+  const routes = ["/login", "/mypage", "/settings", "/help", "/moderation"];
+  for (const appEnv of ["staging", "production"]) {
+    const { env, requests } = environment({ appEnv });
+    for (const path of routes) {
+      const host = appEnv === "staging" ? "staging.example.test" : "www.sharemarium.com";
+      const response = await worker.fetch(new Request(`https://${host}${path}`), env);
+      assert.equal(response.status, 200, path);
+      assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow", path);
+    }
+    assert.equal(requests.length, routes.length);
+  }
+});
+
 test("staging robots.txt blocks all crawlers without loading assets", async () => {
   const { env, requests } = environment();
   const response = await worker.fetch(
@@ -78,8 +92,16 @@ test("production custom domain adds browser security headers", async () => {
     "strict-origin-when-cross-origin",
   );
   assert.match(
-    response.headers.get("content-security-policy-report-only") || "",
+    response.headers.get("content-security-policy") || "",
     /frame-ancestors 'none'/,
+  );
+  assert.match(
+    response.headers.get("content-security-policy") || "",
+    /script-src-attr 'none'/,
+  );
+  assert.equal(
+    response.headers.get("content-security-policy-report-only"),
+    null,
   );
 });
 
@@ -112,6 +134,23 @@ test("legacy profile route keeps the identifier when redirecting", async () => {
   );
 });
 
+test("legacy book slug permanently redirects to the canonical ISBN page", async () => {
+  const { env, requests } = environment({ appEnv: "production" });
+  const response = await worker.fetch(
+    new Request(
+      "https://www.sharemarium.com/book/nanji-hoshi-no-gotoku?utm_source=google",
+    ),
+    env,
+  );
+
+  assert.equal(response.status, 308);
+  assert.equal(
+    response.headers.get("location"),
+    "https://www.sharemarium.com/book/9784065281499?utm_source=google",
+  );
+  assert.equal(requests.length, 0);
+});
+
 test("crawler legal requests use server-rendered HTML", async () => {
   const { env, requests } = environment({ appEnv: "production" });
   const response = await worker.fetch(
@@ -133,8 +172,8 @@ test("API routes do not fall through to Flutter assets", async () => {
     env,
   );
 
-  assert.equal(response.status, 500);
-  assert.equal((await response.json()).error, "rakuten_credentials_missing");
+  assert.equal(response.status, 410);
+  assert.equal((await response.json()).error, "catalog_migrated");
   assert.equal(requests.length, 0);
 });
 
@@ -143,7 +182,7 @@ test("Workers Free serves static Flutter assets without invoking Worker first", 
   const config = JSON.parse(readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8"));
   const patterns = config.assets.run_worker_first;
   assert.ok(Array.isArray(patterns));
-  for (const route of ["/", "/api/*", "/sitemap.xml", "/robots.txt", "/posts/*", "/book/*", "/privacy"]) {
+  for (const route of ["/", "/api/*", "/sitemap.xml", "/robots.txt", "/login", "/mypage", "/settings", "/help", "/moderation", "/posts/*", "/book/*", "/privacy"]) {
     assert.ok(patterns.includes(route), route + " must execute the Worker for SEO/API");
   }
   assert.ok(!patterns.includes("/*"), "Worker must not run for every asset");

@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../config/feature_flags.dart';
 import '../services/supabase_service.dart';
-import '../api/rakuten_api.dart';
+import '../api/ndl_api.dart';
+import '../api/openbd_api.dart';
 import '../models/book.dart';
 import '../models/user_profile.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
 import '../models/social_models.dart';
 import '../models/profile_page_color.dart';
+import '../services/content_safety_service.dart';
 import '../widgets/post_card.dart';
 import '../widgets/book_card.dart';
 import '../widgets/post_composer_dialog.dart';
@@ -300,7 +302,13 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: FeatureFlags.wantToReadUiEnabled ? 4 : 3, vsync: this);
+    _tabController = TabController(
+      length:
+          2 +
+          (FeatureFlags.favoritesUiEnabled ? 1 : 0) +
+          (FeatureFlags.wantToReadUiEnabled ? 1 : 0),
+      vsync: this,
+    );
     _loadProfileData();
   }
 
@@ -437,13 +445,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final colls = canLoadContent
         ? await service.fetchUserCollections(profileId)
         : <Book>[];
-    final favs = canLoadContent
+    final favs = canLoadContent && FeatureFlags.favoritesUiEnabled
         ? await service.fetchUserFavorites(profileId)
         : <Book>[];
-    final wanted = canLoadContent
+    final wanted = canLoadContent && FeatureFlags.wantToReadUiEnabled
         ? await service.fetchUserWantToRead(profileId)
         : <Book>[];
-    final favoriteLimit = relationship.isOwnProfile
+    final favoriteLimit =
+        FeatureFlags.favoritesUiEnabled && relationship.isOwnProfile
         ? await service.fetchCurrentFavoriteLimit()
         : SupabaseService.standardFavoriteLimit;
     final postedBookIds = posts.map((post) => post.bookId).toSet();
@@ -1000,13 +1009,15 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                         children: [
                           _buildPostsTab(),
                           _buildReadBooksTab(),
-                          _buildFavoritesTab(),
-                          if (FeatureFlags.wantToReadUiEnabled) _buildGridTab(
-                            _wantToRead,
-                            '「読みたい！」作品はありません。',
-                            showDescription: true,
-                            compactThreeColumn: true,
-                          ),
+                          if (FeatureFlags.favoritesUiEnabled)
+                            _buildFavoritesTab(),
+                          if (FeatureFlags.wantToReadUiEnabled)
+                            _buildGridTab(
+                              _wantToRead,
+                              '「読みたい！」作品はありません。',
+                              showDescription: true,
+                              compactThreeColumn: true,
+                            ),
                         ],
                       )
                     : _buildPrivateOrBlockedState(),
@@ -1271,7 +1282,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             if (!blocked) ...[
               const SizedBox(height: 8),
               const Text(
-                'フォローリクエストが承認されると、投稿・My 本棚・お気に入りを確認できます。',
+                'フォローリクエストが承認されると、投稿・My 本棚を確認できます。',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -1283,7 +1294,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   Widget _buildTabBar() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final isMobile = MediaQuery.sizeOf(context).width < 600;
     final tabBackgroundColor = isDarkMode
         ? const Color(0xFF424242)
         : const Color(0xFFBDBDBD);
@@ -1291,6 +1301,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final selectedTextColor = isDarkMode ? Colors.black : Colors.white;
     final unselectedTextColor = isDarkMode ? Colors.white : Colors.black;
     return Container(
+      width: double.infinity,
       margin: EdgeInsets.zero,
       decoration: BoxDecoration(
         color: tabBackgroundColor,
@@ -1298,8 +1309,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       ),
       child: TabBar(
         controller: _tabController,
-        isScrollable: isMobile,
-        tabAlignment: isMobile ? TabAlignment.start : null,
+        isScrollable: false,
         labelPadding: EdgeInsets.zero,
         indicator: BoxDecoration(
           color: selectedBackgroundColor,
@@ -1315,36 +1325,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           fontWeight: FontWeight.w500,
           fontSize: 13,
         ),
-        tabs: isMobile
-            ? [
-                Tab(
-                  child: SizedBox(width: 56, child: Center(child: Text('投稿'))),
-                ),
-                Tab(
-                  child: SizedBox(
-                    width: 74,
-                    child: Center(child: Text('My 本棚')),
-                  ),
-                ),
-                Tab(
-                  child: SizedBox(
-                    width: 100,
-                    child: Center(child: Text('お気に入り')),
-                  ),
-                ),
-                if (FeatureFlags.wantToReadUiEnabled) Tab(
-                  child: SizedBox(
-                    width: 94,
-                    child: Center(child: Text('読みたい！')),
-                  ),
-                ),
-              ]
-            : [
-                const Tab(text: '投稿'),
-                const Tab(text: 'My 本棚'),
-                const Tab(text: 'お気に入り'),
-                if (FeatureFlags.wantToReadUiEnabled) const Tab(text: '読みたい！'),
-              ],
+        tabs: [
+          const Tab(text: '投稿'),
+          const Tab(text: 'My 本棚'),
+          if (FeatureFlags.favoritesUiEnabled) const Tab(text: 'お気に入り'),
+          if (FeatureFlags.wantToReadUiEnabled) const Tab(text: '読みたい！'),
+        ],
       ),
     );
   }
@@ -1379,15 +1365,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       onWantToRead: _isOwnProfile
                           ? null
                           : () => _toggleWantToReadFromPost(post),
-                      onReactionUsers: (reaction) => _openEngagementUsers(
-                        post,
-                        reaction: reaction,
-                      ),
+                      onReactionUsers: (reaction) =>
+                          _openEngagementUsers(post, reaction: reaction),
                       onWantToReadUsers: () =>
                           _openEngagementUsers(post, wantToRead: true),
                       onDelete: _isOwnProfile ? () => _deletePost(post) : null,
                       onEdit: _isOwnProfile ? () => _editPost(post) : null,
-                      onFavorite: _isOwnProfile
+                      onFavorite:
+                          FeatureFlags.favoritesUiEnabled && _isOwnProfile
                           ? () => _toggleFavorite(post.bookId, post.bookTitle)
                           : null,
                       favoriteLabel: _isFavorited(post.bookId)
@@ -1396,8 +1381,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       onReport: _isOwnProfile
                           ? null
                           : () => _reportPost(post.id),
-                      onReply: (parentReply) =>
-                          _replyToPost(post, parentReply),
+                      onReply: (parentReply) => _replyToPost(post, parentReply),
                       onReplyReport: _reportReply,
                       concealReplySpoiler: (reply) {
                         final profileId = Provider.of<SupabaseService>(
@@ -1459,7 +1443,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _openBookFromPost(Post post) async {
-    final resolvedBook = await RakutenApi.fetchBookById(post.bookId);
+    final matches = await NdlApi.search(isbn: post.bookId, count: 1);
+    final enriched = await OpenBdApi.enrich(matches);
+    final resolvedBook = enriched.isEmpty ? null : enriched.first;
     if (!mounted) return;
     final book =
         resolvedBook ??
@@ -1873,6 +1859,15 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   Future<void> _showSearchedBookDetailDialog(Book book) async {
     final service = Provider.of<SupabaseService>(context, listen: false);
+    if (ContentSafetyService.isAdultBook(book) &&
+        !await service.canViewAdultContent()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('この書籍は18歳未満の利用者には表示できません。')),
+      );
+      return;
+    }
+    if (!mounted) return;
     final isReadFuture = service.isBookReadByCurrentUser(bookId: book.id);
     final isWantedFuture = FeatureFlags.wantToReadUiEnabled
         ? service.isBookWantedByCurrentUser(book.id)
@@ -1984,59 +1979,65 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              if (FeatureFlags.wantToReadUiEnabled) Expanded(
-                                child: FutureBuilder<bool>(
-                                  future: isWantedFuture,
-                                  builder: (context, wantedSnapshot) {
-                                    final wanted = wantedSnapshot.data ?? false;
-                                    final checking =
-                                        wantedSnapshot.connectionState ==
-                                        ConnectionState.waiting;
-                                    return ElevatedButton(
-                                      onPressed: checking
-                                          ? null
-                                          : () async {
-                                              final result = await service
-                                                  .toggleWantToRead(book: book);
-                                              if (!mounted) return;
-                                              if (result ==
-                                                  WantToReadToggleResult
-                                                      .subscriptionRequired) {
-                                                await showSubscriptionLockedDialog(
-                                                  context: this.context,
-                                                  featureLabel: '「読みたい！」',
+                              if (FeatureFlags.wantToReadUiEnabled)
+                                Expanded(
+                                  child: FutureBuilder<bool>(
+                                    future: isWantedFuture,
+                                    builder: (context, wantedSnapshot) {
+                                      final wanted =
+                                          wantedSnapshot.data ?? false;
+                                      final checking =
+                                          wantedSnapshot.connectionState ==
+                                          ConnectionState.waiting;
+                                      return ElevatedButton(
+                                        onPressed: checking
+                                            ? null
+                                            : () async {
+                                                final result = await service
+                                                    .toggleWantToRead(
+                                                      book: book,
+                                                    );
+                                                if (!mounted) return;
+                                                if (result ==
+                                                    WantToReadToggleResult
+                                                        .subscriptionRequired) {
+                                                  await showSubscriptionLockedDialog(
+                                                    context: this.context,
+                                                    featureLabel: '「読みたい！」',
+                                                  );
+                                                  return;
+                                                }
+                                                ScaffoldMessenger.of(
+                                                  this.context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      result.message,
+                                                    ),
+                                                  ),
                                                 );
-                                                return;
-                                              }
-                                              ScaffoldMessenger.of(
-                                                this.context,
-                                              ).showSnackBar(
-                                                SnackBar(
-                                                  content: Text(result.message),
-                                                ),
-                                              );
-                                              if (!result
-                                                      .shouldRestoreOptimisticState &&
-                                                  dialogContext.mounted) {
-                                                Navigator.of(
-                                                  dialogContext,
-                                                ).pop();
-                                              }
-                                            },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.black,
-                                        foregroundColor: Colors.amber,
-                                      ),
-                                      child: BookActionLabel(
-                                        bookId: book.id,
-                                        label: wanted ? '読みたい！済み' : '読みたい！',
-                                        color: Colors.amber,
-                                        wantToRead: true,
-                                      ),
-                                    );
-                                  },
+                                                if (!result
+                                                        .shouldRestoreOptimisticState &&
+                                                    dialogContext.mounted) {
+                                                  Navigator.of(
+                                                    dialogContext,
+                                                  ).pop();
+                                                }
+                                              },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.black,
+                                          foregroundColor: Colors.amber,
+                                        ),
+                                        child: BookActionLabel(
+                                          bookId: book.id,
+                                          label: wanted ? '読みたい！済み' : '読みたい！',
+                                          color: Colors.amber,
+                                          wantToRead: true,
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 ),
-                              ),
                             ],
                           );
                         },

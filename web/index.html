@@ -44,6 +44,7 @@
     </script>
 
     <meta charset="UTF-8" />
+    <meta name="google" content="notranslate" />
     <meta content="IE=Edge" http-equiv="X-UA-Compatible" />
     <meta
       name="description"
@@ -73,7 +74,23 @@
         // The original publisher synchronous tag is kept unchanged in the
         // inert template below. The actual live integration uses async SDK.
         const expectedHost = "www.sharemarium.com";
+        const adFreePaths = new Set([
+          "/privacy",
+          "/terms",
+          "/community-guidelines",
+          "/infringement-policy",
+          "/external-transmission",
+          "/contact",
+          "/about",
+        ]);
+        const popupDismissKey = "sharemarium-bottom-popup-ad-dismissed";
+        const bottomInsetChangedEvent =
+          "sharemarium:bottom-ad-viewport-inset-changed";
+        const bottomInsetRequestEvent =
+          "sharemarium:bottom-ad-viewport-inset-request";
         const renderedSlots = new Map();
+        const managedPopups = new Map();
+        let publishedBottomInset = -1;
         let entitlementToken = null;
         let entitlementState = "unknown";
         let entitlementRequest = null;
@@ -88,12 +105,184 @@
           );
         }
 
+        function currentAppPath() {
+          const hash = window.location.hash || "";
+          if (hash.startsWith("#/")) {
+            return hash.slice(1).split("?", 1)[0] || "/";
+          }
+          return window.location.pathname;
+        }
+
         function eligibleRoute() {
+          const path = currentAppPath();
           return (
             window.location.hostname === expectedHost &&
-            ["/", "/posts", "/posts/"].includes(window.location.pathname) &&
+            !adFreePaths.has(path) &&
+            (["/", "/posts", "/posts/"].includes(path) ||
+              /^\/book\/(\d{13}|\d{9}[\dXx])\/?$/.test(path)) &&
             !window.location.search.includes("seo_preview=")
           );
+        }
+
+        function popupWasDismissed() {
+          try {
+            return window.sessionStorage.getItem(popupDismissKey) === "1";
+          } catch (_) {
+            return false;
+          }
+        }
+
+        function isProviderBottomPopup(node) {
+          if (!node ||
+              !node.isConnected ||
+              node.closest?.(".sharemarium-admax-timeline-slot")) {
+            return false;
+          }
+          const iframe = node.tagName === "IFRAME"
+            ? node
+            : node.querySelector?.("iframe");
+          if (!iframe) return false;
+
+          // Ninja AdMax can apply the fixed positioning from a stylesheet and
+          // can wrap the iframe below a body child. Checking only inline style
+          // and one exact z-index missed the real mobile/desktop bottom ad.
+          const computed = window.getComputedStyle?.(node);
+          const position = computed?.position || node.style?.position;
+          if (position !== "fixed") return false;
+
+          const rect = node.getBoundingClientRect?.();
+          if (!rect || rect.width < 120 || rect.height < 40) return false;
+          const bottomGap = window.innerHeight - rect.bottom;
+          return bottomGap >= -32 && bottomGap <= 32 && rect.top >= 0;
+        }
+
+        function providerBottomPopups() {
+          const popups = new Set();
+          for (const iframe of document.querySelectorAll("iframe")) {
+            if (iframe.closest?.(".sharemarium-admax-timeline-slot")) continue;
+            let node = iframe;
+            while (node && node !== document.body) {
+              if (isProviderBottomPopup(node)) {
+                popups.add(node);
+                break;
+              }
+              node = node.parentElement;
+            }
+          }
+          return popups;
+        }
+
+        function publishBottomAdInset() {
+          let inset = 0;
+          if (eligibleRoute() && !popupWasDismissed()) {
+            for (const node of providerBottomPopups()) {
+              const rect = node.getBoundingClientRect?.();
+              if (!rect) continue;
+              inset = Math.max(
+                inset,
+                Math.ceil(Math.max(rect.height, window.innerHeight - rect.top)),
+              );
+            }
+          }
+          if (inset === publishedBottomInset) return;
+          publishedBottomInset = inset;
+          window.dispatchEvent(
+            new CustomEvent(bottomInsetChangedEvent, { detail: inset }),
+          );
+        }
+
+        function providerHasCloseButton(node) {
+          return Array.from(node.children || []).some((child) => {
+            const label = (child.textContent || "").trim();
+            const width = Number.parseFloat(child.style?.width || "0");
+            const height = Number.parseFloat(child.style?.height || "0");
+            return (label === "×" || label.toUpperCase() === "X") &&
+              width >= 30 && height >= 30;
+          });
+        }
+
+        function removeManagedPopup(node) {
+          const managed = managedPopups.get(node);
+          if (managed) {
+            window.removeEventListener("resize", managed.place);
+            window.removeEventListener("scroll", managed.place);
+            managed.button.remove();
+            managedPopups.delete(node);
+          }
+          node.remove();
+          publishBottomAdInset();
+        }
+
+        function addPopupCloseButton(node) {
+          if (managedPopups.has(node) || providerHasCloseButton(node)) return;
+          if (popupWasDismissed()) {
+            node.remove();
+            return;
+          }
+
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = "×";
+          button.setAttribute("aria-label", "画面下部の広告を閉じる");
+          button.setAttribute("title", "広告を閉じる");
+          Object.assign(button.style, {
+            position: "fixed",
+            width: "36px",
+            height: "36px",
+            margin: "0",
+            padding: "0",
+            border: "1px solid #666",
+            borderRadius: "4px",
+            background: "#fff",
+            color: "#111",
+            fontSize: "24px",
+            lineHeight: "32px",
+            textAlign: "center",
+            cursor: "pointer",
+            zIndex: "2147483647",
+          });
+          const place = () => {
+            if (!node.isConnected) {
+              button.remove();
+              managedPopups.delete(node);
+              publishBottomAdInset();
+              return;
+            }
+            const rect = node.getBoundingClientRect();
+            button.style.right = Math.max(4, window.innerWidth - rect.right) + "px";
+            button.style.bottom = Math.max(4, window.innerHeight - rect.top + 4) + "px";
+            publishBottomAdInset();
+          };
+          button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            try {
+              window.sessionStorage.setItem(popupDismissKey, "1");
+            } catch (_) {}
+            removeManagedPopup(node);
+          });
+          document.body.appendChild(button);
+          managedPopups.set(node, { button, place });
+          place();
+          window.addEventListener("resize", place);
+          window.addEventListener("scroll", place);
+        }
+
+        function reconcileProviderPopups() {
+          for (const [node, managed] of managedPopups) {
+            if (!node.isConnected) {
+              managed.button.remove();
+              managedPopups.delete(node);
+            }
+          }
+          for (const node of providerBottomPopups()) {
+            if (!eligibleRoute() || popupWasDismissed()) {
+              removeManagedPopup(node);
+            } else {
+              addPopupCloseButton(node);
+            }
+          }
+          publishBottomAdInset();
         }
 
         function currentSupabaseAccessToken() {
@@ -177,6 +366,7 @@
             slot.target.replaceChildren();
           }
           renderedSlots.clear();
+          reconcileProviderPopups();
         }
 
         let sdkScheduled = false;
@@ -278,6 +468,7 @@
         function watchTimelineDom() {
           if (!document.body) return;
           const observer = new MutationObserver(() => {
+            reconcileProviderPopups();
             if (!eligibleRoute()) return;
             for (const root of document.querySelectorAll(
               ".sharemarium-admax-timeline-slot",
@@ -286,11 +477,13 @@
             }
           });
           observer.observe(document.body, { childList: true, subtree: true });
+          reconcileProviderPopups();
         }
 
         window.addEventListener("sharemarium:admax-slot-ready", (event) => {
           void mountSlot(event.detail);
         });
+        window.addEventListener(bottomInsetRequestEvent, publishBottomAdInset);
 
         function scheduleEntitlementReview() {
           if (!eligibleRoute()) {
@@ -320,6 +513,7 @@
         }, 60000);
 
         window.addEventListener("popstate", scheduleEntitlementReview);
+        window.addEventListener("hashchange", scheduleEntitlementReview);
         window.addEventListener("pageshow", scheduleEntitlementReview);
         window.addEventListener("storage", scheduleEntitlementReview);
         window.addEventListener(

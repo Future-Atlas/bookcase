@@ -13,6 +13,33 @@ test('subscription UI remains disabled until legal terms are ready', () => {
   )
 })
 
+test('favorites UI remains available while subscription UI is disabled', () => {
+  const flags = read('lib/config/feature_flags.dart')
+  const bookList = read('lib/screens/book_list_screen.dart')
+  const profile = read('lib/screens/user_profile_screen.dart')
+  const accountGate = read('lib/screens/account_suspension_gate.dart')
+
+  assert.match(
+    flags,
+    /static const bool favoritesUiEnabled = true;/,
+  )
+  assert.match(bookList, /if \(FeatureFlags\.favoritesUiEnabled\)/)
+  assert.match(
+    bookList,
+    /FeatureFlags\.favoritesUiEnabled &&\s+post\.profileId == currentProfileId/,
+  )
+  assert.match(profile, /FeatureFlags\.favoritesUiEnabled \? 1 : 0/)
+  assert.match(profile, /FeatureFlags\.wantToReadUiEnabled \? 1 : 0/)
+  assert.match(
+    profile,
+    /if \(FeatureFlags\.favoritesUiEnabled\)\s+_buildFavoritesTab\(\)/,
+  )
+  assert.match(
+    accountGate,
+    /FeatureFlags\.favoritesUiEnabled\s+\? FavoriteRetentionGate/,
+  )
+})
+
 test('account settings hides the entire subscription section behind the release flag', () => {
   const settings = read('lib/screens/account_settings_screen.dart')
   const gate = settings.indexOf('if (FeatureFlags.subscriptionUiEnabled)')

@@ -1,4 +1,6 @@
 import adEntitlement from "../api/ad-entitlement.js";
+import ndl from "../api/ndl.js";
+import openbd from "../api/openbd.js";
 import homeAdEligibility from "../api/home-ad-eligibility.js";
 import legalSeo from "../api/legal-seo.js";
 import postSeo from "../api/post-seo.js";
@@ -15,13 +17,24 @@ const SEO_PATH_PATTERN =
   /^\/(?:featured-books|genre\/.*|book\/.*|user\/.*|users\/.*|profile\/.*|privacy|terms|community-guidelines|infringement-policy|external-transmission|contact|about)$/;
 const LEGAL_PATH_PATTERN =
   /^\/(privacy|terms|community-guidelines|infringement-policy|external-transmission)$/;
-const CSP_REPORT_ONLY = [
+// Utility and account screens should not appear as independent search results.
+const NOINDEX_APP_PATHS = new Set(["/login", "/mypage", "/settings", "/help", "/moderation"]);
+const LEGACY_BOOK_REDIRECTS = new Map([
+  ["/book/nanji-hoshi-no-gotoku", "/book/9784065281499"],
+]);
+// Enforce a conservative baseline CSP in production. Flutter Web and the
+// currently issued Ninja AdMax tag still require inline scripts and Wasm, so
+// those two allowances remain explicit instead of silently permitting every
+// third-party script origin. Tightening them further requires moving the
+// inline bootstrap/ad code to hashed or nonce-bearing scripts first.
+const CSP_ENFORCED = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://adm.shinobi.jp",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://adm.shinobi.jp https://*.shinobi.jp https://admax.cnobi.jp https://*.cnobi.jp",
+  "script-src-attr 'none'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
@@ -29,6 +42,7 @@ const CSP_REPORT_ONLY = [
   "frame-src https:",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
+  "upgrade-insecure-requests",
 ].join("; ");
 
 class VercelResponseAdapter {
@@ -98,13 +112,37 @@ function requestHeaders(request) {
   return headers;
 }
 
-async function invoke(handler, request, extraQuery = {}) {
+function coordinatedRakutenRequest(env) {
+  // Fail closed rather than bypassing the per-application-ID global limit.
+  if (!env?.RAKUTEN_QUOTA) {
+    return async () => new Response('{"error":"rakuten_quota_unavailable"}', {
+      status: 503,
+      headers: { "Content-Type": "application/json", "Retry-After": "5" },
+    });
+  }
+  return async (url, options = {}) => {
+    const appId = new URL(url).searchParams.get("applicationId");
+    if (!appId) return new Response('{"error":"invalid_app_id"}', { status: 400 });
+    const stub = env.RAKUTEN_QUOTA.get(env.RAKUTEN_QUOTA.idFromName(appId));
+    return stub.fetch("https://rakuten-quota.internal/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        origin: options.origin,
+      }),
+    });
+  };
+}
+
+async function invoke(handler, request, extraQuery = {}, env = null) {
   const url = new URL(request.url);
   const req = {
     method: request.method,
     headers: requestHeaders(request),
     query: { ...queryFromUrl(url), ...extraQuery },
     url: `${url.pathname}${url.search}`,
+    ...(env ? { rakutenRequest: coordinatedRakutenRequest(env) } : {}),
   };
   const res = new VercelResponseAdapter();
   await handler(req, res);
@@ -126,12 +164,15 @@ function withEnvironmentHeaders(response, env, request) {
     "Permissions-Policy",
     "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
   );
-  headers.set("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY);
-  const hostname = new URL(request.url).hostname;
+  headers.set("Content-Security-Policy", CSP_ENFORCED);
+  const requestUrl = new URL(request.url);
+  const hostname = requestUrl.hostname;
   if (env.APP_ENV === "production" && hostname === "www.sharemarium.com") {
     headers.set("Strict-Transport-Security", "max-age=31536000");
   }
-  if (env.APP_ENV !== "production" || hostname.endsWith(".workers.dev")) {
+  if (env.APP_ENV !== "production" ||
+      hostname.endsWith(".workers.dev") ||
+      NOINDEX_APP_PATHS.has(requestUrl.pathname)) {
     headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   return new Response(response.body, {
@@ -144,6 +185,11 @@ function withEnvironmentHeaders(response, env, request) {
 async function routeRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/{2,}/g, "/");
+
+  const canonicalBookPath = LEGACY_BOOK_REDIRECTS.get(path);
+  if (canonicalBookPath) {
+    return redirect(request, canonicalBookPath);
+  }
 
   if ((env.APP_ENV !== "production" || url.hostname.endsWith(".workers.dev")) && path === "/robots.txt") {
     return new Response("User-agent: *\nDisallow: /\n", {
@@ -164,7 +210,9 @@ async function routeRequest(request, env) {
   if (path === "/sitemap.xml" || path === "/api/sitemap") {
     return invoke(sitemap, request);
   }
-  if (path === "/api/rakuten") return invoke(rakuten, request);
+  if (path === "/api/ndl") return invoke(ndl, request);
+  if (path === "/api/openbd") return invoke(openbd, request);
+  if (path === "/api/rakuten") return new Response(JSON.stringify({error:"catalog_migrated"}), {status:410,headers:{"Content-Type":"application/json"}});
   if (path === "/api/ad-entitlement") {
     return invoke(adEntitlement, request);
   }
@@ -174,9 +222,9 @@ async function routeRequest(request, env) {
   if (path === "/api/posts-seo") return invoke(postsSeo, request);
   if (path === "/api/post-seo") return invoke(postSeo, request);
   if (path === "/api/legal-seo") return invoke(legalSeo, request);
-  if (path === "/api/seo-home") return invoke(seoHome, request);
-  if (path === "/api/seo") return invoke(seo, request);
-  if (path === "/api/seo-router") return invoke(seoRouter, request);
+  if (path === "/api/seo-home") return invoke(seoHome, request, {}, env);
+  if (path === "/api/seo") return invoke(seo, request, {}, env);
+  if (path === "/api/seo-router") return invoke(seoRouter, request, {}, env);
 
   const userAgent = request.headers.get("user-agent") || "";
   const isCrawler = BOT_PATTERN.test(userAgent);
@@ -191,13 +239,13 @@ async function routeRequest(request, env) {
   }
 
   if (url.searchParams.get("seo_preview") === "1") {
-    return invoke(seoRouter, request, { path });
+    return invoke(seoRouter, request, { path }, env);
   }
   if (isCrawler && (path === "/" || SEO_PATH_PATTERN.test(path))) {
     if (LEGAL_PATH_PATTERN.test(path)) {
       return invoke(legalSeo, request, { path: path.slice(1) });
     }
-    return invoke(seoRouter, request, { path });
+    return invoke(seoRouter, request, { path }, env);
   }
 
   return env.ASSETS.fetch(request);
@@ -228,8 +276,12 @@ export default {
 
 export const _test = {
   BOT_PATTERN,
+  LEGACY_BOOK_REDIRECTS,
   SEO_PATH_PATTERN,
   VercelResponseAdapter,
   queryFromUrl,
   routeRequest,
 };
+
+// Wrangler Durable Object binding targets the entrypoint's named export.
+export { RakutenCoordinator } from "./rakuten-coordinator.mjs";

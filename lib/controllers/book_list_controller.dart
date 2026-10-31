@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../models/book.dart';
+import '../api/ndl_api.dart';
+import '../api/openbd_api.dart';
 import '../repositories/book_repository.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
 import '../models/social_models.dart';
 import '../models/user_profile.dart';
+import '../services/content_safety_service.dart';
 import '../services/supabase_service.dart';
 
 class BookListController extends ChangeNotifier {
@@ -58,14 +61,16 @@ class BookListController extends ChangeNotifier {
 
   List<Book> featuredBooks = [];
   bool isLoadingFeatured = true;
+  int _featuredLookupGeneration = 0;
 
   // タイムライン用
   List<Post> timelinePosts = [];
   Map<String, List<PostReply>> timelineReplies = {};
   bool _allowAdultContent = false;
 
-  BookRepository get _repository =>
-      BookRepository(allowAdultContent: _allowAdultContent);
+  BookRepository _catalogRepository = BookRepository();
+
+  BookRepository get _repository => _catalogRepository;
 
   Post? toggleTimelineReactionOptimistically(
     String postId,
@@ -114,6 +119,7 @@ class BookListController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _featuredLookupGeneration++;
     searchController.removeListener(_onSearchChanged);
     _searchDebounce?.cancel();
     searchController.dispose();
@@ -215,7 +221,7 @@ class BookListController extends ChangeNotifier {
 
     try {
       final requestedPage = searchPage;
-      final batch = await _repository.searchBooks(
+      final batch = await _repository.searchBooksPage(
         query,
         page: requestedPage,
         count: 20,
@@ -224,14 +230,14 @@ class BookListController extends ChangeNotifier {
       // 入力中に別の検索が始まった場合は、古い結果を画面へ反映しない。
       if (userSearchMode || query != searchQuery.trim()) return;
 
-      for (final book in batch) {
+      for (final book in batch.books) {
         if (_searchResultIds.add(book.id)) {
           searchResults.add(book);
         }
       }
 
       searchPage = requestedPage + 1;
-      hasMoreSearch = batch.length >= 20;
+      hasMoreSearch = batch.hasMore;
     } finally {
       if (!userSearchMode && query == searchQuery.trim()) {
         isSearching = false;
@@ -244,6 +250,52 @@ class BookListController extends ChangeNotifier {
     if (userSearchMode || searchQuery.isEmpty || isSearching) return;
     if (!hasMoreSearch) return;
     await _searchBooks(reset: false);
+  }
+
+  // Curated ISBN, title and order are durable; provider artwork and synopsis
+  // are short-lived. Resolve them only in memory for the current screen.
+  // On API failure the existing curated book entry remains available.
+  Future<void> _hydrateFeaturedBooks(int generation) async {
+    final snapshot = List<Book>.of(featuredBooks);
+    for (final original in snapshot) {
+      if (generation != _featuredLookupGeneration) return;
+      final normalizedId = (original.isbn.isNotEmpty
+              ? original.isbn
+              : original.id)
+          .replaceAll('-', '');
+      if (!RegExp(r'^(?:\d{13}|\d{9}[\dXx])$').hasMatch(normalizedId)) {
+        continue;
+      }
+      Book? fresh;
+      try {
+        final found = await NdlApi.fetchBookById(normalizedId);
+        final enhanced = found == null
+            ? const <Book>[]
+            : await OpenBdApi.enrich(<Book>[found]);
+        fresh = enhanced.isEmpty ? null : enhanced.first;
+      } catch (_) {
+        continue;
+      }
+      if (generation != _featuredLookupGeneration) return;
+      if (fresh == null || fresh.isbn.replaceAll('-', '') != normalizedId) {
+        continue;
+      }
+      final index = featuredBooks.indexWhere((book) => book.id == original.id);
+      if (index < 0) continue;
+      final hydrated = original.copyWith(
+        coverUrl: fresh.coverUrl,
+        description: fresh.description,
+        rakutenAffiliateUrl: fresh.rakutenAffiliateUrl,
+        catalogSource: fresh.catalogSource,
+        catalogFetchedAt: fresh.catalogFetchedAt,
+      );
+      if (!_allowAdultContent && ContentSafetyService.isAdultBook(hydrated)) {
+        featuredBooks = List<Book>.of(featuredBooks)..removeAt(index);
+      } else {
+        featuredBooks = List<Book>.of(featuredBooks)..[index] = hydrated;
+      }
+      notifyListeners();
+    }
   }
 
   Future<void> _loadData(BuildContext context) async {
@@ -262,6 +314,7 @@ class BookListController extends ChangeNotifier {
     notifyListeners();
 
     _allowAdultContent = await SupabaseService().canViewAdultContent();
+    _catalogRepository = BookRepository(allowAdultContent: _allowAdultContent);
     final repository = _repository;
 
     recommendedPage = 1;
@@ -280,18 +333,28 @@ class BookListController extends ChangeNotifier {
     westernBooks = [];
     popularBooks = [];
     featuredBooks = [];
+    final featuredGeneration = ++_featuredLookupGeneration;
     timelinePosts = [];
     timelineReplies = {};
     notifyListeners();
 
     try {
       final featured = await SupabaseService().fetchFeaturedBooks();
-      featuredBooks = featured.map((item) => item.book).toList(growable: false);
+      featuredBooks = featured
+          .map((item) => item.book)
+          .where(
+            (book) =>
+                _allowAdultContent || !ContentSafetyService.isAdultBook(book),
+          )
+          .toList(growable: false);
     } catch (_) {
       featuredBooks = [];
     } finally {
       isLoadingFeatured = false;
       notifyListeners();
+    }
+    if (featuredBooks.isNotEmpty) {
+      unawaited(_hydrateFeaturedBooks(featuredGeneration));
     }
 
     try {

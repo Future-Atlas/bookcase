@@ -1,0 +1,29 @@
+# NDL + openBD migration (PR #194, draft)
+
+## Intent and boundaries
+
+Replace Rakuten Web Service catalog calls with National Diet Library Search as the primary source and openBD as optional enrichment. Keep all user-authored posts, shelves, favorites, reactions and ISBN-based links intact. The legacy `/api/rakuten` responds with 410 and no longer contacts Rakuten.
+
+### Functional mapping
+
+- Home/new arrivals: NDL in-process records, publication-date filtered to the last 365 days and displayed in nine-record windows. Sorting is within each returned page only; it is **not a global release-day ranking**. NDL receipt/record creation and commercial release dates differ.
+- Home foreign books: NDL holdings with 'English' free-text search, *then* filtering to explicit `eng`/`en` language metadata. This prevents Japanese books merely discussing English from appearing but is **not a comprehensive foreign-language feed**. Dedicated language-indexed search remains a release gap.
+- Home popular: ranked by the frequency of eligible, public, non-age-restricted Sharemarium review posts (most recent 300 records). This is **internal community popularity**, not the external Rakuten bestseller ranking. If no eligible reviews exist, the section may be empty. The existing visible label is `人気作品`.
+- Keyword search: title/author/publisher priority and existing exact-match ranking remain. A field-cursor keeps unused raw page items, tracks 1-based NDL offsets, deduplicates by ISBN and carries an explicit `hasMore` flag (not inferred from the number of visible cards). The UI still allocates 10/5/5 per 20 results when data is available. Empty fields fall back to other fields, and a national-bibliography source may fall back to in-process source. NDL and Rakuten search inventories remain different.
+- Cover and descriptions: openBD enriches all ISBN-13 results in batches of 25, preserving missing items and handling absent/replaced records without discarding user data. Image availability and rights must be checked in staging.
+- Safety: existing keyword checks and the ONIX adult audience codes `01`/`02`/`03` are treated as restricted. Warning-only codes `04`/`05`/`06`/`07` do not alone establish 18+ status. **Product decision 2026-10-31:** books with unknown age classification remain visible unless other adult indicators match; verify misses during staging. Public SEO excludes recognized adult terms and flagged posts; API-level anonymous age-aware restriction remains a separate security review.
+- Purchase links: Rakuten affiliate **API** is retired; manually verified links may be attached to ISBNs in `lib/config/rakuten_affiliate_links.dart`. A missing verified product link hides the purchase button; no ISBN-to-Rakuten-product link is invented.
+
+### Unresolved prerequisites before release
+
+1. **NDL rights/application**: NDL states that revenue-bearing sites (including advertising) are commercial use; verify that the exact national/new-arrival provider records are covered by advance authorization and implement the requested attribution. For continual API usage, notify the NDL about the service and expected traffic. See https://ndlsearch.ndl.go.jp/help/api and https://www.ndl.go.jp/data/data_service/jnb .
+2. **openBD rights and safety data**: Confirm whether the actual current production records contain usable ONIX ratings and what cover image redistribution/hotlink restrictions apply. Check 100-300 ISBNs including manga, Japanese novels, business books, foreign titles and known restricted publications. No adult flag does not prove safety; our agreed interim product policy is nevertheless to **show unknown records**, with safeguards for confirmed adult matches.
+3. **Affiliate compliance**: Confirm Sharemarium's website/user-generated-content placement with Rakuten Affiliate separately. Collect official product-level affiliate URLs; no automatic complete ISBN mapping is possible without a legitimate permitted source.
+4. **Publishing order**: Update credits and content policies, sample staging search genres and age groups, SEO direct paths, ad scripts, cached featured book data and legacy provenance migration. Do not deploy automatically.
+5. **Historical data**: Run the existing provenance inventory. Do not delete old metadata or user posts until source licensing and retention decisions are reviewed.
+6. **Search quality**: Run `docs/ndl_openbd_stage_checklist.md` on staging; compare old/new search for title/author/publisher, 10/5/5 placement, multi-page uniqueness, new-arrivals, NDC genres, foreign-language coverage, 18+ behavior and cover availability. Do not declare parity until the samples pass.
+7. **Infrastructure**: Since this branch no longer uses the Rakuten DO coordinator, remove old Durable Object bindings in a *separately reviewed* infrastructure cleanup only after migration validation.
+
+## Rollback and verification
+
+PR stays draft, without merge/deployment. Existing `develop` is unaffected. CI checks validate syntax and unit assumptions but do not substitute for permitted real-service traffic or staging. No production keys are required for the NDL/openBD public endpoints; Supabase staging credentials are required for integration QA.

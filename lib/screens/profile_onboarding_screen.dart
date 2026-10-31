@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../services/supabase_service.dart';
+import '../utils/public_user_id.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_screen.dart';
 
@@ -197,9 +197,15 @@ class _GuardianConsentScreenState extends State<GuardianConsentScreen> {
 }
 
 class PrivacyPasswordSetupScreen extends StatefulWidget {
-  const PrivacyPasswordSetupScreen({super.key, required this.onCompleted});
+  const PrivacyPasswordSetupScreen({
+    super.key,
+    required this.onCompleted,
+    this.isRecovery = false,
+  });
 
   final VoidCallback onCompleted;
+  /// Reuse the original first-time password setup page for a verified reset.
+  final bool isRecovery;
 
   @override
   State<PrivacyPasswordSetupScreen> createState() =>
@@ -224,10 +230,12 @@ class _PrivacyPasswordSetupScreenState
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
-    final error = await Provider.of<SupabaseService>(
-      context,
-      listen: false,
-    ).initializePrivacyPassword(_passwordController.text);
+    final service = Provider.of<SupabaseService>(context, listen: false);
+    final error = widget.isRecovery
+        ? await service.resetPrivacyPasswordAfterReauthentication(
+            _passwordController.text,
+          )
+        : await service.initializePrivacyPassword(_passwordController.text);
     if (!mounted) return;
     setState(() => _saving = false);
     if (error != null) {
@@ -235,6 +243,11 @@ class _PrivacyPasswordSetupScreenState
         context,
       ).showSnackBar(SnackBar(content: Text(error)));
       return;
+    }
+    if (widget.isRecovery) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('パスワードを再設定しました。')),
+      );
     }
     widget.onCompleted();
   }
@@ -257,23 +270,27 @@ class _PrivacyPasswordSetupScreenState
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                const Text(
-                  '個人情報変更用パスワードを設定してください',
-                  style: TextStyle(
+                Text(
+                  widget.isRecovery
+                      ? '新しいパスワードを設定'
+                      : '個人情報変更用パスワードを設定してください',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'ログインには使用しません。プライバシー設定を開くときに使用します。',
-                  style: TextStyle(color: Colors.white70, height: 1.6),
+                Text(
+                  widget.isRecovery
+                      ? 'GoogleまたはXでの本人確認後、15分以内に新しい個人情報変更用パスワードを設定してください。ログイン用パスワードとは別です。'
+                      : 'ログインには使用しません。プライバシー設定を開くときに使用します。',
+                  style: const TextStyle(color: Colors.white70, height: 1.6),
                 ),
                 const SizedBox(height: 24),
                 _PasswordField(
                   controller: _passwordController,
-                  label: 'パスワード',
+                  label: widget.isRecovery ? '新しいパスワード' : 'パスワード',
                   obscureText: _obscurePassword,
                   onToggleVisibility: () =>
                       setState(() => _obscurePassword = !_obscurePassword),
@@ -282,7 +299,9 @@ class _PrivacyPasswordSetupScreenState
                 const SizedBox(height: 14),
                 _PasswordField(
                   controller: _confirmationController,
-                  label: 'パスワード（確認）',
+                  label: widget.isRecovery
+                      ? '新しいパスワード（確認）'
+                      : 'パスワード（確認）',
                   obscureText: _obscurePassword,
                   onToggleVisibility: () =>
                       setState(() => _obscurePassword = !_obscurePassword),
@@ -299,7 +318,7 @@ class _PrivacyPasswordSetupScreenState
                   ),
                   child: _saving
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('設定する'),
+                      : Text(widget.isRecovery ? '再設定する' : '設定する'),
                 ),
               ],
             ),
@@ -323,28 +342,21 @@ class ProfileOnboardingScreen extends StatefulWidget {
 class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
   final _personalFormKey = GlobalKey<FormState>();
   final _profileFormKey = GlobalKey<FormState>();
-  final _fullNameController = TextEditingController();
+  final _familyNameController = TextEditingController();
+  final _givenNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _passwordConfirmationController = TextEditingController();
   final _usernameController = TextEditingController();
   final _userIdController = TextEditingController();
   DateTime? _birthDate;
+  String _gender = 'undisclosed';
   int _step = 0;
   bool _isSaving = false;
   bool _didPrefill = false;
   bool _obscurePassword = true;
   bool _guardianConsentDeclared = false;
   String? _userIdError;
-
-  static const _reservedUserIds = {
-    'admin',
-    'administrator',
-    'support',
-    'sharemarium',
-    'system',
-    'official',
-  };
 
   @override
   void didChangeDependencies() {
@@ -355,8 +367,10 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
       context,
       listen: false,
     ).currentUser?.userMetadata;
-    final fullName = metadata?['full_name'] ?? metadata?['name'];
-    if (fullName is String) _fullNameController.text = fullName.trim();
+    final familyName = metadata?['family_name'];
+    final givenName = metadata?['given_name'];
+    if (familyName is String) _familyNameController.text = familyName.trim();
+    if (givenName is String) _givenNameController.text = givenName.trim();
     final username = metadata?['user_name'] ?? metadata?['preferred_username'];
     if (username is String) _usernameController.text = username.trim();
   }
@@ -364,7 +378,8 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
   @override
   void dispose() {
     for (final controller in [
-      _fullNameController,
+      _familyNameController,
+      _givenNameController,
       _phoneController,
       _passwordController,
       _passwordConfirmationController,
@@ -420,7 +435,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
     if (!_profileFormKey.currentState!.validate() || _birthDate == null) return;
     setState(() => _isSaving = true);
     final service = Provider.of<SupabaseService>(context, listen: false);
-    final userId = _userIdController.text.trim().toLowerCase();
+    final userId = normalizePublicUserId(_userIdController.text);
     if (!await service.isPublicUserIdAvailable(userId)) {
       if (!mounted) return;
       setState(() {
@@ -430,7 +445,9 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
       return;
     }
     final error = await service.completeRegistration(
-      fullName: _fullNameController.text,
+      familyName: _familyNameController.text,
+      givenName: _givenNameController.text,
+      gender: _gender,
       birthDate: _birthDate!,
       phoneNumber: _phoneController.text,
       username: _usernameController.text,
@@ -510,17 +527,45 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '氏名・生年月日・電話番号・パスワードは公開されません。',
+            '氏名・性別・生年月日・電話番号・パスワードは公開されません。',
             style: TextStyle(color: Colors.white70),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '氏名と生年月日は登録後にご自身で変更できません。入力内容を確認し、訂正が必要な場合はお問い合わせください。',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
           ),
           const SizedBox(height: 22),
           TextFormField(
-            controller: _fullNameController,
+            controller: _familyNameController,
             style: const TextStyle(color: Colors.white),
-            maxLength: 100,
-            decoration: _decoration('氏名'),
+            maxLength: 50,
+            decoration: _decoration('姓（Family name）'),
             validator: (value) =>
-                (value?.trim().isEmpty ?? true) ? '氏名を入力してください。' : null,
+                (value?.trim().isEmpty ?? true) ? '姓を入力してください。' : null,
+          ),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _givenNameController,
+            style: const TextStyle(color: Colors.white),
+            maxLength: 50,
+            decoration: _decoration('名（Given name）'),
+            validator: (value) =>
+                (value?.trim().isEmpty ?? true) ? '名を入力してください。' : null,
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: _gender,
+            dropdownColor: const Color(0xFF202020),
+            style: const TextStyle(color: Colors.white),
+            decoration: _decoration('性別（任意）'),
+            items: const [
+              DropdownMenuItem(value: 'female', child: Text('女性')),
+              DropdownMenuItem(value: 'male', child: Text('男性')),
+              DropdownMenuItem(value: 'undisclosed', child: Text('無回答')),
+            ],
+            onChanged: (value) =>
+                setState(() => _gender = value ?? 'undisclosed'),
           ),
           const SizedBox(height: 10),
           InkWell(
@@ -640,20 +685,18 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             controller: _userIdController,
             style: const TextStyle(color: Colors.white),
             maxLength: 20,
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9_]')),
-              const _LowerCaseTextFormatter(),
-            ],
+            keyboardType: TextInputType.visiblePassword,
+            textCapitalization: TextCapitalization.none,
+            autocorrect: false,
+            enableSuggestions: false,
+            inputFormatters: const [LowerCasePublicUserIdFormatter()],
+            onChanged: (_) {
+              if (_userIdError != null) setState(() => _userIdError = null);
+            },
             decoration: _decoration(
               'ユーザーID',
             ).copyWith(prefixText: '@', errorText: _userIdError),
-            validator: (value) {
-              final id = (value ?? '').trim().toLowerCase();
-              if (!RegExp(r'^[a-z0-9_]{3,20}$').hasMatch(id)) {
-                return '半角英小文字・数字・_で3〜20文字にしてください。';
-              }
-              return _reservedUserIds.contains(id) ? 'このユーザーIDは使用できません。' : null;
-            },
+            validator: validatePublicUserId,
           ),
           const SizedBox(height: 24),
           Row(
@@ -768,14 +811,4 @@ class _PasswordField extends StatelessWidget {
       validator: validator,
     );
   }
-}
-
-class _LowerCaseTextFormatter extends TextInputFormatter {
-  const _LowerCaseTextFormatter();
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) => newValue.copyWith(text: newValue.text.toLowerCase());
 }

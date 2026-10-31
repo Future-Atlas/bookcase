@@ -45,7 +45,9 @@ test("legacy Vercel production host permanently redirects to the canonical www h
     (route) => route.status === 308 && route.headers?.Location,
   );
   const redirect = redirects.find(
-    (route) => route.has?.[0]?.value === "book-case-u9uq.vercel.app",
+    (route) =>
+      route.src === "/(.*)" &&
+      route.has?.[0]?.value === "book-case-u9uq.vercel.app",
   );
 
   assert.equal(redirect?.src, "/(.*)");
@@ -64,6 +66,16 @@ test("legacy Vercel production host permanently redirects to the canonical www h
     redirects.some(
       (route) => route.has?.[0]?.value === "sharemariumbookcase.vercel.app",
     ),
+  );
+
+  const legacyBookRedirect = redirects.find(
+    (route) =>
+      route.src === "/book/nanji-hoshi-no-gotoku" &&
+      route.has?.[0]?.value === "book-case-u9uq.vercel.app",
+  );
+  assert.equal(
+    legacyBookRedirect?.headers?.Location,
+    "https://www.sharemarium.com/book/9784065281499",
   );
 });
 

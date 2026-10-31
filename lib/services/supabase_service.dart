@@ -3,8 +3,9 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../api/rakuten_api.dart';
+import '../api/ndl_api.dart';
 import '../models/book.dart';
 import 'legal_document_versions.dart';
 import '../models/user_profile.dart';
@@ -18,6 +19,7 @@ import 'content_safety_service.dart';
 import 'input_security_service.dart';
 import 'timeline_ranking_service.dart';
 import '../utils/dev_logger.dart';
+import '../utils/public_user_id.dart';
 
 // Kept for local troubleshooting. `debugLog` is silent outside debug builds.
 void debugPrint(String? message, {int? wrapWidth}) {
@@ -77,6 +79,9 @@ class SupabaseService extends ChangeNotifier {
   static const int standardFavoriteLimit = 3;
   static const int subscriberFavoriteLimit = 12;
   static const int premiumFavoriteLimit = 2147483647;
+  static const String _privacyRecoveryIntentStartedAtKey =
+      'privacy_password_recovery_started_at';
+  static const Duration _privacyRecoveryIntentLifetime = Duration(minutes: 15);
 
   static final SupabaseService _instance = SupabaseService._internal();
   factory SupabaseService() => _instance;
@@ -93,6 +98,7 @@ class SupabaseService extends ChangeNotifier {
   String _activePageColorKey = ProfilePageColors.defaultKey;
   Timer? _sessionGuardTimer;
   Future<bool>? _canUseWantToReadFuture;
+  final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
   // ----- Initialization ----------------------------------------------------
   Future<void> initialize({
@@ -167,6 +173,58 @@ class SupabaseService extends ChangeNotifier {
   bool get canWrite => isAuthenticated;
 
   User? get currentUser => _client?.auth.currentUser;
+
+  /// The OAuth provider that owns the current Sharemarium account.
+  ///
+  /// Privacy-password recovery must use this same provider. Never ask the
+  /// user to type their Google/X password into Sharemarium itself.
+  String? get currentOAuthProvider {
+    final provider = currentUser?.appMetadata['provider']?.toString();
+    return switch (provider) {
+      'google' => 'google',
+      'twitter' || 'x' => 'x',
+      _ => null,
+    };
+  }
+
+  String? get currentOAuthProviderLabel => switch (currentOAuthProvider) {
+    'google' => 'Google',
+    'x' => 'X',
+    _ => null,
+  };
+
+  Future<void> _rememberPrivacyPasswordRecoveryIntent() async {
+    await _preferences.setString(
+      _privacyRecoveryIntentStartedAtKey,
+      DateTime.now().toUtc().toIso8601String(),
+    );
+  }
+
+  /// Returns whether this browser recently started privacy-password recovery.
+  ///
+  /// Supabase removes OAuth callback query parameters while exchanging the
+  /// authorization code. The short-lived local marker preserves only the UI
+  /// destination; the database still requires the same user/provider and a
+  /// fresh OAuth AMR entry before accepting a new password.
+  Future<bool> hasPendingPrivacyPasswordRecoveryIntent() async {
+    final raw = await _preferences.getString(
+      _privacyRecoveryIntentStartedAtKey,
+    );
+    final startedAt = raw == null ? null : DateTime.tryParse(raw)?.toUtc();
+    if (startedAt == null) {
+      await clearPrivacyPasswordRecoveryIntent();
+      return false;
+    }
+
+    final age = DateTime.now().toUtc().difference(startedAt);
+    final active = !age.isNegative && age <= _privacyRecoveryIntentLifetime;
+    if (!active) await clearPrivacyPasswordRecoveryIntent();
+    return active;
+  }
+
+  Future<void> clearPrivacyPasswordRecoveryIntent() async {
+    await _preferences.remove(_privacyRecoveryIntentStartedAtKey);
+  }
 
   // ----- AUTH -------------------------------------------------------------
   Future<String?> sendMagicLink({required String email}) async {
@@ -270,6 +328,9 @@ class SupabaseService extends ChangeNotifier {
       final started = await _client!.auth.signInWithOAuth(
         provider,
         redirectTo: redirectTo,
+        queryParams: provider == OAuthProvider.google
+            ? const {'prompt': 'select_account'}
+            : null,
       );
       return started ? null : '$labelログインを開始できませんでした。';
     } on AuthException catch (e) {
@@ -620,7 +681,7 @@ class SupabaseService extends ChangeNotifier {
     if (!_isInitialized || _client == null || profileId.isEmpty) return false;
 
     try {
-      final normalized = userId.trim().toLowerCase();
+      final normalized = normalizePublicUserId(userId);
       final existing = await _client!
           .from('profiles')
           .select('id')
@@ -635,7 +696,9 @@ class SupabaseService extends ChangeNotifier {
   }
 
   Future<String?> completeRegistration({
-    required String fullName,
+    required String familyName,
+    required String givenName,
+    required String gender,
     required DateTime birthDate,
     required String phoneNumber,
     required String username,
@@ -648,12 +711,23 @@ class SupabaseService extends ChangeNotifier {
       return 'ログイン状態を確認できませんでした。';
     }
 
-    final fullNameError = InputSecurityService.validateSafeText(
-      fullName,
-      fieldLabel: '氏名',
-      maxLength: 100,
+    final familyNameError = InputSecurityService.validateSafeText(
+      familyName,
+      fieldLabel: '姓',
+      maxLength: 50,
     );
-    if (fullNameError != null) return fullNameError;
+    if (familyNameError != null) return familyNameError;
+
+    final givenNameError = InputSecurityService.validateSafeText(
+      givenName,
+      fieldLabel: '名',
+      maxLength: 50,
+    );
+    if (givenNameError != null) return givenNameError;
+
+    if (!_allowedAccountGenders.contains(gender)) {
+      return '性別を選択してください。';
+    }
 
     final usernameError = InputSecurityService.validateSafeText(
       username,
@@ -662,21 +736,67 @@ class SupabaseService extends ChangeNotifier {
     );
     if (usernameError != null) return usernameError;
 
+    final userIdError = validatePublicUserId(userId);
+    if (userIdError != null) return userIdError;
+
     try {
       await _ensureProfile(userId: profileId);
-      await _client!.rpc(
-        'complete_registration',
-        params: {
-          'p_full_name': fullName.trim(),
-          'p_birth_date': birthDate.toIso8601String().split('T').first,
-          'p_phone_number': _normalizePhoneNumber(phoneNumber),
-          'p_username': username.trim(),
-          'p_user_id': userId.trim().toLowerCase(),
-          'p_privacy_password': privacyPassword,
-          'p_guardian_consent': guardianConsentDeclared,
-          'p_terms_version': LegalDocumentVersions.terms,
-        },
-      );
+      final birthDateValue = birthDate.toIso8601String().split('T').first;
+      final phoneValue = _normalizePhoneNumber(phoneNumber);
+      final normalizedUserId = normalizePublicUserId(userId);
+      try {
+        await _client!.rpc(
+          'complete_registration',
+          params: {
+            'p_family_name': familyName.trim(),
+            'p_given_name': givenName.trim(),
+            'p_gender': gender,
+            'p_birth_date': birthDateValue,
+            'p_phone_number': phoneValue,
+            'p_username': username.trim(),
+            'p_user_id': normalizedUserId,
+            'p_privacy_password': privacyPassword,
+            'p_guardian_consent': guardianConsentDeclared,
+            'p_terms_version': LegalDocumentVersions.terms,
+          },
+        );
+      } on PostgrestException catch (e) {
+        if (!_isGenderSchemaUnavailable(e) &&
+            !_isSplitNameSchemaUnavailable(e)) {
+          rethrow;
+        }
+        try {
+          await _client!.rpc(
+            'complete_registration',
+            params: {
+              'p_family_name': familyName.trim(),
+              'p_given_name': givenName.trim(),
+              'p_birth_date': birthDateValue,
+              'p_phone_number': phoneValue,
+              'p_username': username.trim(),
+              'p_user_id': normalizedUserId,
+              'p_privacy_password': privacyPassword,
+              'p_guardian_consent': guardianConsentDeclared,
+              'p_terms_version': LegalDocumentVersions.terms,
+            },
+          );
+        } on PostgrestException catch (splitNameError) {
+          if (!_isSplitNameSchemaUnavailable(splitNameError)) rethrow;
+          await _client!.rpc(
+            'complete_registration',
+            params: {
+              'p_full_name': '${familyName.trim()} ${givenName.trim()}',
+              'p_birth_date': birthDateValue,
+              'p_phone_number': phoneValue,
+              'p_username': username.trim(),
+              'p_user_id': normalizedUserId,
+              'p_privacy_password': privacyPassword,
+              'p_guardian_consent': guardianConsentDeclared,
+              'p_terms_version': LegalDocumentVersions.terms,
+            },
+          );
+        }
+      }
       _cachedRegistrationUserId = profileId;
       _hasCompletedRegistrationCache = true;
       notifyListeners();
@@ -706,18 +826,66 @@ class SupabaseService extends ChangeNotifier {
     return source.trim().replaceAll(RegExp(r'[^0-9+]'), '');
   }
 
+  static const Set<String> _allowedAccountGenders = {
+    'female',
+    'male',
+    'undisclosed',
+  };
+
+  bool _isGenderSchemaUnavailable(PostgrestException error) {
+    final message = error.message.toLowerCase();
+    return error.code == 'PGRST202' ||
+        error.code == 'PGRST204' ||
+        error.code == '42703' ||
+        message.contains('gender');
+  }
+
+  bool _isSplitNameSchemaUnavailable(PostgrestException error) {
+    final message = error.message.toLowerCase();
+    return error.code == 'PGRST202' ||
+        error.code == 'PGRST204' ||
+        error.code == '42703' ||
+        message.contains('family_name') ||
+        message.contains('given_name');
+  }
+
   Future<Map<String, dynamic>?> fetchCurrentAccountDetails() async {
     final profileId = activeProfileId;
     if (!_isInitialized || _client == null || profileId.isEmpty) return null;
 
     try {
-      return await _client!
-          .from('account_details')
-          .select(
-            'full_name, birth_date, phone_number, phone_verified_at, updated_at',
-          )
-          .eq('profile_id', profileId)
-          .maybeSingle();
+      try {
+        return await _client!
+            .from('account_details')
+            .select(
+              'family_name, given_name, full_name, gender, birth_date, phone_number, phone_verified_at, updated_at',
+            )
+            .eq('profile_id', profileId)
+            .maybeSingle();
+      } on PostgrestException catch (e) {
+        if (!_isGenderSchemaUnavailable(e) &&
+            !_isSplitNameSchemaUnavailable(e)) {
+          rethrow;
+        }
+        try {
+          return await _client!
+              .from('account_details')
+              .select(
+                'family_name, given_name, full_name, birth_date, phone_number, phone_verified_at, updated_at',
+              )
+              .eq('profile_id', profileId)
+              .maybeSingle();
+        } on PostgrestException catch (splitNameError) {
+          if (!_isSplitNameSchemaUnavailable(splitNameError)) rethrow;
+          return await _client!
+              .from('account_details')
+              .select(
+                'full_name, birth_date, phone_number, phone_verified_at, updated_at',
+              )
+              .eq('profile_id', profileId)
+              .maybeSingle();
+        }
+      }
     } catch (e) {
       debugPrint('Error fetching account details: $e');
       return null;
@@ -965,44 +1133,55 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
-  Future<String?> updatePrivateAccountDetails({
+  Future<String?> updateOwnPrivateContactDetails({
     required String password,
-    required String fullName,
-    required DateTime birthDate,
+    required String familyName,
+    required String givenName,
+    required String gender,
+    required DateTime? birthDate,
     required String phoneNumber,
-    required String email,
   }) async {
     if (!_isInitialized || _client == null || !isAuthenticated) {
       return 'ログイン状態を確認できませんでした。';
     }
 
-    final fullNameError = InputSecurityService.validateSafeText(
-      fullName,
-      fieldLabel: '氏名',
-      maxLength: 100,
-    );
-    if (fullNameError != null) return fullNameError;
+    if (!_allowedAccountGenders.contains(gender)) {
+      return '性別を選択してください。';
+    }
 
     try {
       final verified = await verifyPrivacyPassword(password);
       if (!verified) return 'パスワードが正しくありません。';
 
-      final normalizedEmail = email.trim();
-      if (normalizedEmail != (currentUser?.email ?? '')) {
-        await _client!.auth.updateUser(
-          UserAttributes(email: normalizedEmail),
-          emailRedirectTo: _redirectUrl,
+      final phoneValue = _normalizePhoneNumber(phoneNumber);
+      dynamic updated;
+      try {
+        updated = await _client!.rpc(
+          'update_own_private_contact_details',
+          params: {
+            'p_password': password,
+            'p_gender': gender,
+            'p_phone_number': phoneValue,
+          },
+        );
+      } on PostgrestException catch (error) {
+        // Keep the production client usable during the short interval between
+        // deploying this client and applying the audited-data migration. The
+        // fallback sends the already loaded immutable values unchanged and is
+        // used only when PostgREST cannot find the new function.
+        if (error.code != 'PGRST202' || birthDate == null) rethrow;
+        updated = await _client!.rpc(
+          'update_private_account_details',
+          params: {
+            'p_password': password,
+            'p_family_name': familyName.trim(),
+            'p_given_name': givenName.trim(),
+            'p_gender': gender,
+            'p_birth_date': birthDate.toIso8601String().split('T').first,
+            'p_phone_number': phoneValue,
+          },
         );
       }
-      final updated = await _client!.rpc(
-        'update_private_account_details',
-        params: {
-          'p_password': password,
-          'p_full_name': fullName.trim(),
-          'p_birth_date': birthDate.toIso8601String().split('T').first,
-          'p_phone_number': _normalizePhoneNumber(phoneNumber),
-        },
-      );
       if (updated != true) return 'パスワードが正しくありません。';
       notifyListeners();
       return null;
@@ -1047,36 +1226,44 @@ class SupabaseService extends ChangeNotifier {
     if (!_isInitialized || _client == null || !isAuthenticated) {
       return 'ログイン状態を確認できませんでした。';
     }
+    // Sharemarium currently offers Google and X login only. Do not fall back
+    // to an email password or silently create an unrelated account.
+    final provider = currentUser?.appMetadata['provider']?.toString() ?? '';
+    if (!const {'google', 'twitter', 'x'}.contains(provider)) {
+      return 'パスワードの再設定はGoogleまたはXでログインしたアカウントのみ対応しています。';
+    }
     try {
-      final provider = currentUser?.appMetadata['provider']?.toString() ?? '';
+      // The database records the current UID/provider/time before redirecting.
+      // The password can only be changed after a *fresh* matching OAuth login.
       await _client!.rpc('begin_privacy_password_recovery');
-      switch (provider) {
-        case 'google':
-          return _signInWithSocialProvider(
-            OAuthProvider.google,
-            label: 'Google',
-            privacyRecovery: true,
-          );
-        case 'twitter':
-        case 'x':
-          return _signInWithSocialProvider(
-            OAuthProvider.x,
-            label: 'X',
-            privacyRecovery: true,
-          );
-        case 'facebook':
-          return signInWithFacebook(privacyRecovery: true);
-        case 'apple':
-          return signInWithApple(privacyRecovery: true);
-        case 'discord':
-          return signInWithDiscord(privacyRecovery: true);
-        default:
-          return 'このログイン方法では再認証できません。お問い合わせからご連絡ください。';
-      }
+      await _rememberPrivacyPasswordRecoveryIntent();
+      final error = provider == 'google'
+          ? await _signInWithSocialProvider(
+              OAuthProvider.google,
+              label: 'Google',
+              privacyRecovery: true,
+            )
+          : await _signInWithSocialProvider(
+              OAuthProvider.x,
+              label: 'X',
+              privacyRecovery: true,
+            );
+      if (error != null) await clearPrivacyPasswordRecoveryIntent();
+      return error;
+    } on AuthException catch (e) {
+      await clearPrivacyPasswordRecoveryIntent();
+      debugPrint('Privacy OAuth reauthentication failed: ${e.message}');
+      return '連携サービスでの本人確認を開始できませんでした。';
     } on PostgrestException catch (e) {
-      return e.message;
-    } catch (e) {
+      await clearPrivacyPasswordRecoveryIntent();
+      if (e.code == '22023') {
+        return 'Google・X以外のログイン方法では再設定できません。';
+      }
       return '本人確認を開始できませんでした。';
+    } catch (e) {
+      await clearPrivacyPasswordRecoveryIntent();
+      debugPrint('Privacy password recovery start failed: $e');
+      return '本人確認を開始できませんでした。時間をおいて再度お試しください。';
     }
   }
 
@@ -1438,7 +1625,8 @@ class SupabaseService extends ChangeNotifier {
             bookId.isNotEmpty) {
           bookTitle = bookCache[bookId];
           if (bookTitle == null) {
-            final book = await RakutenApi.fetchBookById(bookId);
+            final candidates = await NdlApi.search(isbn: bookId, count: 1);
+            final book = candidates.isEmpty ? null : candidates.first;
             bookTitle = book?.title ?? bookId;
             bookCache[bookId] = bookTitle;
           }
@@ -1518,6 +1706,20 @@ class SupabaseService extends ChangeNotifier {
           .select('id')
           .eq('profile_id', userId)
           .eq('bundle_version', LegalDocumentVersions.bundle)
+          .eq('terms_version', LegalDocumentVersions.terms)
+          .eq('privacy_version', LegalDocumentVersions.privacy)
+          .eq(
+            'community_guidelines_version',
+            LegalDocumentVersions.communityGuidelines,
+          )
+          .eq(
+            'infringement_policy_version',
+            LegalDocumentVersions.infringementPolicy,
+          )
+          .eq(
+            'external_transmission_version',
+            LegalDocumentVersions.externalTransmission,
+          )
           .maybeSingle();
       _cachedConsentUserId = userId;
       _hasCurrentLegalConsentCache = consent != null;
@@ -1657,6 +1859,66 @@ class SupabaseService extends ChangeNotifier {
   Future<List<Book>> fetchBooksByGenre(String genre) async {
     // No direct books table; return empty list.
     return [];
+  }
+
+  /// Public Sharemarium activity, not a store bestseller list.
+  /// Do not count private, suspended or age-restricted profiles/posts.
+  Future<List<Book>> fetchPopularBooks({int limit = 100}) async {
+    if (!_isInitialized || _client == null) return const <Book>[];
+    try {
+      final rows = await _client!
+          .from('posts')
+          .select(
+            'book_id,book_title,book_author,rating,'
+            'profiles:profiles!posts_profile_id_fkey!inner(is_private,is_suspended)',
+          )
+          .eq('is_age_restricted', false)
+          .eq('profiles.is_private', false)
+          .eq('profiles.is_suspended', false)
+          .order('created_at', ascending: false)
+          .limit(300);
+      final counts = <String, int>{};
+      final scores = <String, double>{};
+      final firstSeen = <String, int>{};
+      final titles = <String, String>{};
+      final authors = <String, String>{};
+      for (final row in rows as List<dynamic>) {
+        if (row is! Map) continue;
+        final isbn = (row['book_id']?.toString() ?? '').trim();
+        if (!RegExp(r'^(?:[0-9]{13}|[0-9]{9}[0-9Xx])$').hasMatch(isbn)) continue;
+        counts[isbn] = (counts[isbn] ?? 0) + 1;
+        final rating = row['rating'];
+        scores[isbn] = (scores[isbn] ?? 0) + (rating is num ? rating.toDouble() : 0);
+        firstSeen.putIfAbsent(isbn, () => firstSeen.length);
+        final title = (row['book_title']?.toString() ?? '').trim();
+        if (title.isNotEmpty) titles.putIfAbsent(isbn, () => title);
+        final author = (row['book_author']?.toString() ?? '').trim();
+        if (author.isNotEmpty) authors.putIfAbsent(isbn, () => author);
+      }
+      final sorted = counts.keys.toList()
+        ..sort((a, b) {
+          final popularity = (counts[b] ?? 0).compareTo(counts[a] ?? 0);
+          return popularity != 0
+              ? popularity
+              : (firstSeen[a] ?? 99999).compareTo(firstSeen[b] ?? 99999);
+        });
+      return sorted.take(limit).map((isbn) => Book(
+        id: isbn,
+        isbn: isbn,
+        title: titles[isbn] ?? 'ISBN $isbn',
+        author: authors[isbn] ?? '',
+        publisher: '',
+        pubDate: '',
+        coverUrl: '',
+        reviewCount: counts[isbn] ?? 0,
+        ratingAvg: counts[isbn] == null ? 0 : (scores[isbn] ?? 0) / counts[isbn]!,
+        genre: '人気作品',
+        catalogSource: 'user_post',
+      )).toList(growable: false);
+    } catch (e) {
+      debugPrint('Unable to rank public books by Sharemarium activity: $e');
+      return const <Book>[];
+    }
   }
 
   Future<List<Post>> fetchTimelinePosts() async {
@@ -2009,7 +2271,7 @@ class SupabaseService extends ChangeNotifier {
       final resolved = await Future.wait(
         rows.map((row) async {
           final id = row['book_id']?.toString() ?? '';
-          final apiBook = await RakutenApi.fetchBookById(id);
+          final apiBook = await NdlApi.fetchBookById(id);
           if (apiBook != null) return apiBook;
           return Book(
             id: id,
@@ -2022,7 +2284,13 @@ class SupabaseService extends ChangeNotifier {
           );
         }),
       );
-      return resolved.where((book) => book.id.isNotEmpty).toList();
+      final books = resolved
+          .where((book) => book.id.isNotEmpty)
+          .toList(growable: false);
+      if (await canViewAdultContent()) return books;
+      return books
+          .where((book) => !ContentSafetyService.isAdultBook(book))
+          .toList(growable: false);
     } catch (e) {
       debugPrint('Error fetching want-to-read shelf: $e');
       return [];
@@ -2086,7 +2354,7 @@ class SupabaseService extends ChangeNotifier {
 
     Future<Book?> getBook(String bookId) async {
       if (cache.containsKey(bookId)) return cache[bookId];
-      final found = await RakutenApi.fetchBookById(bookId);
+      final found = await NdlApi.fetchBookById(bookId);
       cache[bookId] = found;
       return found;
     }
@@ -2286,7 +2554,7 @@ class SupabaseService extends ChangeNotifier {
     if (bookIds.isEmpty) return [];
 
     final results = await Future.wait(
-      bookIds.map((id) => RakutenApi.fetchBookById(id)),
+      bookIds.map((id) => NdlApi.fetchBookById(id)),
     );
 
     final books = <Book>[];
@@ -2314,7 +2582,10 @@ class SupabaseService extends ChangeNotifier {
         ),
       );
     }
-    return books;
+    if (await canViewAdultContent()) return books;
+    return books
+        .where((book) => !ContentSafetyService.isAdultBook(book))
+        .toList(growable: false);
   }
 
   Future<void> _upsertReadCollection({
@@ -2585,6 +2856,93 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>?> adminReadPrivateAccountDetails({
+    required String targetIdentifier,
+    required String adminPassword,
+    required String reason,
+    required String requestReference,
+  }) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return null;
+    if (!await isCurrentUserAdmin()) return null;
+    if (targetIdentifier.trim().isEmpty ||
+        adminPassword.isEmpty ||
+        reason.trim().length < 10 ||
+        requestReference.trim().isEmpty) {
+      return null;
+    }
+    try {
+      final value = await _client!.rpc(
+        'admin_read_private_account_details',
+        params: {
+          'p_target_identifier': targetIdentifier.trim(),
+          'p_admin_password': adminPassword,
+          'p_reason': reason.trim(),
+          'p_request_reference': requestReference.trim(),
+        },
+      );
+      if (value is Map) return Map<String, dynamic>.from(value);
+      return null;
+    } catch (e) {
+      debugPrint('Private account access was denied or failed.');
+      return null;
+    }
+  }
+
+  Future<List<String>?> adminUpdatePrivateAccountDetails({
+    required String targetIdentifier,
+    required String adminPassword,
+    required String reason,
+    required String requestReference,
+    required String familyName,
+    required String givenName,
+    required DateTime birthDate,
+    required String phoneNumber,
+    required String gender,
+  }) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return null;
+    if (!await isCurrentUserAdmin()) return null;
+    final familyNameError = InputSecurityService.validateSafeText(
+      familyName,
+      fieldLabel: '姓',
+      maxLength: 50,
+    );
+    final givenNameError = InputSecurityService.validateSafeText(
+      givenName,
+      fieldLabel: '名',
+      maxLength: 50,
+    );
+    if (familyNameError != null ||
+        givenNameError != null ||
+        targetIdentifier.trim().isEmpty ||
+        adminPassword.isEmpty ||
+        reason.trim().length < 10 ||
+        requestReference.trim().isEmpty ||
+        !_allowedAccountGenders.contains(gender)) {
+      return null;
+    }
+    try {
+      final value = await _client!.rpc(
+        'admin_update_private_account_details',
+        params: {
+          'p_target_identifier': targetIdentifier.trim(),
+          'p_admin_password': adminPassword,
+          'p_reason': reason.trim(),
+          'p_request_reference': requestReference.trim(),
+          'p_family_name': familyName.trim(),
+          'p_given_name': givenName.trim(),
+          'p_birth_date': birthDate.toIso8601String().split('T').first,
+          'p_phone_number': _normalizePhoneNumber(phoneNumber),
+          'p_gender': gender,
+        },
+      );
+      if (value is List) return value.map((item) => item.toString()).toList();
+      return null;
+    } catch (e) {
+      debugPrint('Private account correction was denied or failed.');
+      return null;
+    }
+  }
+
   Future<List<FeaturedBook>> fetchFeaturedBooks({
     bool includeScheduled = false,
   }) async {
@@ -2635,8 +2993,13 @@ class SupabaseService extends ChangeNotifier {
         'book_title': book.title.trim(),
         'book_author': book.author.trim(),
         'book_publisher': book.publisher.trim(),
-        'book_cover_url': book.coverUrl.trim(),
-        'book_description': book.description.trim(),
+        // Keep curated book identity and editorial choices, not the
+        // third-party Rakuten cover/description as permanent database copies.
+        // Fresh catalog images and descriptions are resolved on demand.
+        'book_cover_url': '',
+        'book_description': '',
+        'book_metadata_source': book.catalogSource,
+        'book_metadata_observed_at': book.catalogFetchedAt?.toUtc().toIso8601String(),
         'related_screen_titles': relatedScreenTitles
             .map((value) => value.trim())
             .where((value) => value.isNotEmpty)
@@ -3009,7 +3372,12 @@ class SupabaseService extends ChangeNotifier {
           'book_title': book.title,
           'book_author': book.author,
           'book_publisher': book.publisher,
-          'book_description': book.description,
+          // Product descriptions can be Rakuten-owned API data. Do not create
+          // new permanent copies in public posts; the user-authored comment
+          // and book ISBN/title/author remain intact.
+          'book_description': '',
+          'book_metadata_source': book.catalogSource,
+          'book_metadata_observed_at': book.catalogFetchedAt?.toUtc().toIso8601String(),
           'is_age_restricted': isAgeRestricted,
           'rating': rating,
           'comment': normalizedComment,

@@ -29,8 +29,8 @@
           "value": "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
         },
         {
-          "key": "Content-Security-Policy-Report-Only",
-          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://adm.shinobi.jp; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-src https:; worker-src 'self' blob:; manifest-src 'self'"
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://adm.shinobi.jp https://*.shinobi.jp https://admax.cnobi.jp https://*.cnobi.jp; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-src https:; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests"
         }
       ]
     },
@@ -77,6 +77,32 @@
     }
   ],
   "routes": [
+    {
+      "src": "/book/nanji-hoshi-no-gotoku",
+      "has": [
+        {
+          "type": "host",
+          "value": "book-case-u9uq.vercel.app"
+        }
+      ],
+      "status": 308,
+      "headers": {
+        "Location": "https://www.sharemarium.com/book/9784065281499"
+      }
+    },
+    {
+      "src": "/book/nanji-hoshi-no-gotoku",
+      "has": [
+        {
+          "type": "host",
+          "value": "sharemariumbookcase.vercel.app"
+        }
+      ],
+      "status": 308,
+      "headers": {
+        "Location": "https://www.sharemarium.com/book/9784065281499"
+      }
+    },
     {
       "src": "/(.*)",
       "has": [

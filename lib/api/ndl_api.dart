@@ -1,142 +1,292 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
+
 import '../models/book.dart';
 
-class NdlApi {
-  // 📌 新しい国会図書館サーチ（OpenSearch API）のエンドポイントURL
-  static const _baseUrl = 'https://ndlsearch.ndl.go.jp/api/opensearch';
+/// One raw NDL OpenSearch window and its pagination information.
+/// Raw item counts matter: some NDL records do not carry an ISBN, but still
+/// occupy slots in the upstream result page.
+class NdlSearchBatch {
+  const NdlSearchBatch({
+    required this.books,
+    required this.rawCount,
+    required this.hasMore,
+  });
 
-  /// 📌 画面から選択されたジャンル名（例: '文学', '話題の本', 'English' など）を受け取り、
-  /// 自動的に分類コード（NDC）または検索キーワード（any）に切り替えて国会図書館から本を取得します。
+  final List<Book> books;
+  final int rawCount;
+  final bool hasMore;
+}
+
+class NdlApi {
+  static const _base = '/api/ndl';
+  static const national = 'iss-ndl-opac-national';
+  static const inProcess = 'iss-ndl-opac-inprocess';
+  static const holdings = 'iss-ndl-opac';
+
+  static Uri searchUri({
+    String? any,
+    String? title,
+    String? creator,
+    String? publisher,
+    String? isbn,
+    String? ndc,
+    String? from,
+    String? until,
+    String provider = national,
+    int start = 1,
+    int count = 20,
+  }) => Uri(path: _base, queryParameters: {
+    'dpid': provider,
+    'idx': start.toString(),
+    'cnt': count.toString(),
+    'mediatype': 'books',
+    if (any != null && any.isNotEmpty) 'any': any,
+    if (title != null && title.isNotEmpty) 'title': title,
+    if (creator != null && creator.isNotEmpty) 'creator': creator,
+    if (publisher != null && publisher.isNotEmpty) 'publisher': publisher,
+    if (isbn != null && isbn.isNotEmpty) 'isbn': isbn,
+    if (ndc != null && ndc.isNotEmpty) 'ndc': ndc,
+    if (from != null && from.isNotEmpty) 'from': from,
+    if (until != null && until.isNotEmpty) 'until': until,
+  });
+
+  static Future<NdlSearchBatch> searchPage({
+    String? any,
+    String? title,
+    String? creator,
+    String? publisher,
+    String? isbn,
+    String? ndc,
+    String? from,
+    String? until,
+    String provider = national,
+    int start = 1,
+    int count = 20,
+    String genre = '',
+  }) async {
+    if (start < 1 || count < 1 || count > 50 || start + count > 501) {
+      return const NdlSearchBatch(books: [], rawCount: 0, hasMore: false);
+    }
+    try {
+      final response = await http.get(searchUri(
+        any: any, title: title, creator: creator, publisher: publisher,
+        isbn: isbn, ndc: ndc, from: from, until: until,
+        provider: provider, start: start, count: count,
+      )).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) {
+        return const NdlSearchBatch(books: [], rawCount: 0, hasMore: false);
+      }
+      return parseSearchPage(utf8.decode(response.bodyBytes),
+          start: start, count: count, genre: genre);
+    } catch (_) {
+      // Do not display unverified or fallback data on an upstream failure.
+      return const NdlSearchBatch(books: [], rawCount: 0, hasMore: false);
+    }
+  }
+
+  static Future<List<Book>> search({
+    String? any,
+    String? title,
+    String? creator,
+    String? publisher,
+    String? isbn,
+    String? ndc,
+    String? from,
+    String? until,
+    String provider = national,
+    int page = 1,
+    int count = 20,
+    String genre = '',
+  }) async {
+    final batch = await searchPage(
+      any: any, title: title, creator: creator, publisher: publisher,
+      isbn: isbn, ndc: ndc, from: from, until: until, provider: provider,
+      start: (page - 1) * count + 1, count: count, genre: genre,
+    );
+    return batch.books;
+  }
+
+  static String? _value(XmlElement item, String name) {
+    for (final element in item.children.whereType<XmlElement>()) {
+      if (element.name.local == name) {
+        final value = element.innerText.trim();
+        if (value.isNotEmpty) return value;
+      }
+    }
+    return null;
+  }
+
+  static String _type(XmlElement element) {
+    for (final attr in element.attributes) {
+      if (attr.name.local == 'type') return attr.value.toLowerCase();
+    }
+    return '';
+  }
+
+  static String _isbn(XmlElement item) {
+    final identifiers = item.descendants.whereType<XmlElement>()
+        .where((node) => node.name.local == 'identifier').toList();
+    // Prefer an identifier explicitly typed as ISBN over arbitrary numeric IDs.
+    identifiers.sort((a, b) {
+      final ai = _type(a).contains('isbn') ? 0 : 1;
+      final bi = _type(b).contains('isbn') ? 0 : 1;
+      return ai.compareTo(bi);
+    });
+    for (final element in identifiers) {
+      final value = element.innerText.trim();
+      final typed = _type(element).contains('isbn') ||
+          value.toLowerCase().contains('isbn');
+      final match = RegExp(r'(?:^|[^0-9])((?:97[89][0-9]{10}|[0-9]{9}[0-9Xx]))(?:$|[^0-9])')
+          .firstMatch(value);
+      if (match != null && (typed || RegExp(r'^(?:[0-9]{13}|[0-9]{9}[0-9Xx])$').hasMatch(value))) {
+        return match.group(1)!.toUpperCase();
+      }
+    }
+    return '';
+  }
+
+  static String _ndc(XmlElement item) {
+    for (final element in item.descendants.whereType<XmlElement>()) {
+      if (element.name.local != 'subject' || !_type(element).contains('ndc')) continue;
+      final value = element.innerText.trim();
+      if (RegExp(r'^[0-9]{1,3}(?:\.[0-9]+)?$').hasMatch(value)) return value;
+    }
+    return '';
+  }
+
+  static NdlSearchBatch parseSearchPage(String xml, {
+    int start = 1,
+    int count = 20,
+    String genre = '',
+  }) {
+    final document = XmlDocument.parse(xml);
+    final items = document.findAllElements('item').toList(growable: false);
+    final result = <Book>[];
+    final seen = <String>{};
+    for (final item in items) {
+      final title = _value(item, 'title') ?? '';
+      final isbn = _isbn(item);
+      if (title.isEmpty || isbn.isEmpty || !seen.add(isbn)) continue;
+      result.add(Book(
+        id: isbn,
+        isbn: isbn,
+        title: title,
+        author: _value(item, 'creator') ?? _value(item, 'author') ?? '',
+        publisher: _value(item, 'publisher') ?? '',
+        pubDate: _value(item, 'issued') ?? _value(item, 'date') ?? '',
+        coverUrl: '',
+        genre: genre,
+        description: _value(item, 'description') ?? '',
+        languageCode: (_value(item, 'language') ?? '').toLowerCase(),
+        ndcCode: _ndc(item),
+        catalogSource: 'ndl',
+        catalogFetchedAt: DateTime.now().toUtc(),
+      ));
+    }
+    int? total;
+    for (final element in document.descendants.whereType<XmlElement>()) {
+      if (element.name.local == 'totalResults') {
+        total = int.tryParse(element.innerText.trim());
+        break;
+      }
+    }
+    final hasMore = total != null
+        ? start + items.length - 1 < total && items.isNotEmpty
+        : items.length == count;
+    return NdlSearchBatch(
+      books: result,
+      rawCount: items.length,
+      hasMore: hasMore && start + items.length <= 500,
+    );
+  }
+
+  static List<Book> parseBooks(String xml, {String genre = ''}) =>
+      parseSearchPage(xml, genre: genre).books;
+
+  static Future<Book?> fetchBookById(String id) async {
+    final isbn = id.replaceAll(RegExp(r'[^0-9Xx]'), '').toUpperCase();
+    if (!RegExp(r'^(?:[0-9]{13}|[0-9]{9}[0-9X])$').hasMatch(isbn)) {
+      return null;
+    }
+    for (final provider in const [inProcess, national, holdings]) {
+      final candidates = await search(isbn: isbn, provider: provider, count: 5);
+      for (final item in candidates) {
+        if (item.isbn == isbn) return item;
+      }
+    }
+    return null;
+  }
+
+  /// The same public section labels as before. NDC is a prefix match and does
+  /// not have the same classification boundaries as Rakuten Books genres.
   static Future<List<Book>> searchBySelectedGenre({
     required String selectedGenre,
     int page = 1,
     int count = 10,
   }) async {
-    String ndcCode = '';
-    String keyword = '';
-
-    // 1. 画面から渡された文字列を解析し、分類コード(NDC)か一般キーワード(any)かを自動でマッピング
-    if (selectedGenre.contains('文学') || selectedGenre.contains('小説')) {
-      ndcCode = '9*'; // 900〜999 (文学)
-    } else if (selectedGenre.contains('ビジネス') || selectedGenre.contains('産業')) {
-      ndcCode = '6*'; // 600〜699 (産業・ビジネス)
+    String? ndc;
+    String? any;
+    String? from;
+    var provider = national;
+    if (selectedGenre.contains('新着')) {
+      provider = inProcess;
+      from = DateTime.now().subtract(const Duration(days: 365))
+          .toIso8601String().substring(0, 10);
+    } else if (selectedGenre.contains('English') ||
+        selectedGenre.contains('洋書')) {
+      provider = holdings;
+      // The OpenSearch interface has no verified language-only selector.
+      // Restrict to records that explicitly say 'eng'/'en' below instead of
+      // showing Japanese books merely mentioning the word "English".
+      any = 'English';
+    } else if (selectedGenre.contains('文学') ||
+        selectedGenre.contains('小説')) {
+      ndc = '9';
+    } else if (selectedGenre.contains('漫画') ||
+        selectedGenre.contains('マンガ')) {
+      ndc = '726.1';
+    } else if (selectedGenre.contains('ビジネス') ||
+        selectedGenre.contains('産業')) {
+      ndc = '6';
     } else if (selectedGenre.contains('社会') ||
         selectedGenre.contains('経済') ||
         selectedGenre.contains('法律')) {
-      ndcCode = '3*'; // 300〜399 (社会科学)
-    } else if (selectedGenre.contains('自然科学') ||
+      ndc = '3';
+    } else if (selectedGenre.contains('科学') ||
         selectedGenre.contains('数学') ||
         selectedGenre.contains('医学')) {
-      ndcCode = '4*'; // 400〜499 (自然科学)
-    } else if (selectedGenre.contains('技術') || selectedGenre.contains('工学')) {
-      ndcCode = '5*'; // 500〜599 (技術・工学)
+      ndc = '4';
+    } else if (selectedGenre.contains('技術') ||
+        selectedGenre.contains('工学')) {
+      ndc = '5';
     } else if (selectedGenre.contains('芸術') ||
-        selectedGenre.contains('アート') ||
         selectedGenre.contains('スポーツ')) {
-      ndcCode = '7*'; // 700〜799 (芸術・アート)
-    } else if (selectedGenre.contains('歴史') || selectedGenre.contains('地理')) {
-      ndcCode = '2*'; // 200〜299 (歴史・地理)
+      ndc = '7';
+    } else if (selectedGenre.contains('歴史') ||
+        selectedGenre.contains('地理')) {
+      ndc = '2';
     } else if (selectedGenre.contains('哲学') ||
-        selectedGenre.contains('心理') ||
         selectedGenre.contains('宗教')) {
-      ndcCode = '1*'; // 100〜199 (哲学・宗教)
-    } else if (selectedGenre.contains('言語') || selectedGenre.contains('語学')) {
-      ndcCode = '8*'; // 800〜899 (言語)
-    } else if (selectedGenre.contains('総記') || selectedGenre.contains('情報科学')) {
-      ndcCode = '0*'; // 0000〜099 (総記)
+      ndc = '1';
+    } else if (selectedGenre.contains('言語') ||
+        selectedGenre.contains('語学')) {
+      ndc = '8';
     } else {
-      // 📌 「話題の本」「English」「ベストセラー」や自由な検索文字はすべてキーワード検索に回す
-      keyword = selectedGenre;
+      any = selectedGenre.isEmpty ? '本' : selectedGenre;
     }
-
-    // 2. 基本パラメータの組み立て（cnt=取得件数, startPage=現在のページ, mediatype=1は図書固定）
-    String urlString = '$_baseUrl?cnt=$count&startPage=$page&mediatype=1';
-
-    // NDCコードがあれば付与
-    if (ndcCode.isNotEmpty) {
-      urlString += '&ndc=$ndcCode';
+    final matches = await search(
+      any: any, ndc: ndc, from: from, provider: provider,
+      page: page, count: count, genre: selectedGenre,
+    );
+    if (selectedGenre.contains('English') ||
+        selectedGenre.contains('洋書')) {
+      return matches.where((book) {
+        final lang = book.languageCode.toLowerCase();
+        return lang == 'eng' || lang == 'en' || lang == 'english';
+      }).toList(growable: false);
     }
-
-    // キーワードがあればURL用に安全にエンコード（日本語等の文字化け・エラー防止）して付与
-    if (keyword.isNotEmpty) {
-      urlString += '&any=${Uri.encodeComponent(keyword)}';
-    }
-
-    // 💡 国会図書館APIの仕様上、両方空っぽ（初期表示などで何も指定がない状態）だと
-    // ヒット件数が0件で返ってくるため、最低限「本」という広範なキーワードを安全弁として仕込む
-    if (ndcCode.isEmpty && keyword.isEmpty) {
-      urlString += '&any=${Uri.encodeComponent("本")}';
-    }
-
-    try {
-      final uri = Uri.parse(urlString);
-      final response = await http.get(uri);
-
-      if (response.statusCode != 200) {
-        return [];
-      }
-
-      // utf8.decode で文字化けを完全に防止してXMLをパース
-      final document = XmlDocument.parse(utf8.decode(response.bodyBytes));
-      final itemElements = document.findAllElements('item');
-      final List<Book> books = [];
-
-      for (var element in itemElements) {
-        final title =
-            element.findElements('title').firstOrNull?.innerText ??
-            element.findElements('dc:title').firstOrNull?.innerText ??
-            '不明なタイトル';
-
-        final author =
-            element.findElements('author').firstOrNull?.innerText ??
-            element.findElements('dc:creator').firstOrNull?.innerText ??
-            '不明な著者';
-
-        final link = element.findElements('link').firstOrNull?.innerText ?? '';
-        final publisher =
-            element.findElements('dc:publisher').firstOrNull?.innerText ??
-            '不明な出版社';
-        final pubDate =
-            element.findElements('dcterms:issued').firstOrNull?.innerText ??
-            element.findElements('dc:date').firstOrNull?.innerText ??
-            '';
-
-        // ISBN（バーコード番号）を抽出して、のちの楽天APIでの画像検索のフックにする
-        String isbn = '';
-        final idElements = element.findElements('dc:identifier');
-        for (var idNode in idElements) {
-          final typeAttr = idNode.getAttribute('xsi:type');
-          if (typeAttr != null && typeAttr.contains('ISBN')) {
-            isbn = idNode.innerText.trim();
-            break;
-          }
-        }
-
-        books.add(
-          Book(
-            id: isbn.isNotEmpty
-                ? isbn
-                : (link.isNotEmpty ? link : UniqueKey().toString()),
-            title: title,
-            author: author,
-            publisher: publisher,
-            pubDate: pubDate,
-            isbn: isbn,
-            coverUrl: '', // この後 BookRepository 側で RakutenApi を通じて結合されます
-            genre: selectedGenre,
-            description:
-                element.findElements('dc:description').firstOrNull?.innerText ??
-                '',
-          ),
-        );
-      }
-
-      return books;
-    } catch (e) {
-      return [];
-    }
+    return matches;
   }
 }

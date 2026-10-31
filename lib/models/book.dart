@@ -11,9 +11,20 @@ class Book {
   final double ratingAvg;
   final int reviewCount;
   final String genre;
+  /// The leaf Rakuten Books genre IDs supplied by the catalog, not search labels.
+  /// An item can belong to multiple genres (slash-separated in the API).
+  final List<String> rakutenGenreIds;
   final String description;
   final String rakutenAffiliateUrl;
   final int itemPrice;
+  // Provenance of catalog values: rakuten, ndl, or unverified. This is
+  // separate from permanent user-authored review data and ISBN identity.
+  final bool adultContentFlag;
+  final String ageRatingSource;
+  final String languageCode;
+  final String ndcCode;
+  final String catalogSource;
+  final DateTime? catalogFetchedAt;
 
   const Book({
     required this.id,
@@ -26,10 +37,46 @@ class Book {
     this.ratingAvg = 0.0,
     this.reviewCount = 0,
     this.genre = '',
+    this.rakutenGenreIds = const [],
     this.description = '',
     this.rakutenAffiliateUrl = '',
     this.itemPrice = 0,
+    this.adultContentFlag = false,
+    this.ageRatingSource = 'unknown',
+    this.languageCode = '',
+    this.ndcCode = '',
+    this.catalogSource = 'unverified',
+    this.catalogFetchedAt,
   });
+
+  /// Parse the Rakuten Books `booksGenreId` field without losing leading zeros.
+  /// Ignore missing / malformed values rather than treating them as safe genres.
+  static List<String> parseRakutenGenreIds(Object? value) {
+    final text = value is Iterable
+        ? value.map((part) => part.toString()).join('/')
+        : (value?.toString() ?? '');
+    final ids = <String>[];
+    final seen = <String>{};
+    for (final part in text.split('/')) {
+      final id = part.trim();
+      if (RegExp(r'^\d{3}(?:\d{3})*$').hasMatch(id) && seen.add(id)) {
+        ids.add(id);
+      }
+    }
+    return List<String>.unmodifiable(ids);
+  }
+
+  /// True for an exact genre ID or a child in its 3-digit hierarchy.
+  /// E.g. `001004008` belongs to both `001` and `001004`.
+  bool belongsToRakutenGenre(String genreId) {
+    if (!RegExp(r'^\d{3}(?:\d{3})*$').hasMatch(genreId)) return false;
+    return rakutenGenreIds.any(
+      (id) => id == genreId ||
+          (id.startsWith(genreId) &&
+              id.length > genreId.length &&
+              (id.length - genreId.length) % 3 == 0),
+    );
+  }
 
   // Factory from NDL JSON (simplified)
   factory Book.fromNdlJson(Map<String, dynamic> json) {
@@ -48,6 +95,8 @@ class Book {
       coverUrl: '',
       genre: '',
       description: '',
+      catalogSource: 'ndl',
+      catalogFetchedAt: DateTime.now().toUtc(),
     );
   }
 
@@ -87,8 +136,11 @@ class Book {
       rakutenAffiliateUrl: json['affiliateUrl'] as String? ?? '',
       reviewCount: reviewCount,
       genre: '',
+      rakutenGenreIds: parseRakutenGenreIds(json['booksGenreId']),
       description: '',
       itemPrice: itemPrice,
+      catalogSource: 'rakuten',
+      catalogFetchedAt: DateTime.now().toUtc(),
     );
   }
 
@@ -103,9 +155,16 @@ class Book {
     double? ratingAvg,
     int? reviewCount,
     String? genre,
+    List<String>? rakutenGenreIds,
     String? description,
     String? rakutenAffiliateUrl,
     int? itemPrice,
+    bool? adultContentFlag,
+    String? ageRatingSource,
+    String? languageCode,
+    String? ndcCode,
+    String? catalogSource,
+    DateTime? catalogFetchedAt,
   }) {
     return Book(
       id: id ?? this.id,
@@ -118,9 +177,16 @@ class Book {
       ratingAvg: ratingAvg ?? this.ratingAvg,
       reviewCount: reviewCount ?? this.reviewCount,
       genre: genre ?? this.genre,
+      rakutenGenreIds: rakutenGenreIds ?? this.rakutenGenreIds,
       description: description ?? this.description,
       rakutenAffiliateUrl: rakutenAffiliateUrl ?? this.rakutenAffiliateUrl,
       itemPrice: itemPrice ?? this.itemPrice,
+      adultContentFlag: adultContentFlag ?? this.adultContentFlag,
+      ageRatingSource: ageRatingSource ?? this.ageRatingSource,
+      languageCode: languageCode ?? this.languageCode,
+      ndcCode: ndcCode ?? this.ndcCode,
+      catalogSource: catalogSource ?? this.catalogSource,
+      catalogFetchedAt: catalogFetchedAt ?? this.catalogFetchedAt,
     );
   }
 }

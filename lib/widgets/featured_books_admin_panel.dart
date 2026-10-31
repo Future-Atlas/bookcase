@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../api/rakuten_api.dart';
+import '../repositories/book_repository.dart';
 import '../models/book.dart';
 import '../models/featured_book.dart';
 import '../services/supabase_service.dart';
@@ -48,11 +48,7 @@ class _FeaturedBooksAdminPanelState extends State<FeaturedBooksAdminPanel> {
     final query = _searchController.text.trim();
     if (query.isEmpty || _searching) return;
     setState(() => _searching = true);
-    final results = await RakutenApi.searchByKeyword(
-      keyword: query,
-      page: 1,
-      count: 20,
-    );
+    final results = await BookRepository().searchBooks(query, page: 1, count: 20);
     if (!mounted) return;
     setState(() {
       _results = results;
