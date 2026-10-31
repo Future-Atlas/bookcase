@@ -68,8 +68,9 @@ class BookListController extends ChangeNotifier {
   Map<String, List<PostReply>> timelineReplies = {};
   bool _allowAdultContent = false;
 
-  BookRepository get _repository =>
-      BookRepository(allowAdultContent: _allowAdultContent);
+  BookRepository _catalogRepository = BookRepository();
+
+  BookRepository get _repository => _catalogRepository;
 
   Post? toggleTimelineReactionOptimistically(
     String postId,
@@ -220,7 +221,7 @@ class BookListController extends ChangeNotifier {
 
     try {
       final requestedPage = searchPage;
-      final batch = await _repository.searchBooks(
+      final batch = await _repository.searchBooksPage(
         query,
         page: requestedPage,
         count: 20,
@@ -229,14 +230,14 @@ class BookListController extends ChangeNotifier {
       // 入力中に別の検索が始まった場合は、古い結果を画面へ反映しない。
       if (userSearchMode || query != searchQuery.trim()) return;
 
-      for (final book in batch) {
+      for (final book in batch.books) {
         if (_searchResultIds.add(book.id)) {
           searchResults.add(book);
         }
       }
 
       searchPage = requestedPage + 1;
-      hasMoreSearch = batch.length >= 20;
+      hasMoreSearch = batch.hasMore;
     } finally {
       if (!userSearchMode && query == searchQuery.trim()) {
         isSearching = false;
@@ -267,8 +268,10 @@ class BookListController extends ChangeNotifier {
       }
       Book? fresh;
       try {
-        final books = await NdlApi.search(isbn: normalizedId, count: 1);
-        final enhanced = await OpenBdApi.enrich(books);
+        final found = await NdlApi.fetchBookById(normalizedId);
+        final enhanced = found == null
+            ? const <Book>[]
+            : await OpenBdApi.enrich(<Book>[found]);
         fresh = enhanced.isEmpty ? null : enhanced.first;
       } catch (_) {
         continue;
@@ -311,6 +314,7 @@ class BookListController extends ChangeNotifier {
     notifyListeners();
 
     _allowAdultContent = await SupabaseService().canViewAdultContent();
+    _catalogRepository = BookRepository(allowAdultContent: _allowAdultContent);
     final repository = _repository;
 
     recommendedPage = 1;
