@@ -105,7 +105,23 @@ class NdlApi {
   /// Returning null leaves persistent user data and its title fallback intact.
   static Future<Book?> fetchBookById(String id) async {
     final isbn = id.replaceAll(RegExp(r'[^0-9Xx]'), '').toUpperCase();
-    if (!RegExp(r'^(?:[0-9]{13}|[0-9]{9}[0-9X])
+    if (!RegExp(r'^(?:[0-9]{13}|[0-9]{9}[0-9X])$').hasMatch(isbn)) {
+      return null;
+    }
+    for (final provider in const [
+      'iss-ndl-opac', 'iss-ndl-opac-inprocess',
+    ]) {
+      final candidates = await search(
+        isbn: isbn, provider: provider, count: 5,
+      );
+      for (final item in candidates) {
+        if (item.isbn == isbn) return item;
+      }
+    }
+    return null;
+  }
+
+  static Future<List<Book>> searchBySelectedGenre({
     required String selectedGenre,
     int page = 1,
     int count = 10,
