@@ -31,3 +31,36 @@ test("price is not shown in the Rakuten purchase UI", () => {
   assert.doesNotMatch(source, /_priceLabel/);
   assert.doesNotMatch(source, /destination\.itemPrice/);
 });
+
+
+test("featured books persist editorial identity but not third-party description or cover snapshots", () => {
+  const service = readFileSync("lib/services/supabase_service.dart", "utf8");
+  const start = service.indexOf("Future<bool> adminSaveFeaturedBook(");
+  const end = service.indexOf("Future<bool> adminRemoveFeaturedBook(", start);
+  assert.ok(start >= 0 && end > start);
+  const save = service.slice(start, end);
+  assert.match(save, /'book_id': bookId/);
+  assert.match(save, /'related_screen_titles': relatedScreenTitles/);
+  assert.match(save, /'book_cover_url': ''/);
+  assert.match(save, /'book_description': ''/);
+  assert.doesNotMatch(save, /'book_description': book\.description/);
+  assert.doesNotMatch(save, /'book_cover_url': book\.coverUrl/);
+
+  const model = readFileSync("lib/models/featured_book.dart", "utf8");
+  assert.match(model, /coverUrl: ''/);
+  assert.match(model, /description: ''/);
+  const controller = readFileSync("lib/controllers/book_list_controller.dart", "utf8");
+  assert.match(controller, /_hydrateFeaturedBooks/);
+  assert.match(controller, /RakutenApi\.fetchBookById\(normalizedId\)/);
+});
+
+test("public featured SEO never republishes unverified legacy cover and description snapshots", () => {
+  const seo = readFileSync("api/seo.js", "utf8");
+  const start = seo.indexOf("function renderFeaturedBookList(books) {");
+  const end = seo.indexOf("function rakutenEnabled()", start);
+  assert.ok(start >= 0 && end > start);
+  const list = seo.slice(start, end);
+  assert.match(list, /book\.book_title/);
+  assert.doesNotMatch(list, /book\.book_cover_url/);
+  assert.doesNotMatch(list, /book\.book_description/);
+});
