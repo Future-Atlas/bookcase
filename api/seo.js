@@ -90,7 +90,8 @@ async function fetchFeaturedBooks() {
       "featured_books?select=book_id,book_title,book_author,book_publisher,book_cover_url,book_description,related_screen_titles,priority,starts_at,ends_at&order=priority.asc,created_at.desc",
     )) || [];
   return rows.filter(
-    (row) => row && row.book_id && row.book_title,
+    (row) => row && row.book_id && row.book_title &&
+      !containsAdultTerms([row.book_title, row.book_author, row.book_description]),
   );
 }
 
@@ -239,7 +240,7 @@ async function fetchRakutenSection(sectionTitle, diagnostics, request = requestR
 }
 
 async function fetchNdlSection(sectionTitle, diagnostics) {
-  let queryParams = "cnt=6&idx=1&dpid=open";
+  let queryParams = "cnt=6&idx=1&dpid=iss-ndl-opac-national";
 
   if (sectionTitle === "おすすめの本") {
     queryParams += "&any=%E8%A9%B1%E9%A1%8C%20%E6%9C%AC";
@@ -305,7 +306,7 @@ async function fetchNdlBookByIsbn(isbn, diagnostics) {
   const compact = String(isbn).replace(/[^0-9Xx]/g, "");
   if (compact.length !== 10 && compact.length !== 13) return null;
 
-  const url = `${NDL_OPENSEARCH_API}?cnt=1&idx=1&dpid=open&isbn=${encodeURIComponent(
+  const url = `${NDL_OPENSEARCH_API}?cnt=1&idx=1&dpid=iss-ndl-opac-national&isbn=${encodeURIComponent(
     compact,
   )}`;
   const response = await fetch(url);
@@ -353,7 +354,7 @@ async function fetchPublicReviewsForBook(bookId, diagnostics) {
   try {
     return (
       (await supabaseGet(
-        `posts?book_id=eq.${encodeURIComponent(bookId)}&select=id,comment,is_spoiler,created_at,profiles:profiles!posts_profile_id_fkey!inner(username,is_private,is_suspended)&profiles.is_private=eq.false&profiles.is_suspended=eq.false&order=created_at.desc&limit=50`,
+        `posts?book_id=eq.${encodeURIComponent(bookId)}&is_age_restricted=eq.false&select=id,comment,is_spoiler,created_at,profiles:profiles!posts_profile_id_fkey!inner(username,is_private,is_suspended)&profiles.is_private=eq.false&profiles.is_suspended=eq.false&order=created_at.desc&limit=50`,
       )) || []
     );
   } catch (err) {
