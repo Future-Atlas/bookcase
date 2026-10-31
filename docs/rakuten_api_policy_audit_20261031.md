@@ -28,8 +28,8 @@ technical inventory.
 
 | Source / storage | Current fields | Retention and visibility observed | Risk / proposed rule |
 | --- | --- | --- | --- |
-| `public.posts` | `book_id`, `book_title`, `book_author`, `book_publisher`, legacy `book_description`, plus **user-authored** `comment`, `rating`, `is_spoiler` | Metadata snapshot inserted by `createPost` in `lib/services/supabase_service.dart`; no catalog-source provenance or expiry for historical rows. Public reviews are exposed by RLS/SEO according to profile visibility and spoiler rules. **This PR stops storing vendor descriptions in newly created posts**, leaving historical rows unchanged. | High for legacy description/title/author. Preserve original review/rating/book ID permanently; establish an independent metadata source and expiry for provider-owned fields. |
-| `public.featured_books` | `book_id`, `book_title`, `book_author`, `book_publisher`, `book_cover_url`, `book_description` plus editorial `related_screen_titles`, priority and schedule | Stored by `adminSaveFeaturedBook` as a lasting snapshot; public active books read by Flutter and SEO pages. | High: images/descriptions can remain indefinitely and the SEO featured list currently does not provide item-level Rakuten links. Use curator-owned data/ISBN for long-lived entries; serve vendor metadata only when fresh and linked; migrate legacy snapshots without removing curated selection. |
+| `public.posts` | `book_id`, `book_title`, `book_author`, `book_publisher`, legacy `book_description`, **user-authored** `comment`, `rating`, `is_spoiler`; new `book_metadata_source`/`book_metadata_observed_at` | The new additive migration marks all legacy rows `unverified`, leaves their content untouched, and records the source/timestamp of newly selected books. Newly created posts store an empty API description; reviews remain readable without Rakuten through ISBN-only SEO fallback. | Legacy titles/authors/descriptions have **unresolved** origin and expiry. Never bulk-delete user reviews, ratings or book IDs; establish provenance/rights before remediating old metadata. |
+| `public.featured_books` | ISBN/title/author/publisher, legacy `book_cover_url` and `book_description`, editorial `related_screen_titles`, schedule/priority and new source/timestamp fields | **No new provider cover/description snapshots**: save empty strings in those fields. Flutter ignores undated legacy cover/description snapshots and fetches fresh artwork/synopsis transiently; on API failure, curated book cards and ISBN remain. Crawler featured lists show curated titles without unverified legacy cover/description. | **Remaining risk:** old descriptions/covers still exist in DB awaiting rights/retention review, and stored title/author may still be provider-sourced. Avoid pretending this has resolved the commercial licensing question. |
 | `public.collections`, `favorites`, `want_to_read` | Mainly `book_id` (+ user/timestamps) | Durable user-owned reading history, favorites, want-to-read relationships. Resolved for display by catalog APIs. | Lower: keep these **user-owned records** independent of Rakuten availability; verify every ID's provenance and avoid persisting Rakuten descriptions. |
 | Client `RakutenApi._bookByIdCache` | Book including Rakuten metadata and price | Formerly unbounded lifetime per running app. | Mitigated in this PR: 15-minute TTL. |
 | Cloudflare Worker proxy and SEO | Rakuten search/ISBN, prices, images, description, URLs | Per-IP request throttle was not a global application-ID control; SEO bypassed that throttle. | Mitigated in this PR for **each configured Worker environment** with a dedicated SQLite-backed Durable Object and 5-minute in-memory positive cache. |
@@ -56,10 +56,12 @@ human review, not assumptions or silent data deletions.
   If they share an app ID, both environments and any other clients must route
   through ONE shared external quota service **before enabling the fix in
   production**. Merely matching class names does not share counters.
-- Vercel's manual rollback/fallback path still calls Rakuten directly and does
-  not participate in the global coordinator. **Do not activate an external
-  fallback concurrently using the same app ID until it is routed through that
-  same global service or its API use is explicitly disabled.**
+- Legacy Vercel/serverless entrypoints **fail closed (503)** for Rakuten API
+  requests without Cloudflare's bound coordinator. This prevents quota bypass,
+  but *book search will not work* in a Vercel-only fallback until it forwards
+  through an approved shared quota service. Public original book reviews remain
+  accessible using their ISBN even when Rakuten itself is unavailable.
+  Never set a bypass flag or restore uncoordinated requests to work around this.
 - Before deploying changes to staging, validate Wrangler DO migration and
   secrets, smoke-test 200/429/503 behavior, and verify rate under concurrency.
   DOs have Free-plan allowances but actual account limits/billing must be checked.
@@ -87,15 +89,68 @@ human review, not assumptions or silent data deletions.
 4. **Global quota secret inventory.** Privately confirm all deployments and
    jobs using the same Rakuten application ID, including Vercel fallback.
    No secret values belong in issues or audit documents.
-5. **Independent catalog source.** NDL-created bibliographic metadata can be
-   used commercially subject to terms, but third-party supplied metadata has
-   individual provider conditions. Map allowed fields and licensing before
-   introducing a permanent book-identity table. openBD is **not** unrestricted
-   public-domain book data.
+5. **Independent catalog source.** NDL Search's official API usage guide
+   explicitly treats even an individual site earning **advertising revenue** as
+   commercial use: a usage application/permission is normally required, except
+   for provider records pre-authorized for all purposes (e.g. applicable CC0/PDM
+   sources). Filter by the data-provider rights table; `open` covers explicitly
+   open PDM/CC0 metadata. Never assume NDL-wide or openBD data is commercially
+   reusable without reviewing the individual terms and rights.
 6. **Operator acceptance.** Confirm Rakuten's written guidance, review
    implementation changes, merge to `develop`, validate staging and
    app behavior, then request explicit approval before any `main` PR/merge
    or production release. Keep the existing affiliate action and user data.
+
+## Access-controlled database inventory (counts only)
+
+Run these **read-only** queries in the authorized Supabase SQL editor, after
+the additive migration has been applied to staging. No personal reviews,
+usernames, secrets, or raw book metadata should be pasted in PRs:
+
+```sql
+SELECT book_metadata_source,
+       COUNT(*) AS rows,
+       COUNT(*) FILTER (WHERE book_description <> '') AS rows_with_legacy_description,
+       COUNT(*) FILTER (WHERE book_metadata_observed_at IS NULL) AS unverified_capture_time,
+       MIN(created_at) AS earliest_post,
+       MAX(created_at) AS latest_post
+FROM public.posts
+GROUP BY book_metadata_source
+ORDER BY book_metadata_source;
+
+SELECT book_metadata_source,
+       COUNT(*) AS rows,
+       COUNT(*) FILTER (WHERE book_cover_url <> '') AS rows_with_legacy_cover,
+       COUNT(*) FILTER (WHERE book_description <> '') AS rows_with_legacy_description,
+       COUNT(*) FILTER (WHERE book_metadata_observed_at IS NULL) AS unverified_capture_time,
+       MIN(created_at) AS earliest_curated,
+       MAX(updated_at) AS last_curated_update
+FROM public.featured_books
+GROUP BY book_metadata_source
+ORDER BY book_metadata_source;
+```
+
+**Do not mass-clear historical data without a reviewed migration and backup.**
+The additive provenance columns distinguish newly tagged records from
+unverified historical snapshots; they are **not** proof of licensing or
+permission to retain provider information indefinitely.
+
+### Deployment gates
+
+- The feature branch remains a **draft PR**. Staging DB migration is additive;
+  do not touch production data in this PR.
+- Check all GitHub environment/Cloudflare/Vercel consumers of the Rakuten
+  application ID **without printing secret values**. One quota coordinator
+  per Worker environment does not enforce 1 request/second when the same ID is
+  shared across deployments. The release must be blocked until IDs are
+  distinct or all environments use one genuine shared coordinator.
+- Separately confirm Cloudflare's Durable Object SQLite Free-plan limits,
+  network error behavior and the operator's intended fallback procedures.
+- Official permission regarding Rakuten API pages coexisting with Ninja AdMax
+  remains **unconfirmed**; a legal/business decision is still needed.
+- Before deployment, verify that frontend book search, curated books, post
+  submission, public reviews and all user bookshelf lists work on staging,
+  including simulated upstream 429/unavailability.
 
 ## Acceptance checklist for this first PR
 
@@ -104,8 +159,12 @@ human review, not assumptions or silent data deletions.
 - [x] Remove untimestamped price from the Rakuten purchase action.
 - [x] Expire frontend cache; bound Worker cache; dedupe and centralize per-env quota.
 - [x] Stop copying vendor description into new permanent post rows while retaining comments and ISBN.
+- [x] Stop creating permanent featured-book cover/description snapshots; hide unverified legacy content and use short-lived on-demand metadata.
+- [x] Keep substantive original public reviews visible even during upstream outages using ISBN-only fallback.
+- [x] Track explicit source/timestamps for new post and featured metadata; legacy rows default to `unverified`.
+- [x] Fail closed on legacy Vercel direct API paths to prevent quota bypass.
 - [x] Validate merchant URLs and add them to crawled catalog content.
-- [ ] Historical persistence/source migration, provider-specific licensing.
+- [ ] Historical metadata rights review, retention/cleanup migration and independent-source licensing.
 - [ ] Same-app-ID staging/production and alternate-host quota reconciliation.
 - [ ] Rakuten response on Ninja AdMax / other commercial use.
 - [ ] Staging tests and PR CI complete.
