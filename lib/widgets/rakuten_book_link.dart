@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/book.dart';
+import '../config/rakuten_affiliate_links.dart';
 
 class RakutenBookLink extends StatefulWidget {
   const RakutenBookLink({super.key, required this.book, this.lookup});
@@ -67,9 +68,9 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
         return uri;
       }
 
-      // No Rakuten Web Service lookup. Only previously verified, officially
-      // generated affiliate URLs (or a supplied resolver) may be displayed.
-      return null;
+      // Only verified ISBN-specific URLs. Never guess product links.
+      return RakutenBookLink.validatedDestination(
+        RakutenAffiliateLinks.forIsbn(widget.book.isbn));
     } catch (_) {
       return null;
     }
