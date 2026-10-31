@@ -62,6 +62,42 @@ test('NDL proxy rejects provider injection and missing search fields',async()=>{
   assert.equal(empty.statusCode,400);
 });
 
+test('NDL proxy maps a slow upstream timeout to 504 without caching it', async()=>{
+  let requestSignal;
+  const handler=ndl.createHandler({request:async (url,options)=>{
+    requestSignal=options.signal;
+    const error=new Error('upstream timed out');
+    error.name='TimeoutError';
+    throw error;
+  }});
+  const res=recorder();
+  await handler({method:'GET',query:{dpid:'iss-ndl-opac-national',from:'2026-08-01',cnt:'27',idx:'28'}},res);
+  assert.equal(res.statusCode,504);
+  assert.equal(res.body.error,'ndl_timeout');
+  assert.equal(res.headers['Retry-After'],'3');
+  assert.equal(res.headers['Cache-Control'],'no-store');
+  assert.equal(requestSignal instanceof AbortSignal,true);
+});
+
+test('NDL proxy preserves overload response as retryable 503', async()=>{
+  const handler=ndl.createHandler({request:async()=>({ok:false,status:429})});
+  const res=recorder();
+  await handler({method:'GET',query:{dpid:'iss-ndl-opac-inprocess',from:'2026-08-01',cnt:'27',idx:'28'}},res);
+  assert.equal(res.statusCode,503);
+  assert.equal(res.body.error,'ndl_unavailable');
+  assert.equal(res.headers['Retry-After'],'3');
+  assert.equal(res.headers['Cache-Control'],'no-store');
+});
+
+test('NDL proxy does not cache other upstream gateway failures', async()=>{
+  const handler=ndl.createHandler({request:async()=>({ok:false,status:500})});
+  const res=recorder();
+  await handler({method:'GET',query:{dpid:'iss-ndl-opac-national',from:'2026-08-01'}},res);
+  assert.equal(res.statusCode,502);
+  assert.equal(res.body.error,'ndl_unavailable');
+  assert.equal(res.headers['Cache-Control'],'no-store');
+});
+
 test('openBD accepts ISBN list only and preserves null entries',async()=>{
   let url='';
   const handler=openbd.createHandler({request:async req=>{
