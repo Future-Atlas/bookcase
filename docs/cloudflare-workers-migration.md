@@ -133,3 +133,15 @@ Workerのアップロードが成功しても、公開URLの自動判定・HTTP�
 `SMOKE_DIAGNOSTIC_FILE`を指定したステージングGitHub Actionsは、失敗時に`cloudflare-staging-smoke-diagnostic`を1日間だけ保存します。内容は固定の検査名、HTTPステータス、失敗種別のみで、URL、レスポンス本文・ヘッダー、生エラー、Secret値は記録しません。
 
 `wrangler.jsonc`は`staging`と`production`の両方で`workers_dev: true`を明示し、独自ドメイン接続前に各Workerを公開URLで確認できる構成にします。
+
+## Flutter Web CanvasKit / CSP compatibility (2026-10-31)
+
+Flutter 3.47's normal Web release uses CanvasKit. The strict Sharemarium Content Security Policy intentionally permits scripts only from the app's own origin and approved ad hosts. A default Web build tries to load CanvasKit from Google's `www.gstatic.com`, which the browser blocks, preventing the app from booting even when Flutter builds and HTTP smoke checks pass.
+
+All CI, Cloudflare staging/production and Vercel fallback Web builds now use `flutter build web --release --no-web-resources-cdn`. The obsolete `FLUTTER_WEB_RENDERER=html` define has been removed. Flutter bundles CanvasKit under `build/web/canvaskit/` and writes `useLocalCanvasKit: true` to `flutter_bootstrap.js`.
+
+After each Web build, `node scripts/verify-local-canvaskit.mjs` checks the local JavaScript/Wasm artifacts and bootstrap setting. Cloudflare deployment smoke checks their real HTTP responses/MIME types and rejects SPA HTML fallbacks. No new third-party script host is allowed in CSP.
+
+This addresses the specific CanvasKit startup block; it does not establish that every UI route functions. After staging deployment, open the site in a fresh browser session, confirm no CanvasKit CSP error in DevTools, and check the login, search, and book detail screens. A full real-browser smoke test remains a separate future enhancement.
+
+Production build configuration is kept compatible, but production deployment is **not** part of this staging fix.
