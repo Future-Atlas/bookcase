@@ -228,8 +228,11 @@ class BookRepository {
         final chosen = ranked.skip(start).take(9).toList(growable: false);
         return _filterForViewer(await OpenBdApi.enrich(chosen));
       }
+      // Do not silently skip 21 out of every 30 new-arrival records when
+      // the home section displays nine books per page.
+      final window = genre.contains('新着') ? 9 : 30;
       final incoming = await NdlApi.searchBySelectedGenre(
-        selectedGenre: genre, page: page, count: 30,
+        selectedGenre: genre, page: page, count: window,
       );
       final enriched = await OpenBdApi.enrich(incoming);
       final filtered = _filterForViewer(enriched);
