@@ -37,7 +37,7 @@ class BookRepository {
   String _activeQuery = '';
   int _nextSearchPage = 1;
   List<_NdlFieldCursor> _cursors = [];
-  final Set<String> _searchSeenIds = <String>{};
+  Set<String> _searchSeenIds = <String>{};
   Future<List<Book>>? _popularCache;
 
   static String _normalizeForSearch(String input) =>
@@ -274,7 +274,7 @@ class BookRepository {
   void _resetSearch(String query) {
     _activeQuery = query;
     _nextSearchPage = 1;
-    _searchSeenIds.clear();
+    _searchSeenIds = <String>{};
     final fields = searchFieldPriority(query);
     final variants = _keywordVariants(query);
     _cursors = fields.map((field) =>
@@ -302,14 +302,14 @@ class BookRepository {
   /// source page. Only upstream rawCount advances the NDL offset; ISBN-less
   /// records still occupy upstream slots.
   Future<List<Book>> _takeFromCursor(
-    _NdlFieldCursor cursor, int wanted,
+    _NdlFieldCursor cursor, int wanted, Set<String> seenIds,
   ) async {
     final collected = <Book>[];
     var upstreamRequests = 0;
     while (collected.length < wanted) {
       if (cursor.buffer.isNotEmpty) {
         final book = cursor.buffer.removeAt(0);
-        if (_searchSeenIds.add(book.id)) collected.add(book);
+        if (seenIds.add(book.id)) collected.add(book);
         continue;
       }
       if (cursor.finished || upstreamRequests >= 3) break;
@@ -358,17 +358,19 @@ class BookRepository {
       count - (count * 0.5).ceil() - (count * 0.25).ceil(),
     ];
     final candidates = <Book>[];
+    final cursors = _cursors;
+    final seenIds = _searchSeenIds;
     try {
-      for (var i = 0; i < _cursors.length; i++) {
-        candidates.addAll(await _takeFromCursor(_cursors[i], quotas[i]));
+      for (var i = 0; i < cursors.length; i++) {
+        candidates.addAll(await _takeFromCursor(cursors[i], quotas[i], seenIds));
       }
       // If one field is exhausted, fill its spare slots from the others.
       var attemptsWithoutProgress = 0;
       while (candidates.length < count && attemptsWithoutProgress < 3) {
         var madeProgress = false;
-        for (final cursor in _cursors) {
+        for (final cursor in cursors) {
           if (candidates.length >= count) break;
-          final next = await _takeFromCursor(cursor, 1);
+          final next = await _takeFromCursor(cursor, 1, seenIds);
           if (next.isNotEmpty) {
             candidates.addAll(next);
             madeProgress = true;
@@ -380,12 +382,16 @@ class BookRepository {
           attemptsWithoutProgress++;
         }
       }
+      // An earlier asynchronous search must not modify the new query cursor.
+      if (!identical(cursors, _cursors)) {
+        return const BookSearchBatch(books: [], hasMore: false);
+      }
       _nextSearchPage = page + 1;
       final enriched = await OpenBdApi.enrich(candidates);
       final filtered = _filterForViewer(enriched);
       final result = rankSearchResults(filtered, clean)
           .take(count).toList(growable: false);
-      final more = result.isNotEmpty && _cursors.any(
+      final more = result.isNotEmpty && cursors.any(
         (cursor) => cursor.buffer.isNotEmpty || !cursor.finished,
       );
       return BookSearchBatch(books: result, hasMore: more);
