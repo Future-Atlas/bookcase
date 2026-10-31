@@ -76,8 +76,10 @@ class _BookListScreenState extends State<BookListScreen> {
     final initialBookId = widget.initialBookId?.trim() ?? '';
     if (initialBookId.isEmpty || _openingBookId == initialBookId) return;
     _openingBookId = initialBookId;
-    final matches = await NdlApi.search(isbn: initialBookId, count: 1);
-    final enriched = await OpenBdApi.enrich(matches);
+    final found = await NdlApi.fetchBookById(initialBookId);
+    final enriched = await OpenBdApi.enrich(
+      found == null ? <Book>[] : <Book>[found],
+    );
     final book = enriched.isEmpty ? null : enriched.first;
     if (!mounted) return;
     if (book != null) {
