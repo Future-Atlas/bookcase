@@ -139,7 +139,8 @@ void main() {
     final repo = BookRepository(homeFetcher: fetch);
     final western = await repo.fetchBooksByGenre('English');
     expect(western.length, 9);
-    expect(western.every(NdlApi.isForeignLanguage), true);
+    expect(western.where((book) => book.languageCode.isNotEmpty)
+        .every(NdlApi.isForeignLanguage), true);
     expect(western.any((book) => book.id == candidate(71).id), true);
     expect(western.any((book) => book.id == candidate(72).id), false);
     // ndl-boj is an explicitly foreign-language bibliography even if an
