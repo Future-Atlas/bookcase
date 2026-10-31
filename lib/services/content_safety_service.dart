@@ -68,7 +68,7 @@ class ContentSafetyService {
     Book book, {
     Set<String>? restrictedGenreIds,
   }) {
-    return hasRestrictedRakutenGenre(
+    return book.adultContentFlag || hasRestrictedRakutenGenre(
       book,
       restrictedGenreIds: restrictedGenreIds,
     ) || containsAdultContentTerms([
