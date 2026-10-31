@@ -33,7 +33,7 @@ function validateBaseUrl() {
   record("base_url", "ok");
 }
 
-async function check(name, pathname, { bot = false, htmlNavigation = false, contentType } = {}) {
+async function check(name, pathname, { bot = false, htmlNavigation = false, contentType, staticAsset = false } = {}) {
   let response;
   try {
     response = await fetch(`${baseUrl}${pathname}`, {
@@ -55,7 +55,7 @@ async function check(name, pathname, { bot = false, htmlNavigation = false, cont
     record(name, "content_type_mismatch", response.status);
     throw new Error(`Cloudflare smoke check ${name} has unexpected content type`);
   }
-  if (expectNoindex && !String(response.headers.get("x-robots-tag") || "").includes("noindex")) {
+  if (expectNoindex && !staticAsset && !String(response.headers.get("x-robots-tag") || "").includes("noindex")) {
     record(name, "missing_noindex", response.status);
     throw new Error(`Cloudflare smoke check ${name} lacks noindex`);
   }
@@ -64,6 +64,12 @@ async function check(name, pathname, { bot = false, htmlNavigation = false, cont
 
 validateBaseUrl();
 await check("home", "/", { contentType: "text/html" });
+ // These files are served by Cloudflare's static asset binding, without
+ // Worker-injected X-Robots-Tag. The site's staging robots.txt still blocks crawlers.
+ // Check MIME types so a 200 OK SPA HTML fallback cannot pass as a JS/Wasm file.
+await check("flutter_bootstrap", "/flutter_bootstrap.js", { contentType: "javascript", staticAsset: true });
+await check("canvaskit_chromium_js", "/canvaskit/chromium/canvaskit.js", { contentType: "javascript", staticAsset: true });
+await check("canvaskit_chromium_wasm", "/canvaskit/chromium/canvaskit.wasm", { contentType: "application/wasm", staticAsset: true });
 // A clean Flutter path must be served as an SPA navigation, not a 404.
 await check("login_path", "/login", { htmlNavigation: true, contentType: "text/html" });
 await check("settings_path", "/settings", { htmlNavigation: true, contentType: "text/html" });

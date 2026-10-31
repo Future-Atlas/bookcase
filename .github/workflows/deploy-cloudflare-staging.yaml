@@ -85,7 +85,10 @@ jobs:
           npm run test:cloudflare
 
       - name: Build Flutter Web (Cloudflare staging)
-        run: flutter build web --release --dart-define=FLUTTER_WEB_RENDERER=html --dart-define=APP_ENV=staging --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} --dart-define=SUPABASE_REDIRECT_URL=${{ secrets.SUPABASE_REDIRECT_URL }}
+        run: flutter build web --release --no-web-resources-cdn --dart-define=APP_ENV=staging --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} --dart-define=SUPABASE_REDIRECT_URL=${{ secrets.SUPABASE_REDIRECT_URL }}
+
+      - name: Verify local CanvasKit engine assets
+        run: node scripts/verify-local-canvaskit.mjs
 
       - name: Prepare Cloudflare assets
         run: npm run prepare:cloudflare

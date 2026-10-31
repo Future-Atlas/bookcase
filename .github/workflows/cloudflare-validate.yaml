@@ -32,7 +32,10 @@ jobs:
           npm ci
 
       - name: Build Flutter Web for validation
-        run: flutter build web --release --dart-define=APP_ENV=staging
+        run: flutter build web --release --no-web-resources-cdn --dart-define=APP_ENV=staging
+
+      - name: Verify local CanvasKit engine assets
+        run: node scripts/verify-local-canvaskit.mjs
 
       - name: Test Worker routing and generated legal sources
         run: npm run test:cloudflare

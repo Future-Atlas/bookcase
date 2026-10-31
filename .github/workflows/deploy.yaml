@@ -52,7 +52,10 @@ jobs:
         env:
           NINJA_ADMAX_ASYNC_ID: "234edc1d1284546b2d177ac7c5531101"
           NINJA_ADMAX_ASYNC_TYPE: "banner"
-        run: flutter build web --release --dart-define=FLUTTER_WEB_RENDERER=html --dart-define=APP_ENV=production --dart-define=NINJA_ADMAX_ENABLED=true --dart-define=NINJA_ADMAX_POSTS_PER_AD=5 "--dart-define=NINJA_ADMAX_ASYNC_ID=${NINJA_ADMAX_ASYNC_ID}" "--dart-define=NINJA_ADMAX_ASYNC_TYPE=${NINJA_ADMAX_ASYNC_TYPE}" --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} --dart-define=SUPABASE_REDIRECT_URL=${{ secrets.SUPABASE_REDIRECT_URL }}
+        run: flutter build web --release --no-web-resources-cdn --dart-define=APP_ENV=production --dart-define=NINJA_ADMAX_ENABLED=true --dart-define=NINJA_ADMAX_POSTS_PER_AD=5 "--dart-define=NINJA_ADMAX_ASYNC_ID=${NINJA_ADMAX_ASYNC_ID}" "--dart-define=NINJA_ADMAX_ASYNC_TYPE=${NINJA_ADMAX_ASYNC_TYPE}" --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} --dart-define=SUPABASE_REDIRECT_URL=${{ secrets.SUPABASE_REDIRECT_URL }}
+
+      - name: Verify local CanvasKit engine assets
+        run: node scripts/verify-local-canvaskit.mjs
 
       - name: Install Vercel CLI
         run: npm install --global vercel@58.7.1
