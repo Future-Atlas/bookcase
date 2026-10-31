@@ -1328,9 +1328,16 @@ module.exports = async (req, res) => {
         // Reviews are independent user content. A temporary Rakuten outage
         // must not hide already-public reviews, or force us to persist catalog
         // text just to keep this page available.
-        let book = rakutenEnabled()
-          ? await resolveBookByIsbn(slug, diagnostics, rakutenRequest)
-          : null;
+        let book = null;
+        if (rakutenEnabled()) {
+          try {
+            book = await resolveBookByIsbn(slug, diagnostics, rakutenRequest);
+          } catch (_) {
+            // Network/timeout failures must not prevent a standalone,
+            // original-review fallback. Never cache the API failure as 404.
+            diagnostics.rakutenIsbnFailures += 1;
+          }
+        }
         if (!book) {
           const fallbackRows = await fetchPublicReviewsForBook(slug, diagnostics);
           const fallbackReviews = fallbackRows.filter(isEligiblePublicBookReview);
