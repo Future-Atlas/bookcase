@@ -2,7 +2,7 @@
 // or provider IDs: partner-supplied records can have different reuse terms.
 const NDL_URL = "https://ndlsearch.ndl.go.jp/api/opensearch";
 const PROVIDERS = new Set([
-  "iss-ndl-opac-national", "iss-ndl-opac-inprocess",
+  "iss-ndl-opac", "iss-ndl-opac-national", "iss-ndl-opac-inprocess",
 ]);
 const SEARCH_KEYS = ["any", "title", "creator", "publisher", "ndc", "from", "until", "isbn"];
 
