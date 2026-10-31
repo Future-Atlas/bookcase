@@ -21,7 +21,15 @@ function createHandler({ request = (...args) => fetch(...args) } = {}) {
         idx < 1 || idx + cnt > 501) {
       return res.status(400).json({ error: "invalid_catalog_query" });
     }
-    const query = new URLSearchParams({ dpid: provider, cnt: String(cnt), idx: String(idx) });
+    if (input.mediatype != null && String(input.mediatype) !== "books") {
+      return res.status(400).json({ error: "invalid_mediatype" });
+    }
+    const query = new URLSearchParams({
+      dpid: provider,
+      cnt: String(cnt),
+      idx: String(idx),
+      mediatype: "books",
+    });
     for (const key of SEARCH_KEYS) {
       if (input[key] == null) continue;
       if (typeof input[key] !== "string" || input[key].length > 150) {
