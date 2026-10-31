@@ -2,70 +2,92 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/book.dart';
 
-/// Enrichment is optional. Failed or missing records must never remove
-/// existing user-authored reviews and bookshelf entries.
+/// Optional, short-lived enrichment by openBD. The user-owned bookshelf and
+/// reviews must stay available when records or covers are absent/withdrawn.
 class OpenBdApi {
+  static const batchSize = 25;
+
   static Future<List<Book>> enrich(List<Book> books) async {
-    final isbnList = books.map((b) => b.isbn).where(
-      (isbn) => RegExp(r'^\d{13}$').hasMatch(isbn),
-    ).toSet().take(25).toList();
+    final isbnList = books.map((b) => b.isbn)
+        .where((isbn) => RegExp(r'^[0-9]{13}$').hasMatch(isbn))
+        .toSet().toList(growable: false);
     if (isbnList.isEmpty) return books;
-    try {
-      final response = await http.get(Uri(
-        path: '/api/openbd', queryParameters: {'isbn': isbnList.join(',')},
-      )).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) return books;
-      final data = jsonDecode(utf8.decode(response.bodyBytes));
-      if (data is! List || data.length != isbnList.length) return books;
-      final enrichment = <String, Map<String, dynamic>>{};
-      for (var i = 0; i < data.length; i++) {
-        if (data[i] is Map<String, dynamic>) {
-          enrichment[isbnList[i]] = data[i] as Map<String, dynamic>;
+    final byIsbn = <String, Map<String, dynamic>>{};
+    for (var start = 0; start < isbnList.length; start += batchSize) {
+      final chunk = isbnList.skip(start).take(batchSize).toList();
+      try {
+        final response = await http.get(Uri(
+          path: '/api/openbd',
+          queryParameters: {'isbn': chunk.join(',')},
+        )).timeout(const Duration(seconds: 15));
+        if (response.statusCode != 200) continue;
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        if (data is! List || data.length != chunk.length) continue;
+        for (var i = 0; i < chunk.length; i++) {
+          if (data[i] is Map<String, dynamic>) {
+            final record = data[i] as Map<String, dynamic>;
+            final summary = record['summary'];
+            if (summary is Map && summary['isbn'] != null &&
+                summary['isbn'].toString() != chunk[i]) {
+              // A record mismatched to its requested ISBN must not be applied.
+              continue;
+            }
+            byIsbn[chunk[i]] = record;
+          }
         }
+      } catch (_) {
+        // Enrichment is optional: preserve the unaffected ISBNs.
       }
-      return books.map((book) {
-        final record = enrichment[book.isbn];
-        if (record == null) return book;
-        final summary = record['summary'];
-        final onix = record['onix'];
-        final summaryData = summary is Map ? summary : const {};
-        final onixData = onix is Map ? onix : const {};
-        final cover = summaryData['cover']?.toString() ?? '';
-        final validCover = Uri.tryParse(cover);
-        final canUseCover = validCover != null &&
-            validCover.scheme == 'https' && validCover.userInfo.isEmpty;
-        final tags = <String>[];
-        _collectAudience(onixData, tags);
-        final adult = tags.any((code) =>
-          code == '03' || code == '06' || code == '07');
-        final description = _description(onixData);
-        return book.copyWith(
-          coverUrl: canUseCover ? cover : book.coverUrl,
-          description: description.isNotEmpty ? description : book.description,
-          adultContentFlag: adult,
-          ageRatingSource: tags.isEmpty ? 'unknown' : 'openbd',
-        );
-      }).toList(growable: false);
-    } catch (_) {
-      return books;
     }
+    return books.map((book) {
+      final record = byIsbn[book.isbn];
+      return record == null ? book : enrichRecord(book, record);
+    }).toList(growable: false);
   }
 
-  // Only the ONIX adult rating scheme (22) is considered. A general adult
-  // readership code is NOT the same as explicit 18+ material.
-  static void _collectAudience(Object? node, List<String> output) {
+  /// Pure transform to support fixture tests for ONIX safety classifications.
+  static Book enrichRecord(Book book, Map<String, dynamic> record) {
+    final summary = record['summary'];
+    final onix = record['onix'];
+    final summaryData = summary is Map ? summary : const {};
+    final onixData = onix is Map ? onix : const {};
+    final cover = summaryData['cover']?.toString().trim() ?? '';
+    final parsedCover = Uri.tryParse(cover);
+    final validCover = parsedCover != null &&
+        parsedCover.scheme == 'https' &&
+        parsedCover.host.isNotEmpty && parsedCover.userInfo.isEmpty;
+    final codes = <String>[];
+    _collectAdultAudienceCodes(onixData, codes);
+    // ONIX list 203 (adult audience rating). 06 (language) and
+    // 07 (intolerance) are content warnings, NOT proof of a legal 18+ rating.
+    // Likewise 04 (violence), 05 (drugs) alone do not establish 18+.
+    // 01 = adult audience; 02 = adult content warning; 03 = sexual content.
+    const restrictedCodes = {'01', '02', '03'};
+    final explicitlyAdult = codes.any(restrictedCodes.contains);
+    final description = _description(onixData);
+    return book.copyWith(
+      coverUrl: validCover ? cover : book.coverUrl,
+      description: description.isNotEmpty ? description : book.description,
+      adultContentFlag: book.adultContentFlag || explicitlyAdult,
+      ageRatingSource: codes.isEmpty ? book.ageRatingSource : 'openbd',
+    );
+  }
+
+  static void _collectAdultAudienceCodes(Object? node, List<String> output) {
     if (node is Map) {
       if (node['AudienceCodeType']?.toString() == '22') {
-        final code = node['AudienceCodeValue']?.toString() ??
+        final value = node['AudienceCodeValue']?.toString() ??
             node['AudienceCode']?.toString();
-        if (code != null) output.add(code.padLeft(2, '0'));
+        if (value != null && RegExp(r'^[0-9]{1,2}$').hasMatch(value)) {
+          output.add(value.padLeft(2, '0'));
+        }
       }
       for (final value in node.values) {
-        _collectAudience(value, output);
+        _collectAdultAudienceCodes(value, output);
       }
     } else if (node is List) {
       for (final value in node) {
-        _collectAudience(value, output);
+        _collectAdultAudienceCodes(value, output);
       }
     }
   }
@@ -77,7 +99,8 @@ class OpenBdApi {
     final candidates = texts is List ? texts : [texts];
     for (final item in candidates) {
       if (item is Map && item['Text'] is String) {
-        final value = (item['Text'] as String).replaceAll(RegExp(r'<[^>]*>'), '').trim();
+        final value = (item['Text'] as String)
+            .replaceAll(RegExp(r'<[^>]*>'), '').trim();
         if (value.isNotEmpty) return value;
       }
     }
