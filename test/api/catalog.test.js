@@ -27,6 +27,15 @@ test('NDL proxy uses documented provider and 1-based index', async () => {
   assert.equal(url.searchParams.get('title'),'文学');
 });
 
+test('NDL proxy allows NDL-owned foreign-book catalog records',async()=>{
+  const handler = ndl.createHandler({request:async url => ({
+    ok:true,text:async()=>'<rss><channel></channel></rss>'
+  })});
+  const res=recorder();
+  await handler({method:'GET',query:{dpid:'iss-ndl-opac',title:'Pride and Prejudice'}},res);
+  assert.equal(res.statusCode,200);
+});
+
 test('NDL proxy rejects provider injection and missing search fields',async()=>{
   const handler=ndl.createHandler({request:async()=>{throw Error('unexpected');}});
   const invalid=recorder();
