@@ -35,7 +35,8 @@ function setup({ reviews = [], featured = [], production = true, error = false, 
     return {ok:true,text:async () => JSON.stringify(reviews)};
   };
   delete require.cache[require.resolve("../../api/seo")];
-  return require("../../api/seo");
+  const seo = require("../../api/seo");
+  return (req, res) => seo({ ...req, rakutenRequest: rakuten.requestRakuten }, res);
 }
 test.afterEach(() => {
   rakuten.requestRakuten = originalRequest; global.fetch = originalFetch;
