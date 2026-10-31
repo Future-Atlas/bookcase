@@ -336,7 +336,7 @@ async function resolveBookByIsbn(isbn, diagnostics) {
 }
 
 function containsAdultTerms(values) {
-  const text = values.join(" ").toLowerCase().replace(/[\s\u3000_\-・･.／/]+/g,"");
+  const text = values.join(" ").toLowerCase().replace(/[\s\u3000_\-・･.／\/]+/g,"");
   return ["成人向け","成人指定","成年向け","成年コミック","18禁","r18",
     "アダルト","ポルノ","pornography","sexuallyexplicit"]
     .some(term => text.includes(term));
