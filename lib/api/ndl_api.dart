@@ -15,7 +15,7 @@ class NdlApi {
     String? publisher,
     String? isbn,
     String? ndc,
-    String provider = 'open',
+    String provider = 'iss-ndl-opac-national',
     int page = 1,
     int count = 20,
   }) => Uri(path: _base, queryParameters: {
@@ -37,6 +37,7 @@ class NdlApi {
     String? publisher,
     String? isbn,
     String? ndc,
+    String provider = 'iss-ndl-opac-national',
     int page = 1,
     int count = 20,
     String genre = '',
@@ -45,7 +46,7 @@ class NdlApi {
     try {
       final response = await http.get(searchUri(
         any: any, title: title, creator: creator, publisher: publisher,
-        isbn: isbn, ndc: ndc, page: page, count: count,
+        isbn: isbn, ndc: ndc, provider: provider, page: page, count: count,
       )).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) return [];
       return parseBooks(utf8.decode(response.bodyBytes), genre: genre);
@@ -141,6 +142,7 @@ class NdlApi {
     } else {
       any = selectedGenre.isEmpty ? '本' : selectedGenre;
     }
-    return search(any: any, ndc: ndc, page: page, count: count, genre: selectedGenre);
+    return search(any: any, ndc: ndc, page: page, count: count, genre: selectedGenre,
+      provider: selectedGenre.contains('新着') ? 'iss-ndl-opac-inprocess' : 'iss-ndl-opac-national');
   }
 }
