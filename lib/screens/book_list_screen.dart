@@ -973,6 +973,9 @@ class _BookListScreenState extends State<BookListScreen> {
                                 hasMore: _controller.hasMoreRecommended,
                                 isLoadingInitial:
                                     _controller.isLoadingRecommended,
+                                onRetry: () => unawaited(
+                                  _controller.retryRecommended(),
+                                ),
                               ),
                             if (kIsWeb &&
                                 timelineAdDisplayReady &&
@@ -997,6 +1000,9 @@ class _BookListScreenState extends State<BookListScreen> {
                                 isLoadingMore: _controller.isLoadingMoreWestern,
                                 hasMore: _controller.hasMoreWestern,
                                 isLoadingInitial: _controller.isLoadingWestern,
+                                onRetry: () => unawaited(
+                                  _controller.retryWestern(),
+                                ),
                               ),
                             if (widget.initialGenre == null) ...[
                               Align(
@@ -1288,6 +1294,7 @@ class _BookListScreenState extends State<BookListScreen> {
     required bool isLoadingMore,
     required bool hasMore,
     required bool isLoadingInitial,
+    VoidCallback? onRetry,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1306,6 +1313,7 @@ class _BookListScreenState extends State<BookListScreen> {
           canLoadPrevious: canLoadPrevious,
           isLoadingMore: isLoadingMore,
           hasMore: hasMore,
+          onRetry: onRetry,
         ),
       ],
     );
@@ -1416,6 +1424,7 @@ class _BookListScreenState extends State<BookListScreen> {
     required bool canLoadPrevious,
     required bool isLoadingMore,
     required bool hasMore,
+    VoidCallback? onRetry,
   }) {
     if (bookList.isEmpty) {
       if (isLoadingInitial) {
@@ -1480,9 +1489,17 @@ class _BookListScreenState extends State<BookListScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              '書籍データの取得先に接続できない可能性があります。',
+              '書籍が見つからないか、取得先が一時的に応答していません。',
               style: TextStyle(color: Colors.grey[500], fontSize: 11),
             ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('もう一度取得する'),
+              ),
+            ],
           ],
         ),
       );
