@@ -2894,6 +2894,8 @@ class SupabaseService extends ChangeNotifier {
         // Fresh catalog images and descriptions are resolved on demand.
         'book_cover_url': '',
         'book_description': '',
+        'book_metadata_source': book.catalogSource,
+        'book_metadata_observed_at': book.catalogFetchedAt?.toUtc().toIso8601String(),
         'related_screen_titles': relatedScreenTitles
             .map((value) => value.trim())
             .where((value) => value.isNotEmpty)
@@ -3270,6 +3272,8 @@ class SupabaseService extends ChangeNotifier {
           // new permanent copies in public posts; the user-authored comment
           // and book ISBN/title/author remain intact.
           'book_description': '',
+          'book_metadata_source': book.catalogSource,
+          'book_metadata_observed_at': book.catalogFetchedAt?.toUtc().toIso8601String(),
           'is_age_restricted': isAgeRestricted,
           'rating': rating,
           'comment': normalizedComment,
