@@ -21,6 +21,7 @@ function setup({ reviews = [], featured = [], production = true, error = false }
     return { ok:true, text:async () => JSON.stringify({Items:[{Item:{
       isbn:"9784101010014",title:'本<title>',author:"著者",
       itemCaption:"紹介文",publisherName:"出版社",
+      itemUrl:"https://books.rakuten.co.jp/rb/12345/",
     }}]}) };
   };
   global.fetch = async url => {
@@ -54,6 +55,9 @@ test("book SEO serves title, canonical, schema and only non-spoiler reviews", as
   assert.match(out.body, /content="index,follow"/);
   assert.match(out.body, /https:\/\/www.sharemarium.com\/book\/9784101010014/);
   assert.doesNotMatch(out.body,/secret/);
+  assert.match(out.body, /楽天ブックスの商品ページを見る/);
+  assert.match(out.body, /https:\/\/books\.rakuten\.co\.jp\/rb\/12345\//);
+  assert.match(out.body, /rel="sponsored noopener noreferrer"/);
 });
 test("featured books are indexable and expose only verified related screen titles", async () => {
   const handler = setup({featured:[{
