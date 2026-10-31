@@ -194,12 +194,16 @@ function normalizeNdlBooks(xmlText, sectionTitle) {
     const title = extractXmlTag(itemBlock, ["title", "dc:title"]);
     const author = extractXmlTag(itemBlock, ["author", "dc:creator"]);
     const description = extractXmlTag(itemBlock, ["dc:description"]);
+    const isbnIds = [...itemBlock.matchAll(/<dc:identifier\\b[^>]*>([^<]+)<\\/dc:identifier>/gi)]
+      .map((match) => match[1].trim().toUpperCase());
+    const isbn = isbnIds.find((value) => /^(?:[0-9]{13}|[0-9]{9}[0-9X])$/.test(value)) || "";
     return {
       title: title || "不明なタイトル",
       author: author || "不明な著者",
       coverUrl: "",
       genre: sectionTitle,
       description,
+      isbn,
     };
   });
 }
@@ -301,35 +305,35 @@ async function fetchRakutenBookByIsbn(isbn, diagnostics, request = requestRakute
 }
 
 async function fetchNdlBookByIsbn(isbn, diagnostics) {
-  if (!isbn) return null;
-
-  const compact = String(isbn).replace(/[^0-9Xx]/g, "");
-  if (compact.length !== 10 && compact.length !== 13) return null;
-
-  const url = `${NDL_OPENSEARCH_API}?cnt=1&idx=1&dpid=iss-ndl-opac-national&isbn=${encodeURIComponent(
-    compact,
-  )}`;
-  const response = await fetch(url);
-  const body = await response.text();
-  if (!response.ok) {
-    diagnostics.ndlIsbnFailures += 1;
-    return null;
+  const compact = String(isbn || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+  if (!/^(?:[0-9]{13}|[0-9]{9}[0-9X])$/.test(compact)) return null;
+  // In-process records may appear before national bibliography completion.
+  for (const provider of [
+    "iss-ndl-opac-inprocess", "iss-ndl-opac-national", "iss-ndl-opac",
+  ]) {
+    try {
+      const url = NDL_OPENSEARCH_API + "?cnt=6&idx=1&mediatype=books&dpid=" +
+        provider + "&isbn=" + encodeURIComponent(compact);
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      const books = normalizeNdlBooks(await response.text(), "isbn");
+      const matched = books.find((book) => book.isbn === compact);
+      if (!matched) continue;
+      return {
+        title: matched.title,
+        author: matched.author,
+        coverUrl: "",
+        description: matched.description,
+        publisher: "",
+        isbn: compact,
+        rakutenUrl: "",
+      };
+    } catch {
+      // A single NDL provider outage must not erase existing reviews.
+    }
   }
-
-  const books = normalizeNdlBooks(body, "isbn");
-  if (!books.length) {
-    diagnostics.ndlIsbnFailures += 1;
-    return null;
-  }
-
-  return {
-    title: books[0].title,
-    author: books[0].author,
-    coverUrl: "",
-    description: books[0].description,
-    isbn: compact,
-    rakutenUrl: "",
-  };
+  diagnostics.ndlIsbnFailures += 1;
+  return null;
 }
 
 async function resolveBookByIsbn(isbn, diagnostics) {
@@ -379,8 +383,7 @@ function renderBookList(books) {
       <div class="book-details">
         <h4 class="book-title">${escapeHtml(book.title)}</h4>
         <p class="book-author">著者: ${escapeHtml(book.author)}</p>
-        ${book.description && book.rakutenUrl ? `<p style="font-size:0.9em; color:#555;">${escapeHtml(book.description)}</p>` : ""}
-        ${book.rakutenUrl ? `<p>楽天ブックス提供の情報 <a href="${escapeHtml(book.rakutenUrl)}" target="_blank" rel="sponsored noopener noreferrer">楽天ブックスの商品ページを見る</a></p>` : ""}
+        ${book.description ? `<p style="font-size:0.9em; color:#555;">${escapeHtml(book.description)}</p>` : ""}
       </div>
     </div>
   `,
@@ -1377,12 +1380,6 @@ module.exports = async (req, res) => {
             throw new Error("book_api_unavailable");
           }
         }
-        if (false && book && !book.rakutenUrl) {
-          // Do not surface unlinked third-party catalog text when the API
-          // returns a record without a verified Rakuten product destination.
-          book = { ...book, title: `書籍 ISBN ${slug}`, author: "",
-            publisher: "", coverUrl: "", description: "", rakutenUrl: "" };
-        }
         if (book) {
           let featured = null;
           try {
@@ -1414,9 +1411,8 @@ module.exports = async (req, res) => {
             content: `<h1>${escapeHtml(book.title)}</h1>
               ${book.author ? `<p>著者：${escapeHtml(book.author)}</p>` : ""}
               <p>${book.publisher ? `出版社：${escapeHtml(book.publisher)} ／ ` : ""}ISBN：${escapeHtml(slug)}</p>
-              ${book.coverUrl && book.rakutenUrl ? `<img width="150" src="${escapeHtml(book.coverUrl)}" alt="${escapeHtml(book.title)}の表紙">` : ""}
-              <h2>書籍紹介</h2><p>${escapeHtml(book.rakutenUrl ? (book.description || "紹介文は準備中です。") : "書籍情報を確認できませんでした。")}</p>
-              ${book.rakutenUrl ? `<p>楽天ブックス提供の情報：<a href="${escapeHtml(book.rakutenUrl)}" target="_blank" rel="sponsored noopener noreferrer">楽天ブックスの商品ページを見る</a></p>` : ""}
+              ${book.coverUrl ? `<img width="150" src="${escapeHtml(book.coverUrl)}" alt="${escapeHtml(book.title)}の表紙">` : ""}
+              <h2>書籍紹介</h2><p>${escapeHtml(book.description || "紹介文は準備中です。")}</p>
               ${relatedScreenTitles.length ? `<h2>関連する映像化作品</h2><ul>${relatedScreenTitles.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ul>` : ""}
               <h2>読者の感想</h2>
               ${reviews.length ? reviews.map(p => `<article><h3>${escapeHtml(p.profiles?.username || "読者")}さんの感想</h3><p>${escapeHtml(p.comment)}</p><a href="/posts/${encodeURIComponent(p.id)}">投稿を見る</a></article>`).join("") : "<p>公開されている感想はまだありません。</p>"}
@@ -1432,8 +1428,8 @@ module.exports = async (req, res) => {
               ...(book.publisher
                 ? { publisher: { "@type": "Organization", name: book.publisher } }
                 : {}),
-              ...(book.description && book.rakutenUrl ? { description: book.description } : {}),
-              ...(book.coverUrl && book.rakutenUrl ? { image: book.coverUrl } : {}),
+              ...(book.description ? { description: book.description } : {}),
+              ...(book.coverUrl ? { image: book.coverUrl } : {}),
               url: toAbsoluteUrl(`/book/${slug}`),
             },
             extraJsonLd: [
