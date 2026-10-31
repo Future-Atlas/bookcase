@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../api/rakuten_api.dart';
 import '../models/book.dart';
@@ -78,6 +79,9 @@ class SupabaseService extends ChangeNotifier {
   static const int standardFavoriteLimit = 3;
   static const int subscriberFavoriteLimit = 12;
   static const int premiumFavoriteLimit = 2147483647;
+  static const String _privacyRecoveryIntentStartedAtKey =
+      'privacy_password_recovery_started_at';
+  static const Duration _privacyRecoveryIntentLifetime = Duration(minutes: 15);
 
   static final SupabaseService _instance = SupabaseService._internal();
   factory SupabaseService() => _instance;
@@ -94,6 +98,7 @@ class SupabaseService extends ChangeNotifier {
   String _activePageColorKey = ProfilePageColors.defaultKey;
   Timer? _sessionGuardTimer;
   Future<bool>? _canUseWantToReadFuture;
+  final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
   // ----- Initialization ----------------------------------------------------
   Future<void> initialize({
@@ -187,6 +192,39 @@ class SupabaseService extends ChangeNotifier {
     'x' => 'X',
     _ => null,
   };
+
+  Future<void> _rememberPrivacyPasswordRecoveryIntent() async {
+    await _preferences.setString(
+      _privacyRecoveryIntentStartedAtKey,
+      DateTime.now().toUtc().toIso8601String(),
+    );
+  }
+
+  /// Returns whether this browser recently started privacy-password recovery.
+  ///
+  /// Supabase removes OAuth callback query parameters while exchanging the
+  /// authorization code. The short-lived local marker preserves only the UI
+  /// destination; the database still requires the same user/provider and a
+  /// fresh OAuth AMR entry before accepting a new password.
+  Future<bool> hasPendingPrivacyPasswordRecoveryIntent() async {
+    final raw = await _preferences.getString(
+      _privacyRecoveryIntentStartedAtKey,
+    );
+    final startedAt = raw == null ? null : DateTime.tryParse(raw)?.toUtc();
+    if (startedAt == null) {
+      await clearPrivacyPasswordRecoveryIntent();
+      return false;
+    }
+
+    final age = DateTime.now().toUtc().difference(startedAt);
+    final active = !age.isNegative && age <= _privacyRecoveryIntentLifetime;
+    if (!active) await clearPrivacyPasswordRecoveryIntent();
+    return active;
+  }
+
+  Future<void> clearPrivacyPasswordRecoveryIntent() async {
+    await _preferences.remove(_privacyRecoveryIntentStartedAtKey);
+  }
 
   // ----- AUTH -------------------------------------------------------------
   Future<String?> sendMagicLink({required String email}) async {
@@ -1198,27 +1236,32 @@ class SupabaseService extends ChangeNotifier {
       // The database records the current UID/provider/time before redirecting.
       // The password can only be changed after a *fresh* matching OAuth login.
       await _client!.rpc('begin_privacy_password_recovery');
-      if (provider == 'google') {
-        return _signInWithSocialProvider(
-          OAuthProvider.google,
-          label: 'Google',
-          privacyRecovery: true,
-        );
-      }
-      return _signInWithSocialProvider(
-        OAuthProvider.x,
-        label: 'X',
-        privacyRecovery: true,
-      );
+      await _rememberPrivacyPasswordRecoveryIntent();
+      final error = provider == 'google'
+          ? await _signInWithSocialProvider(
+              OAuthProvider.google,
+              label: 'Google',
+              privacyRecovery: true,
+            )
+          : await _signInWithSocialProvider(
+              OAuthProvider.x,
+              label: 'X',
+              privacyRecovery: true,
+            );
+      if (error != null) await clearPrivacyPasswordRecoveryIntent();
+      return error;
     } on AuthException catch (e) {
+      await clearPrivacyPasswordRecoveryIntent();
       debugPrint('Privacy OAuth reauthentication failed: ${e.message}');
       return '連携サービスでの本人確認を開始できませんでした。';
     } on PostgrestException catch (e) {
+      await clearPrivacyPasswordRecoveryIntent();
       if (e.code == '22023') {
         return 'Google・X以外のログイン方法では再設定できません。';
       }
       return '本人確認を開始できませんでした。';
     } catch (e) {
+      await clearPrivacyPasswordRecoveryIntent();
       debugPrint('Privacy password recovery start failed: $e');
       return '本人確認を開始できませんでした。時間をおいて再度お試しください。';
     }
