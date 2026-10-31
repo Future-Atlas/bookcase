@@ -335,11 +335,18 @@ async function resolveBookByIsbn(isbn, diagnostics, request = requestRakuten) {
   return fetchNdlBookByIsbn(isbn, diagnostics);
 }
 
+function isEligiblePublicBookReview(post) {
+  // PostgREST's regular embed is a LEFT join. Require a matching public,
+  // non-suspended profile here too, even when the SQL relationship changes.
+  return post?.profiles?.is_private === false &&
+    post?.profiles?.is_suspended === false && isIndexableReview(post);
+}
+
 async function fetchPublicReviewsForBook(bookId, diagnostics) {
   try {
     return (
       (await supabaseGet(
-        `posts?book_id=eq.${encodeURIComponent(bookId)}&select=id,comment,is_spoiler,created_at,profiles:profiles!posts_profile_id_fkey(username,is_private,is_suspended)&profiles.is_private=eq.false&profiles.is_suspended=eq.false&order=created_at.desc&limit=50`,
+        `posts?book_id=eq.${encodeURIComponent(bookId)}&select=id,comment,is_spoiler,created_at,profiles:profiles!posts_profile_id_fkey!inner(username,is_private,is_suspended)&profiles.is_private=eq.false&profiles.is_suspended=eq.false&order=created_at.desc&limit=50`,
       )) || []
     );
   } catch (err) {
@@ -1326,7 +1333,7 @@ module.exports = async (req, res) => {
           : null;
         if (!book) {
           const fallbackRows = await fetchPublicReviewsForBook(slug, diagnostics);
-          const fallbackReviews = fallbackRows.filter(isIndexableReview);
+          const fallbackReviews = fallbackRows.filter(isEligiblePublicBookReview);
           if (fallbackReviews.length > 0) {
             const fallbackHtml = renderPage({
               title: `ISBN ${slug}｜読者レビュー｜Sharemarium`,
@@ -1372,7 +1379,7 @@ module.exports = async (req, res) => {
             // A missing optional editorial table must not hide book pages.
           }
           const rows = await fetchPublicReviewsForBook(slug, diagnostics);
-          const reviews = rows.filter(isIndexableReview);
+          const reviews = rows.filter(isEligiblePublicBookReview);
           const authorText = book.author ? `（${book.author}）` : "";
           const description = `${book.title}${authorText}の作品概要・読者レビュー。Sharemariumで読書記録を共有しましょう。`;
           const relatedScreenTitles = Array.isArray(
