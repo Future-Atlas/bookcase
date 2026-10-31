@@ -28,7 +28,7 @@ technical inventory.
 
 | Source / storage | Current fields | Retention and visibility observed | Risk / proposed rule |
 | --- | --- | --- | --- |
-| `public.posts` | `book_id`, `book_title`, `book_author`, `book_publisher`, `book_description`, plus **user-authored** `comment`, `rating`, `is_spoiler` | Metadata snapshot inserted by `createPost` in `lib/services/supabase_service.dart`; no catalog-source provenance or expiry. Public reviews are exposed by RLS/SEO according to profile visibility and spoiler rules. | High: external descriptions/metadata may outlive permitted caching. Preserve original review/rating/book ID permanently; establish an independent metadata source and expiry for provider-owned fields. |
+| `public.posts` | `book_id`, `book_title`, `book_author`, `book_publisher`, legacy `book_description`, plus **user-authored** `comment`, `rating`, `is_spoiler` | Metadata snapshot inserted by `createPost` in `lib/services/supabase_service.dart`; no catalog-source provenance or expiry for historical rows. Public reviews are exposed by RLS/SEO according to profile visibility and spoiler rules. **This PR stops storing vendor descriptions in newly created posts**, leaving historical rows unchanged. | High for legacy description/title/author. Preserve original review/rating/book ID permanently; establish an independent metadata source and expiry for provider-owned fields. |
 | `public.featured_books` | `book_id`, `book_title`, `book_author`, `book_publisher`, `book_cover_url`, `book_description` plus editorial `related_screen_titles`, priority and schedule | Stored by `adminSaveFeaturedBook` as a lasting snapshot; public active books read by Flutter and SEO pages. | High: images/descriptions can remain indefinitely and the SEO featured list currently does not provide item-level Rakuten links. Use curator-owned data/ISBN for long-lived entries; serve vendor metadata only when fresh and linked; migrate legacy snapshots without removing curated selection. |
 | `public.collections`, `favorites`, `want_to_read` | Mainly `book_id` (+ user/timestamps) | Durable user-owned reading history, favorites, want-to-read relationships. Resolved for display by catalog APIs. | Lower: keep these **user-owned records** independent of Rakuten availability; verify every ID's provenance and avoid persisting Rakuten descriptions. |
 | Client `RakutenApi._bookByIdCache` | Book including Rakuten metadata and price | Formerly unbounded lifetime per running app. | Mitigated in this PR: 15-minute TTL. |
@@ -103,6 +103,7 @@ human review, not assumptions or silent data deletions.
 - [x] Current DB/API/UI retention and use inventory documented.
 - [x] Remove untimestamped price from the Rakuten purchase action.
 - [x] Expire frontend cache; bound Worker cache; dedupe and centralize per-env quota.
+- [x] Stop copying vendor description into new permanent post rows while retaining comments and ISBN.
 - [x] Validate merchant URLs and add them to crawled catalog content.
 - [ ] Historical persistence/source migration, provider-specific licensing.
 - [ ] Same-app-ID staging/production and alternate-host quota reconciliation.
