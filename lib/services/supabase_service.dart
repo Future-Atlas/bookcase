@@ -2211,7 +2211,7 @@ class SupabaseService extends ChangeNotifier {
       final resolved = await Future.wait(
         rows.map((row) async {
           final id = row['book_id']?.toString() ?? '';
-          final apiBook = await RakutenApi.fetchBookById(id);
+          final apiBook = await NdlApi.fetchBookById(id);
           if (apiBook != null) return apiBook;
           return Book(
             id: id,
@@ -2294,7 +2294,7 @@ class SupabaseService extends ChangeNotifier {
 
     Future<Book?> getBook(String bookId) async {
       if (cache.containsKey(bookId)) return cache[bookId];
-      final found = await RakutenApi.fetchBookById(bookId);
+      final found = await NdlApi.fetchBookById(bookId);
       cache[bookId] = found;
       return found;
     }
@@ -2494,7 +2494,7 @@ class SupabaseService extends ChangeNotifier {
     if (bookIds.isEmpty) return [];
 
     final results = await Future.wait(
-      bookIds.map((id) => RakutenApi.fetchBookById(id)),
+      bookIds.map((id) => NdlApi.fetchBookById(id)),
     );
 
     final books = <Book>[];
