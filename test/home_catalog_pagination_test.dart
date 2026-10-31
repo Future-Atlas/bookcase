@@ -142,6 +142,9 @@ void main() {
     expect(western.every(NdlApi.isForeignLanguage), true);
     expect(western.any((book) => book.id == candidate(71).id), true);
     expect(western.any((book) => book.id == candidate(72).id), false);
+    // ndl-boj is an explicitly foreign-language bibliography even if an
+    // individual record omits the optional language tag.
+    expect(western.any((book) => book.id == candidate(73).id), true);
     expect(western.any((book) => book.id == candidate(74).id), false);
     expect(providers.first, NdlApi.foreignBibliography + ':1:');
     expect(providers, contains(NdlApi.holdings + ':1:English'));
