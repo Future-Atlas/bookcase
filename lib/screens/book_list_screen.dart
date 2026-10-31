@@ -1478,7 +1478,7 @@ class _BookListScreenState extends State<BookListScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              '楽天APIキー未設定、または通信エラーの可能性があります。',
+              '書籍データの取得先に接続できない可能性があります。',
               style: TextStyle(color: Colors.grey[500], fontSize: 11),
             ),
           ],
