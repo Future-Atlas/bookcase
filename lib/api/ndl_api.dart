@@ -147,7 +147,9 @@ class NdlApi {
       any = selectedGenre.isEmpty ? '本' : selectedGenre;
     }
     return search(any: any, ndc: ndc, page: page, count: count, genre: selectedGenre,
-      provider: selectedGenre.contains('新着') ? 'iss-ndl-opac-inprocess' : 'iss-ndl-opac-national');
+      provider: selectedGenre.contains('新着') ? 'iss-ndl-opac-inprocess'
+          : selectedGenre.contains('English') || selectedGenre.contains('洋書')
+              ? 'iss-ndl-opac' : 'iss-ndl-opac-national');
   }
 }
 ).hasMatch(isbn)) {
