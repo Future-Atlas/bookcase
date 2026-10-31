@@ -339,7 +339,7 @@ class BookRepository {
   /// priority and 10/5/5 allocation for a 20-book result page. This avoids
   /// discarding items #11-20 after fetching 20 upstream records for 10 slots.
   Future<BookSearchBatch> searchBooksPage(
-    String query, {int page = 1, int count = 20},
+    String query, {int page = 1, int count = 20}
   ) async {
     final clean = query.trim();
     if (clean.isEmpty) {
@@ -396,7 +396,7 @@ class BookRepository {
 
   /// Compatibility entrypoint for admin lookup and existing search screens.
   Future<List<Book>> searchBooks(
-    String query, {int page = 1, int count = 20},
+    String query, {int page = 1, int count = 20}
   ) async => (await searchBooksPage(query, page: page, count: count)).books;
 
   static List<String> _keywordVariants(String query) {
