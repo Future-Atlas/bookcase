@@ -299,7 +299,7 @@ class BookRepository {
   }
 
   Future<NdlSearchBatch> _fetchHomeWindow(
-    _HomeCatalogSource source, int count,
+    _HomeCatalogSource source, int count, {required bool newArrivals}
   ) {
     if (homeFetcher != null) {
       return homeFetcher!(
@@ -310,6 +310,7 @@ class BookRepository {
     return NdlApi.searchPage(
       provider: source.provider, any: source.any, from: source.from,
       start: source.offset, count: count,
+      genre: newArrivals ? '新着' : 'English',
     );
   }
 
@@ -358,7 +359,9 @@ class BookRepository {
         continue;
       }
       final count = min(legacyCandidateWindow, 501 - source.offset);
-      final response = await _fetchHomeWindow(source, count);
+      final response = await _fetchHomeWindow(
+        source, count, newArrivals: newArrivals,
+      );
       requests++;
       source.offset += response.rawCount;
 
