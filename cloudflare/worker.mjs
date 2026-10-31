@@ -110,13 +110,37 @@ function requestHeaders(request) {
   return headers;
 }
 
-async function invoke(handler, request, extraQuery = {}) {
+function coordinatedRakutenRequest(env) {
+  // Fail closed rather than bypassing the per-application-ID global limit.
+  if (!env?.RAKUTEN_QUOTA) {
+    return async () => new Response('{"error":"rakuten_quota_unavailable"}', {
+      status: 503,
+      headers: { "Content-Type": "application/json", "Retry-After": "5" },
+    });
+  }
+  return async (url, options = {}) => {
+    const appId = new URL(url).searchParams.get("applicationId");
+    if (!appId) return new Response('{"error":"invalid_app_id"}', { status: 400 });
+    const stub = env.RAKUTEN_QUOTA.get(env.RAKUTEN_QUOTA.idFromName(appId));
+    return stub.fetch("https://rakuten-quota.internal/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        origin: options.origin,
+      }),
+    });
+  };
+}
+
+async function invoke(handler, request, extraQuery = {}, env = null) {
   const url = new URL(request.url);
   const req = {
     method: request.method,
     headers: requestHeaders(request),
     query: { ...queryFromUrl(url), ...extraQuery },
     url: `${url.pathname}${url.search}`,
+    ...(env ? { rakutenRequest: coordinatedRakutenRequest(env) } : {}),
   };
   const res = new VercelResponseAdapter();
   await handler(req, res);
@@ -184,7 +208,7 @@ async function routeRequest(request, env) {
   if (path === "/sitemap.xml" || path === "/api/sitemap") {
     return invoke(sitemap, request);
   }
-  if (path === "/api/rakuten") return invoke(rakuten, request);
+  if (path === "/api/rakuten") return invoke(rakuten, request, {}, env);
   if (path === "/api/ad-entitlement") {
     return invoke(adEntitlement, request);
   }
@@ -194,9 +218,9 @@ async function routeRequest(request, env) {
   if (path === "/api/posts-seo") return invoke(postsSeo, request);
   if (path === "/api/post-seo") return invoke(postSeo, request);
   if (path === "/api/legal-seo") return invoke(legalSeo, request);
-  if (path === "/api/seo-home") return invoke(seoHome, request);
-  if (path === "/api/seo") return invoke(seo, request);
-  if (path === "/api/seo-router") return invoke(seoRouter, request);
+  if (path === "/api/seo-home") return invoke(seoHome, request, {}, env);
+  if (path === "/api/seo") return invoke(seo, request, {}, env);
+  if (path === "/api/seo-router") return invoke(seoRouter, request, {}, env);
 
   const userAgent = request.headers.get("user-agent") || "";
   const isCrawler = BOT_PATTERN.test(userAgent);
@@ -211,13 +235,13 @@ async function routeRequest(request, env) {
   }
 
   if (url.searchParams.get("seo_preview") === "1") {
-    return invoke(seoRouter, request, { path });
+    return invoke(seoRouter, request, { path }, env);
   }
   if (isCrawler && (path === "/" || SEO_PATH_PATTERN.test(path))) {
     if (LEGAL_PATH_PATTERN.test(path)) {
       return invoke(legalSeo, request, { path: path.slice(1) });
     }
-    return invoke(seoRouter, request, { path });
+    return invoke(seoRouter, request, { path }, env);
   }
 
   return env.ASSETS.fetch(request);
@@ -254,3 +278,6 @@ export const _test = {
   queryFromUrl,
   routeRequest,
 };
+
+// Wrangler Durable Object binding targets the entrypoint's named export.
+export { RakutenCoordinator } from "./rakuten-coordinator.mjs";
