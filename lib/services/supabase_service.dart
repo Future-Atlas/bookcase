@@ -2889,8 +2889,11 @@ class SupabaseService extends ChangeNotifier {
         'book_title': book.title.trim(),
         'book_author': book.author.trim(),
         'book_publisher': book.publisher.trim(),
-        'book_cover_url': book.coverUrl.trim(),
-        'book_description': book.description.trim(),
+        // Keep curated book identity and editorial choices, not the
+        // third-party Rakuten cover/description as permanent database copies.
+        // Fresh catalog images and descriptions are resolved on demand.
+        'book_cover_url': '',
+        'book_description': '',
         'related_screen_titles': relatedScreenTitles
             .map((value) => value.trim())
             .where((value) => value.isNotEmpty)
