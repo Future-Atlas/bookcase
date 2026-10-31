@@ -30,7 +30,7 @@ void main() {
       required String provider, String? any, String? from,
       required int start, required int count,
     }) async {
-      expect(provider, NdlApi.inProcess);
+      expect(provider, NdlApi.national);
       expect(from, isNotEmpty);
       expect(count, 27);
       requested.add(start);
@@ -83,7 +83,7 @@ void main() {
       required int start, required int count,
     }) async {
       providers.add(provider + ':' + start.toString());
-      if (provider == NdlApi.inProcess) {
+      if (provider == NdlApi.national) {
         return const NdlSearchBatch(books: [], rawCount: 27, hasMore: true);
       }
       return NdlSearchBatch(
@@ -95,9 +95,8 @@ void main() {
     final first = await repo.fetchBooksByGenre('新着');
     expect(first.length, 9);
     expect(providers, [
-      NdlApi.inProcess + ':1',
-      NdlApi.inProcess + ':28',
       NdlApi.national + ':1',
+      NdlApi.inProcess + ':1',
     ]);
   });
 
@@ -153,6 +152,79 @@ void main() {
     expect(next.length, 9);
     expect(western.map((book) => book.id).toSet()
       .intersection(next.map((book) => book.id).toSet()), isEmpty);
+  });
+
+  test('new arrivals fail over when a source times out without advancing idx', () async {
+    final queries = <String>[];
+    Future<NdlSearchBatch> fetch({
+      required String provider, String? any, String? from,
+      required int start, required int count,
+    }) async {
+      queries.add(provider + ':' + start.toString());
+      if (provider == NdlApi.national) {
+        return const NdlSearchBatch(
+          books: [], rawCount: 0, hasMore: false,
+          temporarilyUnavailable: true,
+        );
+      }
+      return NdlSearchBatch(
+        books: List.generate(15, (i) => candidate(500 + i)),
+        rawCount: 27, hasMore: true,
+      );
+    }
+    final repo = BookRepository(homeFetcher: fetch);
+    final newBooks = await repo.fetchBooksByGenre('新着');
+    expect(newBooks.length, 9);
+    expect(queries, [NdlApi.national + ':1', NdlApi.inProcess + ':1']);
+    expect(repo.hasMoreHomeBooks('新着'), true);
+  });
+
+  test('two upstream timeouts are not treated as an empty catalog', () async {
+    var unavailable = true;
+    final offsets = <String>[];
+    Future<NdlSearchBatch> fetch({
+      required String provider, String? any, String? from,
+      required int start, required int count,
+    }) async {
+      offsets.add(provider + ':' + start.toString());
+      if (unavailable) {
+        return const NdlSearchBatch(
+          books: [], rawCount: 0, hasMore: false,
+          temporarilyUnavailable: true,
+        );
+      }
+      return NdlSearchBatch(
+        books: List.generate(11, (i) => candidate(800 + i)),
+        rawCount: 27, hasMore: true,
+      );
+    }
+    final repo = BookRepository(homeFetcher: fetch);
+    expect(await repo.fetchBooksByGenre('新着'), isEmpty);
+    // Both sources failed but remain retryable; this is NOT a zero-results page.
+    expect(repo.hasMoreHomeBooks('新着'), true);
+    expect(offsets, [NdlApi.national + ':1', NdlApi.inProcess + ':1']);
+    unavailable = false;
+    repo.resetHomeBooks('新着');
+    expect((await repo.fetchBooksByGenre('新着')).length, 9);
+    expect(offsets.last, NdlApi.national + ':1');
+  });
+
+  test('new arrivals use a recent publication window instead of a year-wide query', () async {
+    Future<NdlSearchBatch> fetch({
+      required String provider, String? any, String? from,
+      required int start, required int count,
+    }) async {
+      expect(provider, NdlApi.national);
+      expect(from, isNotNull);
+      final daysOld = DateTime.now().difference(DateTime.parse(from!)).inDays;
+      expect(daysOld, inInclusiveRange(89, 91));
+      return NdlSearchBatch(
+        books: List.generate(12, (i) => candidate(900 + i)),
+        rawCount: 27, hasMore: true,
+      );
+    }
+    final repo = BookRepository(homeFetcher: fetch);
+    expect((await repo.fetchBooksByGenre('新着')).length, 9);
   });
 
   test('no placeholder books are manufactured when NDL has no matches', () async {
