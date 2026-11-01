@@ -23,6 +23,12 @@ typedef NdlHomeFetcher = Future<NdlSearchBatch> Function({
   required int count,
 });
 
+typedef NdlNewArrivalFetcher = Future<NdlNewArrivalBatch> Function({
+  required String from,
+  required String until,
+  String? continuationToken,
+});
+
 class BookSearchBatch {
   const BookSearchBatch({required this.books, required this.hasMore});
   final List<Book> books;
@@ -44,12 +50,15 @@ class BookRepository {
     this.allowAdultContent = false,
     this.fieldFetcher,
     this.homeFetcher,
+    this.newArrivalFetcher,
   });
 
   final bool allowAdultContent;
   final NdlFieldFetcher? fieldFetcher;
   final NdlHomeFetcher? homeFetcher;
+  final NdlNewArrivalFetcher? newArrivalFetcher;
   final Map<String, _HomeCatalogCursor> _homeCatalogCursors = {};
+  _NewArrivalCursor? _newArrivalCursor;
   String _activeQuery = '';
   int _nextSearchPage = 1;
   List<_NdlFieldCursor> _cursors = [];
@@ -246,7 +255,10 @@ class BookRepository {
         final chosen = ranked.skip(start).take(9).toList(growable: false);
         return _filterForViewer(await OpenBdApi.enrich(chosen));
       }
-      if (_isNewArrivalsGenre(genre) || _isForeignGenre(genre)) {
+      if (_isNewArrivalsGenre(genre)) {
+        return await _fetchOaiNewArrivalPage(page);
+      }
+      if (_isForeignGenre(genre)) {
         return await _fetchHomeSection(genre, page: page);
       }
       final incoming = await NdlApi.searchBySelectedGenre(
@@ -271,16 +283,119 @@ class BookRepository {
   /// Explicit user retry starts again at the first, complete-bibliography
   /// source, without invalidating the currently displayed page until fetched.
   void resetHomeBooks(String genre) {
-    if (_isNewArrivalsGenre(genre) || _isForeignGenre(genre)) {
+    if (_isNewArrivalsGenre(genre)) {
+      _newArrivalCursor = null;
+    } else if (_isForeignGenre(genre)) {
       _homeCatalogCursors.remove(_homeKey(genre));
     }
   }
 
   bool hasMoreHomeBooks(String genre) {
-    if (!_isNewArrivalsGenre(genre) && !_isForeignGenre(genre)) return true;
+    if (_isNewArrivalsGenre(genre)) {
+      final cursor = _newArrivalCursor;
+      return cursor == null || cursor.ready.isNotEmpty ||
+          cursor.raw.isNotEmpty || !cursor.finished;
+    }
+    if (!_isForeignGenre(genre)) return true;
     final cursor = _homeCatalogCursors[_homeKey(genre)];
     if (cursor == null) return true;
     return cursor.ready.isNotEmpty || cursor.sourceIndex < cursor.sources.length;
+  }
+
+  // OAI-PMH selects NDL bibliography datestamps. Scan short, consecutive
+  // three-day windows, newest first; the metadata returned is from the NDL
+  // new-bibliography collection, not a release-date free-text search.
+  _NewArrivalCursor _createNewArrivalCursor() {
+    final todayJst = DateTime.now().toUtc().add(const Duration(hours: 9));
+    String date(DateTime day) {
+      final y = day.year.toString().padLeft(4, '0');
+      final m = day.month.toString().padLeft(2, '0');
+      final d = day.day.toString().padLeft(2, '0');
+      return '$y-$m-$d';
+    }
+    final windows = <_NewArrivalWindow>[];
+    for (var i = 0; i < 5; i++) {
+      final until = todayJst.subtract(Duration(days: i * 3));
+      final from = until.subtract(const Duration(days: 2));
+      windows.add(_NewArrivalWindow(date(from), date(until)));
+    }
+    return _NewArrivalCursor(windows);
+  }
+
+  Future<NdlNewArrivalBatch> _fetchNewArrivalWindow(
+    _NewArrivalWindow window, String? token,
+  ) {
+    if (newArrivalFetcher != null) {
+      return newArrivalFetcher!(
+        from: window.from, until: window.until,
+        continuationToken: token,
+      );
+    }
+    return NdlApi.fetchNewArrivalPage(
+      from: window.from, until: window.until,
+      continuationToken: token,
+    );
+  }
+
+  Future<List<Book>> _fetchOaiNewArrivalPage(int page) async {
+    final cursor = _newArrivalCursor ??= _createNewArrivalCursor();
+    while (cursor.pages.length < page) {
+      if (cursor.finished && cursor.ready.isEmpty && cursor.raw.isEmpty) {
+        return const <Book>[];
+      }
+      final result = await _nextOaiNewArrivals(cursor);
+      if (result.isEmpty) return const <Book>[];
+      cursor.pages.add(result);
+    }
+    return cursor.pages[page - 1];
+  }
+
+  Future<List<Book>> _nextOaiNewArrivals(_NewArrivalCursor cursor) async {
+    final page = <Book>[];
+    var requests = 0;
+    while (page.length < 9) {
+      if (cursor.ready.isNotEmpty) {
+        page.add(cursor.ready.removeFirst());
+        continue;
+      }
+      if (cursor.raw.isNotEmpty) {
+        // Reuse the legacy 27-to-9 candidate strategy without enriching all
+        // 200 OAI records at once; preserve unconsumed books for the next page.
+        final candidates = <Book>[];
+        while (candidates.length < 27 && cursor.raw.isNotEmpty) {
+          candidates.add(cursor.raw.removeFirst());
+        }
+        cursor.ready.addAll(_filterForViewer(
+          await OpenBdApi.enrich(candidates),
+        ));
+        continue;
+      }
+      if (cursor.finished || requests >= 3) break;
+      if (cursor.windowIndex >= cursor.windows.length) {
+        cursor.finished = true;
+        break;
+      }
+      final source = cursor.windows[cursor.windowIndex];
+      final batch = await _fetchNewArrivalWindow(source, cursor.token);
+      requests++;
+      if (batch.temporarilyUnavailable) {
+        // A timeout never means the bibliography has zero records.
+        // Keep the cursor/token intact for a user-initiated retry.
+        break;
+      }
+      for (final book in batch.books) {
+        if (cursor.seenIsbns.add(book.isbn)) cursor.raw.add(book);
+      }
+      cursor.token = batch.continuationToken;
+      if (cursor.token == null || cursor.token!.isEmpty) {
+        cursor.windowIndex++;
+      }
+      if (cursor.windowIndex >= cursor.windows.length &&
+          cursor.token == null) {
+        cursor.finished = true;
+      }
+    }
+    return page;
   }
 
   _HomeCatalogCursor _createHomeCursor(String genre) {
@@ -658,4 +773,23 @@ class _HomeCatalogCursor {
   final Set<String> seenIsbns = <String>{};
   final List<List<Book>> pages = [];
   int sourceIndex = 0;
+}
+
+
+class _NewArrivalWindow {
+  _NewArrivalWindow(this.from, this.until);
+  final String from;
+  final String until;
+}
+
+class _NewArrivalCursor {
+  _NewArrivalCursor(this.windows);
+  final List<_NewArrivalWindow> windows;
+  final Queue<Book> raw = Queue<Book>();
+  final Queue<Book> ready = Queue<Book>();
+  final Set<String> seenIsbns = <String>{};
+  final List<List<Book>> pages = [];
+  String? token;
+  int windowIndex = 0;
+  bool finished = false;
 }
