@@ -280,35 +280,3 @@ class _SpoilerButton extends StatelessWidget {
   }
 }
 
-class _MissingCover extends StatelessWidget {
-  const _MissingCover({required this.book});
-
-  final Book book;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.grey[300],
-      padding: const EdgeInsets.all(8),
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.menu_book_outlined, color: Colors.black45, size: 30),
-          const SizedBox(height: 6),
-          Text(
-            book.title,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 10,
-              color: Colors.black54,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
