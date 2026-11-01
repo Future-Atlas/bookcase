@@ -44,29 +44,29 @@ The public NDL OpenSearch response and DC-NDL documentation include hyphenated I
 ### Cover-image display and rights (2026-11-01)
 
 The stage and direct openBD API both returned HTTP 200 for ISBNs
-\`9784488402327\` (new 2026 Japanese novel), \`9784413299084\` (2026 non-fiction) and
-\`9784101010014\`, but each response had **no \`summary.cover\`**.
+`9784488402327` (new 2026 Japanese novel), `9784413299084` (2026 non-fiction) and
+`9784101010014`, but each response had **no `summary.cover`**.
 NDL OpenSearch returns bibliographic records, not a usable cover URL;
 NDL's original cover API was discontinued on 2026-03-31. Absence of covers
 is **not a failure of the NDL ISBN parser or an openBD 502**.
 
-The shared \`BookCoverImage\` widget uses the verified existing \`Book.coverUrl\`
+The shared `BookCoverImage` widget uses the verified existing `Book.coverUrl`
 (openBD, previously stored) first, then may request the matching ISBN at
-\`https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg?default=false\`.
+`https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg?default=false`.
 Open Library explicitly permits displaying their cover URLs on public pages;
-the \`default=false\` switch ensures nonexistent covers produce HTTP 404
+the `default=false` switch ensures nonexistent covers produce HTTP 404
 instead of a blank image. This is a **display-only** fallback: no unlicensed
 image downloads, persistence, rehosting or inferred title-based matches.
 Google Books public API returned 429 in live tests and is not used without
 approved credentials/attribution; online bookstores' catalog images are
 not copied. Open Library itself has a limit of 100 non-ID/OLID cover requests
 per IP per 5 minutes, so avoid crawling/prefetching all catalog results.
-The UI links to Open Library in \`CatalogCredit\`.
+The UI links to Open Library in `CatalogCredit`.
 
 On Flutter Web, a cross-origin cover CDN without CORS may not work with
-\`Image.network\` default settings. Use
-\`WebHtmlElementStrategy.fallback\` for original cover URLs and
-\`WebHtmlElementStrategy.prefer\` for Open Library image URLs to allow browser
+`Image.network` default settings. Use
+`WebHtmlElementStrategy.fallback` for original cover URLs and
+`WebHtmlElementStrategy.prefer` for Open Library image URLs to allow browser
 HTML image loading. If neither source has a cover, show the title and
 **表紙画像なし**; never invent an actual cover.
 
