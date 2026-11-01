@@ -7,6 +7,7 @@ const corsHeaders = {
 }
 
 type JsonRecord = Record<string, unknown>
+type AdminClient = ReturnType<typeof createClient<any>>
 
 function json(body: JsonRecord, status = 200) {
   return Response.json(body, { status, headers: corsHeaders })
@@ -228,7 +229,7 @@ function asRecord(value: unknown): JsonRecord | null {
 }
 
 async function readState(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   profileId: string,
   purpose: 'login' | 'privacy_recovery',
 ) {
@@ -259,7 +260,7 @@ async function authRequest(
 }
 
 async function deleteTotpFactors(
-  admin: ReturnType<typeof createClient>,
+  admin: AdminClient,
   userId: string,
 ) {
   const { data, error } = await admin.auth.admin.mfa.listFactors({ userId })
@@ -268,7 +269,7 @@ async function deleteTotpFactors(
   for (const factor of factors) {
     const { error: deletionError } = await admin.auth.admin.mfa.deleteFactor({
       userId,
-      factorId: factor.id,
+      id: factor.id,
     })
     if (deletionError) return 'Unable to reset TOTP factors'
   }
