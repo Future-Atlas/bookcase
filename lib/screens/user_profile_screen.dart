@@ -5,6 +5,7 @@ import '../services/supabase_service.dart';
 import '../api/ndl_api.dart';
 import '../api/openbd_api.dart';
 import '../models/book.dart';
+import '../widgets/book_cover_image.dart';
 import '../models/user_profile.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
@@ -1769,14 +1770,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               width: 62,
               height: 96,
               color: Colors.grey[300],
-              child: book.coverUrl.trim().isNotEmpty
-                  ? Image.network(
-                      book.coverUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Icon(Icons.menu_book, color: Colors.black54),
-                    )
-                  : const Icon(Icons.menu_book, color: Colors.black54),
+              child: BookCoverImage(book: book),
             ),
             const SizedBox(width: 10),
             Expanded(
