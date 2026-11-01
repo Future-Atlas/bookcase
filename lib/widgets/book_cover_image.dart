@@ -39,12 +39,41 @@ class BookCoverImage extends StatelessWidget {
         parsed.userInfo.isEmpty;
   }
 
-  Widget _placeholder(BuildContext context) => ColoredBox(
+  Widget _placeholder(BuildContext context) => Container(
     color: Theme.of(context).brightness == Brightness.dark
         ? const Color(0xFF32353A)
-        : const Color(0xFFE7E7E7),
-    child: const Center(
-      child: Icon(Icons.menu_book_outlined, color: Colors.grey, size: 40),
+        : const Color(0xFFE9E5DD),
+    padding: const EdgeInsets.all(10),
+    child: LayoutBuilder(
+      builder: (context, constraints) => Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.menu_book_outlined, color: Colors.grey, size: 28),
+          if (constraints.maxHeight >= 90) ...[
+            const SizedBox(height: 8),
+            Flexible(
+              child: Text(
+                book.title,
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '表紙画像なし',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Colors.grey,
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ],
+      ),
     ),
   );
 
