@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../repositories/book_repository.dart';
 import '../models/book.dart';
+import 'book_cover_image.dart';
 import '../models/featured_book.dart';
 import '../services/supabase_service.dart';
 
@@ -274,13 +275,11 @@ class _FeaturedBooksAdminPanelState extends State<FeaturedBooksAdminPanel> {
                   .take(10)
                   .map(
                     (book) => ListTile(
-                      leading: book.coverUrl.isEmpty
-                          ? const Icon(Icons.book_outlined)
-                          : Image.network(
-                              book.coverUrl,
-                              width: 36,
-                              fit: BoxFit.cover,
-                            ),
+                      leading: SizedBox(
+                        width: 36,
+                        height: 52,
+                        child: BookCoverImage(book: book),
+                      ),
                       title: Text(
                         book.title,
                         maxLines: 1,
