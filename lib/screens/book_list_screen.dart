@@ -844,35 +844,6 @@ class _BookListScreenState extends State<BookListScreen> {
     }
   }
 
-  Widget _buildMissingCoverFallback(Book book) {
-    return Container(
-      color: Colors.grey[300],
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.menu_book, size: 28, color: Colors.black54),
-          const SizedBox(height: 8),
-          Text(
-            book.title,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            book.author,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
