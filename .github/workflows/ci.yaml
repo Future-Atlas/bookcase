@@ -62,6 +62,34 @@ jobs:
         # this isolated type-check without changing runtime configuration.
         run: deno check --node-modules-dir=auto supabase/functions/delete-account/index.ts supabase/functions/billing-checkout/index.ts supabase/functions/billing-cancel-subscription/index.ts supabase/functions/billing-change-plan/index.ts supabase/functions/billing-webhook/index.ts
 
+
+  book_cover_sampling:
+    # One-off diagnostic. Public staging endpoints only; no secrets or deploys.
+    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'experiment/cover-availability-100-20261102' && github.repository == 'Future-Atlas/bookcase' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout read-only diagnostic
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Sample up to 100 real NDL ISBNs, then openBD and fallback providers
+        run: node scripts/cover-sample-100.mjs
+      - name: Save result JSON (ISBN and status only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: book-cover-sample-100
+          path: cover-sample-100-result.json
+          if-no-files-found: ignore
+          retention-days: 7
+
   cloudflare_production:
     # Only merge/push to main can deploy; all Flutter/API/Deno CI checks
     # must succeed first. Production and staging remain separate Workers.
