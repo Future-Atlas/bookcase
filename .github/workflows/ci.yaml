@@ -20,6 +20,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Probe public book-cover providers (temporary)
+        if: ${{ github.head_ref == 'fix/cover-source-fallback-20261101' }}
+        continue-on-error: true
+        run: node scripts/cover-live-probe.mjs
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
