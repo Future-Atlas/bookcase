@@ -75,7 +75,13 @@ void main() {
           child: BookCoverImage(book: covered),
         )),
       ));
-      final image = tester.widget<Image>(find.byType(Image));
+      // A failed image may render an ISBN fallback Image as a child, so
+      // target this provider URL instead of assuming there is only one Image.
+      final target = find.byWidgetPredicate((widget) =>
+          widget is Image && widget.image is NetworkImage &&
+          (widget.image as NetworkImage).url == url);
+      expect(target, findsOneWidget);
+      final image = tester.widget<Image>(target);
       expect((image.image as NetworkImage).webHtmlElementStrategy,
           WebHtmlElementStrategy.prefer);
     }
