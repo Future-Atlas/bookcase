@@ -33,3 +33,14 @@ await probe("google-books-2026b","https://www.googleapis.com/books/v1/volumes?q=
 for(const isbn of [isbns[0],isbns[1],"9780140328721"]){
  await probe("openlibrary-"+isbn,"https://covers.openlibrary.org/b/isbn/"+isbn+"-M.jpg?default=false","head");
 }
+
+for(const key of ["9784488402327","9784413299084","9780140328721"]){
+ const query=new URLSearchParams({bibkeys:"ISBN:"+key,jscmd:"viewapi",callback:"SharemariumProbe"});
+ const t=Date.now();
+ try{
+  const r=await fetch("https://books.google.com/books?"+query,{signal:AbortSignal.timeout(9000)});
+  const body=await r.text();
+  console.log(JSON.stringify({label:"google-dynamic-"+key,status:r.status,ms:Date.now()-t,bytes:body.length,
+    thumbnailMention:body.includes("thumbnail_url"),head:body.slice(0,100).replace(/[\r\n]/g," ")}));
+ }catch(e){console.log(JSON.stringify({label:"google-dynamic-"+key,error:e.name,ms:Date.now()-t}));}
+}
