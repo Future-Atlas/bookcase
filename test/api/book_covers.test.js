@@ -43,7 +43,9 @@ test('batch ISBN lookup uses official keyless Dynamic Links and supplies credit 
   assert.equal(requestedUrl.searchParams.get('bibkeys'),
     'ISBN:9784488402327,ISBN:9784413299084');
   assert.equal(res.body.covers['9784488402327'].coverUrl.startsWith('https://'), true);
-  assert.equal(res.body.covers['9784488402327'].creditUrl.includes('books.google.com'), true);
+  const creditUrl = new URL(res.body.covers['9784488402327'].creditUrl);
+  assert.equal(creditUrl.protocol, 'https:');
+  assert.equal(creditUrl.hostname, 'books.google.com');
   assert.equal(res.headers['Cache-Control'], 'public, max-age=0, s-maxage=300');
 });
 
@@ -66,6 +68,33 @@ test('only exact requested ISBN editions with Google-hosted image and book link 
     ['9784488402327', '9784413299084'],
   );
   assert.deepEqual(Object.keys(parsed), ['9784413299084']);
+
+  // Substring checks such as includes('books.google.com') would wrongly
+  // accept attacker-controlled hosts. Check actual parsed hostnames instead.
+  for (const fakeUrl of [
+    'https://books.google.com.evil.example/books?id=1',
+    'https://books.google.com@evil.example/books?id=1',
+    'https://evil.example/books?source=books.google.com',
+  ]) {
+    const fakeImage = {
+      'ISBN:9784488402327': {
+        bib_key: 'ISBN:9784488402327',
+        thumbnail_url: fakeUrl,
+        info_url: 'https://books.google.com/books?id=valid',
+      },
+    };
+    assert.deepEqual(covers.parseDynamicLinks(
+      'SharemariumBookCovers(' + JSON.stringify(fakeImage) + ');',
+      ['9784488402327'],
+    ), {});
+    fakeImage['ISBN:9784488402327'].thumbnail_url =
+      'https://books.google.com/books?id=valid&img=1';
+    fakeImage['ISBN:9784488402327'].info_url = fakeUrl;
+    assert.deepEqual(covers.parseDynamicLinks(
+      'SharemariumBookCovers(' + JSON.stringify(fakeImage) + ');',
+      ['9784488402327'],
+    ), {});
+  }
 });
 
 test('reject JSONP injection, wrong callback, missing book link and oversized payload', () => {

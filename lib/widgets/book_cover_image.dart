@@ -82,6 +82,7 @@ class BookCoverImage extends StatelessWidget {
     BuildContext context,
     String url, {
     required Widget Function() onError,
+    bool showGoogleCredit = false,
   }) {
     return Image.network(
       url,
@@ -89,6 +90,13 @@ class BookCoverImage extends StatelessWidget {
       width: width,
       height: height,
       semanticLabel: book.title + 'の表紙',
+      // Attach credit to a successfully painted Google image, not to the
+      // fallback result. This also avoids labeling an Open Library image as
+      // Google Books when the primary thumbnail fails.
+      frameBuilder: showGoogleCredit
+          ? (context, image, frame, _) =>
+              frame == null ? image : _withSourceCredit(image)
+          : null,
       // Open Library serves public image URLs directly. Prefer <img> for
       // cross-origin covers to avoid a failed CORS fetch plus a second GET.
       webHtmlElementStrategy: url.startsWith(
@@ -164,15 +172,20 @@ class BookCoverImage extends StatelessWidget {
     final primary = book.coverUrl.trim();
     final fallback = openLibraryCoverUrl(book.isbn);
     if (isSafeRemoteCover(primary)) {
-      return _withSourceCredit(_network(context, primary, onError: () {
-        if (fallback == null || primary == fallback) {
-          return _placeholder(context);
-        }
-        return _network(
-          context, fallback,
-          onError: () => _placeholder(context),
-        );
-      }));
+      return _network(
+        context,
+        primary,
+        showGoogleCredit: book.coverSource == 'google_books',
+        onError: () {
+          if (fallback == null || primary == fallback) {
+            return _placeholder(context);
+          }
+          return _network(
+            context, fallback,
+            onError: () => _placeholder(context),
+          );
+        },
+      );
     }
     if (fallback != null) {
       return _network(
