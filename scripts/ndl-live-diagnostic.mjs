@@ -11,12 +11,7 @@ const oai = new URLSearchParams({
   verb:"ListRecords", metadataPrefix:"oai_dc",set:"iss-ndl-opac-national",
   from:"2026-10-29",until:"2026-10-30",
 });
-const cases = [
-  ["staging-recent", staging+"?"+recent],
-  ["ndl-recent",base+"?"+recent],
-  ["ndl-title",base+"?"+title],
-  ["ndl-oai", "https://ndlsearch.ndl.go.jp/api/oaipmh?"+oai],
-];
+const cases = [["staging-recent", staging+"?"+recent]];
 for (const [name,url] of cases) {
   const start=Date.now();
   try {
@@ -25,6 +20,9 @@ for (const [name,url] of cases) {
     const count=(text.match(/<item(?:\s|>)/g)||[]).length;
     const records=(text.match(/<record(?:\s|>)/g)||[]).length;
     const isbn=(text.match(/isbn/gi)||[]).length;
+    const sampleIdentifiers = [...text.matchAll(/<(?:\\w+:)?identifier([^>]*)>([^<]{1,150})<\\/(?:\\w+:)?identifier>/g)]
+      .slice(0,12).map(x => ({attributes:x[1].trim().slice(0,85),value:x[2].trim().slice(0,65)}));
+    console.log(JSON.stringify({sampleIdentifiers}));
     const total=text.match(/<[^>]*totalResults>(\d+)<\//);
     console.log(JSON.stringify({name,status:response.status,ms:Date.now()-start,bytes:text.length,
       contentType:response.headers.get("content-type"),itemCount:count,recordCount:records,
