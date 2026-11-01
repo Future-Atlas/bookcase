@@ -49,3 +49,10 @@ Compare ISBNs, order and screenshots for 20-30 old/new searches:
 - On 502/504, confirm the NDL cursor does **not** increment its offset and that the home section can be retried via **もう一度取得する** without reloading the rest of the home page.
 - When NDL returns ISBNs, confirm up to 9 safe covers/cards, correct next-page deduplication, no foreign/Japanese cross-contamination, and no display of unverified fabricated books.
 - Record upstream status/response time without logging the user query or access keys; inspect Chrome Network and do not assume a green HTTP-only smoke test covers NDL integration.
+
+
+### Verify real NDL ISBN representation after this fix
+- In staging, confirm `/api/ndl?dpid=iss-ndl-opac-national&idx=1&cnt=27&mediatype=books&from=<recent-date>` returns 200 XML, and inspect the `dc:identifier` / `dcterms:identifier` elements for NDL ISBN values such as `978-4-297-13633-8`.
+- Confirm the client converts hyphenated ISBNs to canonical `9784297136338` form and does not discard otherwise valid records (the first 27 RSS results must fill up to 9 safe cards when enough ISBNs exist).
+- Repeat with next page and verify ISBN identity, no duplicates, age filtering, and manual retry on intermittent NDL 502/504.
+- NDL OpenSearch publication-date `from` and OAI-PMH datestamp `from` have different meanings. A cached OAI-PMH ingestion is a separate change, not a replacement for basic ISBN normalization.

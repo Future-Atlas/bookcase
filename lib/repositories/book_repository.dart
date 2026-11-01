@@ -287,14 +287,19 @@ class BookRepository {
     if (_isNewArrivalsGenre(genre)) {
       // Keep the first query narrow: a one-year unqualified publication-date
       // scan frequently times out and creates repeated 502s on pagination.
-      // Published national records are more likely to include ISBNs than
-      // draft in-process records. Both are within the recent publication window.
+      // Keep the query limited to recently published titles. This OpenSearch
+      // date filter is NOT a registration-datestamp query; a future scheduled
+      // OAI-PMH harvester could supply a more faithful new-arrival ranking.
       final from = DateTime.now()
           .subtract(const Duration(days: 90))
           .toIso8601String().substring(0, 10);
       return _HomeCatalogCursor([
-        _HomeCatalogSource(provider: NdlApi.national, from: from),
+        // NDL's dedicated 新着書誌情報 source. After normalizing hyphenated
+        // ISBNs, valid in-process records are no longer discarded.
         _HomeCatalogSource(provider: NdlApi.inProcess, from: from),
+        // Fall back to completed national bibliography if the dedicated
+        // provider is unavailable or has too few usable ISBNs.
+        _HomeCatalogSource(provider: NdlApi.national, from: from),
       ]);
     }
     return _HomeCatalogCursor([

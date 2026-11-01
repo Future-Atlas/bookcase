@@ -34,4 +34,42 @@ void main(){
    expect(NdlApi.isForeignLanguage(books.single),true);
  });
 
+ test('hyphenated ISBN in official NDL identifiers is normalized',(){
+   const xml=r'''<?xml version="1.0"?>
+   <rss xmlns:dc="http://purl.org/dc/elements/1.1/"
+        xmlns:dcterms="http://purl.org/dc/terms/"
+        xmlns:dcndl="http://ndl.go.jp/dcndl/terms/"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <channel>
+      <item><title>ハイフン付きISBN</title>
+        <dc:identifier xsi:type="dcndl:ISBN">978-4-297-13633-8</dc:identifier>
+      </item>
+      <item><title>出版者からのISBN</title>
+        <dcterms:identifier rdf:datatype="http://ndl.go.jp/dcndl/terms/ISBN">978-4-06-541524-5</dcterms:identifier>
+      </item>
+      <item><title>書誌番号のみ</title>
+        <dc:identifier>https://id.ndl.go.jp/bib/123456789</dc:identifier>
+      </item>
+    </channel>
+   </rss>''';
+   final batch=NdlApi.parseSearchPage(xml,start:1,count:3,genre:'新着');
+   expect(batch.rawCount,3);
+   expect(batch.books.length,2);
+   expect(batch.books.map((b)=>b.isbn),
+     ['9784297136338','9784065415245']);
+   expect(batch.books.every((b)=>b.genre=='新着'),true);
+ });
+
+ test('ISBN prefixes are accepted without accepting arbitrary numeric IDs',(){
+   const xml=r'''<rss xmlns:dc="http://purl.org/dc/elements/1.1/"><channel>
+     <item><title>Real</title><dc:identifier>ISBN: 978-4-297-13633-8</dc:identifier></item>
+     <item><title>Not a book</title><dc:identifier>NDL ID: 1234567890</dc:identifier></item>
+     <item><title>Only a link</title><dc:identifier>https://example.jp/bib/9784297136338</dc:identifier></item>
+   </channel></rss>''';
+   final result=NdlApi.parseBooks(xml);
+   expect(result.length,1);
+   expect(result.single.isbn,'9784297136338');
+ });
+
 }
