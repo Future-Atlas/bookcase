@@ -88,7 +88,11 @@ class BookCoverImage extends StatelessWidget {
       width: width,
       height: height,
       semanticLabel: book.title + 'の表紙',
-      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
+      // Open Library serves public image URLs directly. Prefer <img> for
+      // cross-origin covers to avoid a failed CORS fetch plus a second GET.
+      webHtmlElementStrategy: url.startsWith(
+        'https://covers.openlibrary.org/',
+      ) ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.fallback,
       errorBuilder: (_, error, stackTrace) => onError(),
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;
