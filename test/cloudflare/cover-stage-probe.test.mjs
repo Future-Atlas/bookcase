@@ -83,3 +83,22 @@ test('an empty valid provider result remains distinguishable from a routing fail
   assert.equal(r.google_japanese_jacket, 'not_available');
   assert.equal(r.google_api_http, 200);
 });
+
+test('malformed openBD cover URLs are classified without crashing staging checks', async () => {
+  const r = await probeCoverStage('https://sharemarium-staging.example/', {
+    request: fakeFetch({openbdCover:'not a url'}),
+  });
+  assert.equal(r.openbd_japanese_jacket, 'invalid_url');
+});
+
+test('an HTML SPA fallback cannot masquerade as a valid cover API', async () => {
+  const req = async (url) => {
+    if (url.includes('isbn=not-an-isbn')) return json(400, {error:'invalid_isbn_list'});
+    return new Response('<html>fallback</html>', {
+      status:200, headers:{'content-type':'text/html'},
+    });
+  };
+  await assert.rejects(() => probeCoverStage('https://sharemarium-staging.example/', {
+    request:req,
+  }), /cover_probe_invalid_content_type/);
+});
