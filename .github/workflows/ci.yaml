@@ -20,6 +20,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Diagnose actual staging new-arrival ISBNs (temporary)
+        if: ${{ github.head_ref == 'fix/ndl-isbn-hyphen-new-arrivals-20261101' }}
+        continue-on-error: true
+        run: node scripts/ndl-live-home-probe.mjs
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
