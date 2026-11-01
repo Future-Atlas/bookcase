@@ -8,6 +8,10 @@ class Book {
   final String pubDate;
   final String isbn;
   final String coverUrl;
+  /// Book-cover provenance (e.g. openbd or google_books), not catalog data.
+  final String coverSource;
+  /// Required source credit link for Google Books thumbnails.
+  final String coverAttributionUrl;
   final double ratingAvg;
   final int reviewCount;
   final String genre;
@@ -34,6 +38,8 @@ class Book {
     required this.pubDate,
     required this.isbn,
     required this.coverUrl,
+    this.coverSource = '',
+    this.coverAttributionUrl = '',
     this.ratingAvg = 0.0,
     this.reviewCount = 0,
     this.genre = '',
@@ -152,6 +158,8 @@ class Book {
     String? pubDate,
     String? isbn,
     String? coverUrl,
+    String? coverSource,
+    String? coverAttributionUrl,
     double? ratingAvg,
     int? reviewCount,
     String? genre,
@@ -174,6 +182,8 @@ class Book {
       pubDate: pubDate ?? this.pubDate,
       isbn: isbn ?? this.isbn,
       coverUrl: coverUrl ?? this.coverUrl,
+      coverSource: coverSource ?? this.coverSource,
+      coverAttributionUrl: coverAttributionUrl ?? this.coverAttributionUrl,
       ratingAvg: ratingAvg ?? this.ratingAvg,
       reviewCount: reviewCount ?? this.reviewCount,
       genre: genre ?? this.genre,
