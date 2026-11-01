@@ -96,12 +96,16 @@ async function openbd(books){
 }
 async function google(books){
   const missing=books.filter(b=>b.openbd!=='cover');
-  for(const chunk of chunks(missing,25)){
+  for(const chunk of chunks(missing,10)){
     const u=new URL('/api/book-covers',base);
     u.searchParams.set('isbn',chunk.map(b=>b.isbn).join(','));
     try{
-      const r=await get(u,{timeout:14000});
-      if(r.status!==200)throw new Error('google status');
+      let r=await get(u,{timeout:14000});
+      if([502,503,504].includes(r.status)){
+        await delay(3000);
+        r=await get(u,{timeout:14000});
+      }
+      if(r.status!==200)throw new Error('http_'+r.status);
       const data=await r.json();
       if(!data?.covers||typeof data.covers!=='object')throw new Error('google shape');
       for(const b of chunk){
@@ -109,8 +113,13 @@ async function google(books){
         b.google=isValidCover(rec?.coverUrl,['books.google.com','books.googleusercontent.com'])&&
           isValidCover(rec?.creditUrl,['books.google.com'])?'cover':'no_cover';
       }
-    }catch{chunk.forEach(b=>b.google='unknown');}
-    await delay(550);
+    }catch(error){
+      chunk.forEach(b=>b.google='unknown');
+      // A failed provider batch is NOT evidence that its jackets are absent.
+      const code=String(error?.message||'network_error');
+      console.log('COVER100_GOOGLE_BATCH '+JSON.stringify({size:chunk.length,issue:/^http_\d+$/.test(code)?code:'network_or_bad_response'}));
+    }
+    await delay(4000);
   }
   books.forEach(b=>{if(!b.google)b.google='not_needed';});
 }
@@ -136,8 +145,11 @@ function report(books){
   const coverOpenbd=count('openbd','cover');
   const coverGoogle=count('google','cover');
   const coverOl=count('openlibrary','head_image');
-  const noImage=books.filter(b=>b.openbd!=='cover'&&b.google!=='cover'&&
-    b.openlibrary==='not_found').length;
+  const noImage=books.filter(b=>b.openbd!=='unknown'&&b.openbd!=='cover'&&
+    b.google==='no_cover'&&b.openlibrary==='not_found').length;
+  const undetermined=books.filter(b=>b.openbd!=='cover'&&b.google!=='cover'&&
+    b.openlibrary!=='head_image'&&
+    (b.openbd==='unknown'||b.google==='unknown'||b.openlibrary==='unknown')).length;
   return {
     requested:target,n,
     sampling:'NDL new-bibliography recent 90d and national bibliography recent 90d; first valid ISBN-13 per cohort, not a random sample',
@@ -161,6 +173,7 @@ function report(books){
       metadataOrHeadAvailable:coverOpenbd+coverGoogle+coverOl,
       metadataOrHeadAvailablePct:pct(coverOpenbd+coverGoogle+coverOl,n),
       knownMissingAll:noImage,knownMissingAllPct:pct(noImage,n),
+      undetermined,undeterminedPct:pct(undetermined,n),
       actuallyRenderedInBrowser:false
     }
   };
