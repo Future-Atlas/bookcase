@@ -141,21 +141,34 @@ class NdlApi {
   static String _isbn(XmlElement item) {
     final identifiers = item.descendants.whereType<XmlElement>()
         .where((node) => node.name.local == 'identifier').toList();
-    // Prefer an identifier explicitly typed as ISBN over arbitrary numeric IDs.
     identifiers.sort((a, b) {
-      final ai = _type(a).contains('isbn') ? 0 : 1;
-      final bi = _type(b).contains('isbn') ? 0 : 1;
-      return ai.compareTo(bi);
+      bool isTypedIsbn(XmlElement element) => element.attributes.any(
+        (attribute) => attribute.value.toLowerCase().contains('isbn'),
+      );
+      return (isTypedIsbn(a) ? 0 : 1).compareTo(isTypedIsbn(b) ? 0 : 1);
     });
     for (final element in identifiers) {
-      final value = element.innerText.trim();
-      final typed = _type(element).contains('isbn') ||
-          value.toLowerCase().contains('isbn');
-      final match = RegExp(r'(?:^|[^0-9])((?:97[89][0-9]{10}|[0-9]{9}[0-9Xx]))(?:$|[^0-9])')
-          .firstMatch(value);
-      if (match != null && (typed || RegExp(r'^(?:[0-9]{13}|[0-9]{9}[0-9Xx])$').hasMatch(value))) {
-        return match.group(1)!.toUpperCase();
-      }
+      final original = element.innerText.trim();
+      final typed = element.attributes.any(
+            (attribute) => attribute.value.toLowerCase().contains('isbn'),
+          ) || original.toLowerCase().contains('isbn');
+
+      // NDL routinely uses hyphenated identifiers such as
+      // "978-4-297-13633-8". Normalizing separators BEFORE matching is
+      // essential; the previous regex silently discarded those records.
+      final normalized = original.replaceAll(
+        RegExp(r'[\s\u3000\-‐‑‒–—―−]'), '',
+      );
+      final exact = RegExp(r'^(?:97[89][0-9]{10}|[0-9]{9}[0-9Xx])$');
+      if (exact.hasMatch(normalized)) return normalized.toUpperCase();
+      if (!typed) continue;
+
+      // Prefixes like "ISBN: 978-4-..." are valid, but unrelated NDL
+      // identifiers and URLs must never be misclassified as book ISBNs.
+      final match = RegExp(
+        r'(?:^|[^0-9])((?:97[89][0-9]{10}|[0-9]{9}[0-9Xx]))(?:$|[^0-9])',
+      ).firstMatch(normalized);
+      if (match != null) return match.group(1)!.toUpperCase();
     }
     return '';
   }
