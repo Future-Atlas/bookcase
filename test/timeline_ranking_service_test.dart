@@ -36,6 +36,45 @@ void main() {
 
     expect(arranged.map((post) => post.id), ['high', 'low']);
   });
+
+  test('book reviews put every followed profile before other profiles', () {
+    final arranged = TimelineRankingService.arrangeBookReviews(
+      posts: [
+        _post('other-high', 'other-1', loves: 9),
+        _post('follow-low', 'followed-1', likes: 1),
+        _post('follow-high', 'followed-2', loves: 2),
+        _post('other-low', 'other-2'),
+      ],
+      followedProfileIds: const {'followed-1', 'followed-2'},
+    );
+
+    expect(arranged.map((post) => post.id), [
+      'follow-high',
+      'follow-low',
+      'other-high',
+      'other-low',
+    ]);
+  });
+
+  test('profile book reviews put the viewed profile owner first', () {
+    final arranged = TimelineRankingService.arrangeBookReviews(
+      posts: [
+        _post('other-high', 'other-1', loves: 9),
+        _post('owner-low', 'profile-owner'),
+        _post('follow-high', 'followed-1', loves: 5),
+        _post('owner-high', 'profile-owner', likes: 3),
+      ],
+      followedProfileIds: const {'followed-1'},
+      preferredProfileId: 'profile-owner',
+    );
+
+    expect(arranged.map((post) => post.id), [
+      'owner-high',
+      'owner-low',
+      'follow-high',
+      'other-high',
+    ]);
+  });
 }
 
 Post _post(

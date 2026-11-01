@@ -1,6 +1,7 @@
 // SupabaseService: handles real Supabase interactions only – no mock data.
 // Mock book data removed – books are fetched from external APIs via BookRepository.
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,11 +20,29 @@ import 'content_safety_service.dart';
 import 'input_security_service.dart';
 import 'timeline_ranking_service.dart';
 import '../utils/dev_logger.dart';
+import '../utils/japanese_datetime.dart';
 import '../utils/public_user_id.dart';
 
 // Kept for local troubleshooting. `debugLog` is silent outside debug builds.
 void debugPrint(String? message, {int? wrapWidth}) {
   debugLog(message, wrapWidth: wrapWidth);
+}
+
+String _totpLockedMessage(DateTime? retryAt) => retryAt == null
+    ? '上限回数に達しました。24時間後に再度入力してください。'
+    : '上限回数に達しました。${formatJapaneseMonthDayTime(retryAt)}（24時間後）以降に再度入力してください。';
+
+DateTime? _contactRateLimitRetryAt(Object? details) {
+  Object? decoded = details;
+  if (decoded is String) {
+    try {
+      decoded = jsonDecode(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+  if (decoded is! Map) return null;
+  return DateTime.tryParse(decoded['retry_at']?.toString() ?? '');
 }
 
 enum FavoriteToggleResult {
@@ -75,6 +94,49 @@ class BookEngagementCounts {
   final int wantToReadCount;
 }
 
+class TotpEnrollmentData {
+  const TotpEnrollmentData({
+    required this.factorId,
+    required this.uri,
+    required this.secret,
+  });
+
+  final String factorId;
+  final String uri;
+  final String secret;
+}
+
+class TotpVerificationState {
+  const TotpVerificationState({
+    required this.locked,
+    required this.remainingAttempts,
+    this.lockedUntil,
+  });
+
+  final bool locked;
+  final int remainingAttempts;
+  final DateTime? lockedUntil;
+
+  factory TotpVerificationState.fromJson(Map<String, dynamic> json) {
+    final lockedUntil = DateTime.tryParse(
+      json['locked_until']?.toString() ?? '',
+    );
+    return TotpVerificationState(
+      locked: json['locked'] == true,
+      remainingAttempts: (json['remaining_attempts'] as num?)?.toInt() ?? 5,
+      lockedUntil: lockedUntil?.toLocal(),
+    );
+  }
+}
+
+class TotpVerificationResult {
+  const TotpVerificationResult({required this.state, this.error});
+
+  final TotpVerificationState state;
+  final String? error;
+  bool get succeeded => error == null;
+}
+
 class SupabaseService extends ChangeNotifier {
   static const int standardFavoriteLimit = 3;
   static const int subscriberFavoriteLimit = 12;
@@ -98,6 +160,7 @@ class SupabaseService extends ChangeNotifier {
   String _activePageColorKey = ProfilePageColors.defaultKey;
   Timer? _sessionGuardTimer;
   Future<bool>? _canUseWantToReadFuture;
+  bool _privacyRecoveryTotpVerified = false;
   final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
   // ----- Initialization ----------------------------------------------------
@@ -174,6 +237,8 @@ class SupabaseService extends ChangeNotifier {
 
   User? get currentUser => _client?.auth.currentUser;
 
+  bool get isPrivacyRecoveryTotpVerified => _privacyRecoveryTotpVerified;
+
   /// The OAuth provider that owns the current Sharemarium account.
   ///
   /// Privacy-password recovery must use this same provider. Never ask the
@@ -223,6 +288,7 @@ class SupabaseService extends ChangeNotifier {
   }
 
   Future<void> clearPrivacyPasswordRecoveryIntent() async {
+    _privacyRecoveryTotpVerified = false;
     await _preferences.remove(_privacyRecoveryIntentStartedAtKey);
   }
 
@@ -612,6 +678,241 @@ class SupabaseService extends ChangeNotifier {
       return result == true;
     } catch (e) {
       debugPrint('Error checking privacy password: $e');
+      return false;
+    }
+  }
+
+  Future<bool> hasVerifiedTotpFactor() async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return false;
+    try {
+      final factors = await _client!.auth.mfa.listFactors();
+      return factors.totp.isNotEmpty;
+    } catch (e) {
+      debugPrint('Error checking TOTP enrollment: $e');
+      return false;
+    }
+  }
+
+  Future<bool> requiresTotpChallenge() async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return false;
+    try {
+      final factors = await _client!.auth.mfa.listFactors();
+      if (factors.totp.isEmpty) return false;
+      final assurance = _client!.auth.mfa.getAuthenticatorAssuranceLevel();
+      return assurance.currentLevel != AuthenticatorAssuranceLevels.aal2;
+    } catch (e) {
+      debugPrint('Error checking TOTP assurance level: $e');
+      return true;
+    }
+  }
+
+  Future<TotpEnrollmentData?> beginTotpEnrollment() async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return null;
+    try {
+      final factors = await _client!.auth.mfa.listFactors();
+      for (final factor in factors.all) {
+        if (factor.factorType == FactorType.totp &&
+            factor.status == FactorStatus.unverified) {
+          await _client!.auth.mfa.unenroll(factor.id);
+        }
+      }
+      final enrollment = await _client!.auth.mfa.enroll(
+        factorType: FactorType.totp,
+        issuer: 'Sharemarium',
+        friendlyName: 'Sharemarium 認証アプリ',
+      );
+      final totp = enrollment.totp;
+      if (totp == null) return null;
+      return TotpEnrollmentData(
+        factorId: enrollment.id,
+        uri: totp.uri,
+        secret: totp.secret,
+      );
+    } catch (e) {
+      debugPrint('TOTP enrollment could not be started: $e');
+      return null;
+    }
+  }
+
+  Future<String?> verifyTotpEnrollment({
+    required String factorId,
+    required String code,
+  }) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) {
+      return 'ログイン状態を確認できませんでした。';
+    }
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      return '6桁の認証コードを入力してください。';
+    }
+    try {
+      await _client!.auth.mfa.challengeAndVerify(
+        factorId: factorId,
+        code: code,
+      );
+      notifyListeners();
+      return null;
+    } on AuthException {
+      return '認証コードが正しくありません。認証アプリの最新コードを確認してください。';
+    } catch (e) {
+      debugPrint('TOTP enrollment verification failed: $e');
+      return '認証アプリを登録できませんでした。';
+    }
+  }
+
+  Future<String?> verifiedTotpFactorId() async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return null;
+    try {
+      final factors = await _client!.auth.mfa.listFactors();
+      return factors.totp.isEmpty ? null : factors.totp.first.id;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<TotpVerificationState?> fetchTotpVerificationState({
+    required String purpose,
+  }) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return null;
+    try {
+      final response = await _client!.functions.invoke(
+        'totp-recovery',
+        body: {'mode': 'status', 'purpose': purpose},
+      );
+      if (response.status < 200 || response.status >= 300) return null;
+      final data = response.data;
+      return data is Map
+          ? TotpVerificationState.fromJson(Map<String, dynamic>.from(data))
+          : null;
+    } catch (e) {
+      debugPrint('TOTP status could not be loaded: $e');
+      return null;
+    }
+  }
+
+  Future<TotpVerificationResult> verifyTotpCode({
+    required String purpose,
+    required String factorId,
+    required String code,
+  }) async {
+    const fallback = TotpVerificationState(locked: false, remainingAttempts: 5);
+    if (!_isInitialized || _client == null || !isAuthenticated) {
+      return const TotpVerificationResult(
+        state: fallback,
+        error: 'ログイン状態を確認できませんでした。',
+      );
+    }
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      return const TotpVerificationResult(
+        state: fallback,
+        error: '6桁の認証コードを入力してください。',
+      );
+    }
+    try {
+      final response = await _client!.functions.invoke(
+        'totp-recovery',
+        body: {
+          'mode': 'verify',
+          'purpose': purpose,
+          'factorId': factorId,
+          'code': code,
+        },
+      );
+      final data = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+      final state = TotpVerificationState.fromJson(data);
+      if (response.status < 200 || response.status >= 300) {
+        return TotpVerificationResult(
+          state: state,
+          error: purpose == 'privacy_recovery'
+              ? state.locked
+                    ? _totpLockedMessage(state.lockedUntil)
+                    : '認証コードが正しくありません。あと${state.remainingAttempts}回で、24時間ロックされます。'
+              : '認証コードが正しくありません。',
+        );
+      }
+      final accessToken = data['accessToken']?.toString() ?? '';
+      final refreshToken = data['refreshToken']?.toString() ?? '';
+      if (accessToken.isEmpty || refreshToken.isEmpty) {
+        return const TotpVerificationResult(
+          state: fallback,
+          error: '本人確認を完了できませんでした。',
+        );
+      }
+      await _client!.auth.setSession(refreshToken, accessToken: accessToken);
+      if (purpose == 'privacy_recovery') {
+        _privacyRecoveryTotpVerified = true;
+      }
+      notifyListeners();
+      return const TotpVerificationResult(state: fallback);
+    } on FunctionException catch (e) {
+      final details = e.details;
+      final state = details is Map
+          ? TotpVerificationState.fromJson(Map<String, dynamic>.from(details))
+          : fallback;
+      return TotpVerificationResult(
+        state: state,
+        error: purpose == 'privacy_recovery'
+            ? state.locked
+                  ? _totpLockedMessage(state.lockedUntil)
+                  : '認証コードが正しくありません。あと${state.remainingAttempts}回で、24時間ロックされます。'
+            : '認証コードが正しくありません。',
+      );
+    } catch (e) {
+      debugPrint('Protected TOTP verification failed: $e');
+      return const TotpVerificationResult(
+        state: fallback,
+        error: '認証コードを確認できませんでした。',
+      );
+    }
+  }
+
+  Future<String?> resetOwnTotpWithPrivacyPassword(String password) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) {
+      return 'ログイン状態を確認できませんでした。';
+    }
+    try {
+      final response = await _client!.functions.invoke(
+        'totp-recovery',
+        body: {'mode': 'self_reenroll', 'password': password},
+      );
+      if (response.status == 403) return '個人情報変更用パスワードが正しくありません。';
+      if (response.status < 200 || response.status >= 300) {
+        return '認証アプリを再登録できませんでした。';
+      }
+      await _client!.auth.refreshSession();
+      notifyListeners();
+      return null;
+    } on FunctionException catch (e) {
+      if (e.status == 403) return '個人情報変更用パスワードが正しくありません。';
+      return '認証アプリを再登録できませんでした。';
+    } catch (e) {
+      debugPrint('TOTP self recovery failed: $e');
+      return '認証アプリを再登録できませんでした。';
+    }
+  }
+
+  Future<bool> adminResetTotpFactor({
+    required String targetIdentifier,
+    required String adminPassword,
+    required String reason,
+    required String requestReference,
+  }) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return false;
+    try {
+      final response = await _client!.functions.invoke(
+        'totp-recovery',
+        body: {
+          'mode': 'admin_reset',
+          'targetIdentifier': targetIdentifier.trim(),
+          'adminPassword': adminPassword,
+          'reason': reason.trim(),
+          'requestReference': requestReference.trim(),
+        },
+      );
+      return response.status >= 200 && response.status < 300;
+    } catch (e) {
+      debugPrint('Administrator TOTP reset failed: $e');
       return false;
     }
   }
@@ -1233,6 +1534,7 @@ class SupabaseService extends ChangeNotifier {
       return 'パスワードの再設定はGoogleまたはXでログインしたアカウントのみ対応しています。';
     }
     try {
+      _privacyRecoveryTotpVerified = false;
       // The database records the current UID/provider/time before redirecting.
       // The password can only be changed after a *fresh* matching OAuth login.
       await _client!.rpc('begin_privacy_password_recovery');
@@ -1258,6 +1560,9 @@ class SupabaseService extends ChangeNotifier {
       await clearPrivacyPasswordRecoveryIntent();
       if (e.code == '22023') {
         return 'Google・X以外のログイン方法では再設定できません。';
+      }
+      if (e.code == 'P0001') {
+        return '認証コードを5回誤入力したため、24時間は再設定できません。';
       }
       return '本人確認を開始できませんでした。';
     } catch (e) {
@@ -1801,9 +2106,13 @@ class SupabaseService extends ChangeNotifier {
       return null;
     } on PostgrestException catch (e) {
       if (e.message.contains('CONTACT_RATE_LIMIT_EXCEEDED')) {
+        final retryAt = _contactRateLimitRetryAt(e.details);
+        final retryText = retryAt == null
+            ? '24時間経過後'
+            : '${formatJapaneseMonthDayTime(retryAt)}以降';
         return '申し訳ございません。システム上、24時間以内に送信できるお問い合わせは5件までです。\n'
             '運営チームが順次対応しておりますので、しばらくお待ちください。\n'
-            '追加のお問い合わせがある場合は、お手数ですが24時間経過後にお送りください。';
+            '上限件数に達しました。お手数ですが、$retryTextに再度送信してください。';
       }
       debugPrint('Contact request database error: $e');
       return 'お問い合わせを送信できませんでした。データベース更新後にもう一度お試しください。';
@@ -1897,6 +2206,7 @@ class SupabaseService extends ChangeNotifier {
   Future<List<Post>> fetchPostsForBook(
     String bookId, {
     bool excludeCurrentUser = false,
+    String? preferredProfileId,
   }) async {
     final normalizedBookId = bookId.trim();
     if (!_isInitialized || _client == null || normalizedBookId.isEmpty) {
@@ -1908,26 +2218,17 @@ class SupabaseService extends ChangeNotifier {
       final enriched = await _enrichPostsWithBookMetadata(parsed);
       final visible = await _filterPostsForCurrentViewer(enriched);
       final viewerId = activeProfileId;
-      final otherUsersPosts = viewerId.isNotEmpty
+      final candidates = excludeCurrentUser && viewerId.isNotEmpty
           ? visible
                 .where((post) => post.profileId != viewerId)
                 .toList(growable: false)
-          : <Post>[];
-      if (excludeCurrentUser || viewerId.isEmpty) {
-        return _arrangeTimelinePosts(
-          excludeCurrentUser ? otherUsersPosts : visible,
-        );
-      }
-
-      final ownPosts =
-          visible
-              .where((post) => post.profileId == viewerId)
-              .toList(growable: false)
-            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      final rankedOtherUsersPosts = await _arrangeTimelinePosts(
-        otherUsersPosts,
+          : visible;
+      final followedProfileIds = await _acceptedFollowingProfileIds();
+      return TimelineRankingService.arrangeBookReviews(
+        posts: candidates,
+        followedProfileIds: followedProfileIds,
+        preferredProfileId: preferredProfileId,
       );
-      return [...ownPosts, ...rankedOtherUsersPosts];
     }
 
     try {

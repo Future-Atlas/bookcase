@@ -5,11 +5,14 @@ import '../services/supabase_service.dart';
 import '../utils/public_user_id.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_screen.dart';
+import 'totp_authentication_screen.dart';
 
 enum _OnboardingRequirement {
   complete,
   profile,
   privacyPassword,
+  totpEnrollment,
+  totpChallenge,
   guardianConsent,
 }
 
@@ -33,6 +36,12 @@ class _ProfileOnboardingGateState extends State<ProfileOnboardingGate> {
     if (!hasProfile) return _OnboardingRequirement.profile;
     if (!await service.hasPrivacyPassword()) {
       return _OnboardingRequirement.privacyPassword;
+    }
+    if (!await service.hasVerifiedTotpFactor()) {
+      return _OnboardingRequirement.totpEnrollment;
+    }
+    if (await service.requiresTotpChallenge()) {
+      return _OnboardingRequirement.totpChallenge;
     }
     return await service.requiresGuardianConsent()
         ? _OnboardingRequirement.guardianConsent
@@ -74,6 +83,15 @@ class _ProfileOnboardingGateState extends State<ProfileOnboardingGate> {
                 );
               case _OnboardingRequirement.profile:
                 return ProfileOnboardingScreen(
+                  onCompleted: () => _refresh(service),
+                );
+              case _OnboardingRequirement.totpEnrollment:
+                return TotpEnrollmentScreen(
+                  onCompleted: () => _refresh(service),
+                );
+              case _OnboardingRequirement.totpChallenge:
+                return TotpChallengeScreen(
+                  purpose: 'login',
                   onCompleted: () => _refresh(service),
                 );
               case _OnboardingRequirement.guardianConsent:
@@ -204,6 +222,7 @@ class PrivacyPasswordSetupScreen extends StatefulWidget {
   });
 
   final VoidCallback onCompleted;
+
   /// Reuse the original first-time password setup page for a verified reset.
   final bool isRecovery;
 
@@ -245,9 +264,9 @@ class _PrivacyPasswordSetupScreenState
       return;
     }
     if (widget.isRecovery) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('パスワードを再設定しました。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('パスワードを再設定しました。')));
     }
     widget.onCompleted();
   }
@@ -271,9 +290,7 @@ class _PrivacyPasswordSetupScreenState
               padding: const EdgeInsets.all(24),
               children: [
                 Text(
-                  widget.isRecovery
-                      ? '新しいパスワードを設定'
-                      : '個人情報変更用パスワードを設定してください',
+                  widget.isRecovery ? '新しいパスワードを設定' : '個人情報変更用パスワードを設定してください',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
@@ -299,9 +316,7 @@ class _PrivacyPasswordSetupScreenState
                 const SizedBox(height: 14),
                 _PasswordField(
                   controller: _confirmationController,
-                  label: widget.isRecovery
-                      ? '新しいパスワード（確認）'
-                      : 'パスワード（確認）',
+                  label: widget.isRecovery ? '新しいパスワード（確認）' : 'パスワード（確認）',
                   obscureText: _obscurePassword,
                   onToggleVisibility: () =>
                       setState(() => _obscurePassword = !_obscurePassword),

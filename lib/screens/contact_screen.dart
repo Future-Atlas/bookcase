@@ -4,9 +4,10 @@ import 'package:provider/provider.dart';
 import '../services/supabase_service.dart';
 
 class ContactScreen extends StatefulWidget {
-  const ContactScreen({super.key, this.onClose});
+  const ContactScreen({super.key, this.onClose, this.initialCategory});
 
   final VoidCallback? onClose;
+  final String? initialCategory;
 
   @override
   State<ContactScreen> createState() => _ContactScreenState();
@@ -17,7 +18,7 @@ class _ContactScreenState extends State<ContactScreen> {
   final _emailController = TextEditingController();
   final _subjectController = TextEditingController();
   final _messageController = TextEditingController();
-  String _category = 'general';
+  late String _category;
   bool _isSubmitting = false;
 
   static const _categories = <String, String>{
@@ -26,9 +27,18 @@ class _ContactScreenState extends State<ContactScreen> {
     'infringement': '権利侵害に関する申出',
     'report': '投稿・利用者の通報',
     'account': 'アカウント・退会',
+    'totp_recovery': '認証用QRコードの再取得',
     'fraud': '不正利用',
     'other': 'その他',
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _category = _categories.containsKey(widget.initialCategory)
+        ? widget.initialCategory!
+        : 'general';
+  }
 
   @override
   void didChangeDependencies() {
