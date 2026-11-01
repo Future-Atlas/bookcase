@@ -56,3 +56,25 @@ Compare ISBNs, order and screenshots for 20-30 old/new searches:
 - Confirm the client converts hyphenated ISBNs to canonical `9784297136338` form and does not discard otherwise valid records (the first 27 RSS results must fill up to 9 safe cards when enough ISBNs exist).
 - Repeat with next page and verify ISBN identity, no duplicates, age filtering, and manual retry on intermittent NDL 502/504.
 - NDL OpenSearch publication-date `from` and OAI-PMH datestamp `from` have different meanings. A cached OAI-PMH ingestion is a separate change, not a replacement for basic ISBN normalization.
+
+
+
+## Cover-image availability after fallback
+- Confirm \`/api/openbd?isbn=9784488402327,9784413299084\` returns 200 with
+  \`summary.cover\` blank (the records still contain valid bibliographic
+  information). An empty image field is not a failed request.
+- Check a known Open Library ISBN with a cover, e.g. \`9780140328721\`:
+  the UI should use \`https://covers.openlibrary.org/b/isbn/9780140328721-M.jpg?default=false\`
+  as a **real image** if its book's cover URL is absent.
+- Check a recent Japanese ISBN with no Open Library cover, e.g.
+  \`9784488402327\`: the API returns 404 and UI shows a title/author
+  placeholder clearly marked \`表紙画像なし\`, not a blank white rectangle.
+- With a valid original cover, verify it takes precedence over Open Library
+  and that a load error falls back to the ISBN-matched URL.
+- Verify mobile and web, including cross-origin image fallback with
+  CanvasKit, detail dialogs, profile/book search and favorites.
+- Verify no NDL source selection, 9-card/27-candidate pagination,
+  ISBN identity, adult-content classification or user posts changed.
+- Do not claim full Japanese book cover coverage: Open Library availability
+  varies, openBD coverage is limited and using JPRO/retailer assets requires
+  explicit rights.
