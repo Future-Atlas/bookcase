@@ -1579,15 +1579,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.network(
-                      book.coverUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: Colors.grey[300],
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.book, size: 36),
-                      ),
-                    ),
+                    BookCoverImage(book: book),
                     Positioned(
                       left: 0,
                       right: 0,
@@ -1897,21 +1889,15 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (book.coverUrl.trim().isNotEmpty)
-                        Center(
-                          child: SizedBox(
-                            height: narrow ? 220 : 300,
-                            child: Image.network(
-                              book.coverUrl,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, _, _) => const Icon(
-                                Icons.menu_book,
-                                size: 64,
-                                color: Colors.black54,
-                              ),
-                            ),
+                      Center(
+                        child: SizedBox(
+                          height: narrow ? 220 : 300,
+                          child: BookCoverImage(
+                            book: book,
+                            fit: BoxFit.contain,
                           ),
                         ),
+                      ),
                       const SizedBox(height: 12),
                       Text(
                         book.title.trim().isEmpty ? 'タイトル不明' : book.title,
