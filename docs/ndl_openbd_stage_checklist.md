@@ -60,15 +60,15 @@ Compare ISBNs, order and screenshots for 20-30 old/new searches:
 
 
 ## Cover-image availability after fallback
-- Confirm \`/api/openbd?isbn=9784488402327,9784413299084\` returns 200 with
-  \`summary.cover\` blank (the records still contain valid bibliographic
+- Confirm `/api/openbd?isbn=9784488402327,9784413299084` returns 200 with
+  `summary.cover` blank (the records still contain valid bibliographic
   information). An empty image field is not a failed request.
-- Check a known Open Library ISBN with a cover, e.g. \`9780140328721\`:
-  the UI should use \`https://covers.openlibrary.org/b/isbn/9780140328721-M.jpg?default=false\`
+- Check a known Open Library ISBN with a cover, e.g. `9780140328721`:
+  the UI should use `https://covers.openlibrary.org/b/isbn/9780140328721-M.jpg?default=false`
   as a **real image** if its book's cover URL is absent.
 - Check a recent Japanese ISBN with no Open Library cover, e.g.
-  \`9784488402327\`: the API returns 404 and UI shows a title/author
-  placeholder clearly marked \`表紙画像なし\`, not a blank white rectangle.
+  `9784488402327`: the API returns 404 and UI shows a title/author
+  placeholder clearly marked `表紙画像なし`, not a blank white rectangle.
 - With a valid original cover, verify it takes precedence over Open Library
   and that a load error falls back to the ISBN-matched URL.
 - Verify mobile and web, including cross-origin image fallback with
