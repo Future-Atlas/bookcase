@@ -30,7 +30,7 @@ void main() {
       required String provider, String? any, String? from,
       required int start, required int count,
     }) async {
-      expect(provider, NdlApi.national);
+      expect(provider, NdlApi.inProcess);
       expect(from, isNotEmpty);
       expect(count, 27);
       requested.add(start);
@@ -76,14 +76,14 @@ void main() {
     expect(repo.hasMoreHomeBooks('新着'), true);
   });
 
-  test('new arrivals fall back after sparse in-process metadata', () async {
+  test('new arrivals fall back to completed national bibliography after sparse draft metadata', () async {
     final providers = <String>[];
     Future<NdlSearchBatch> fetch({
       required String provider, String? any, String? from,
       required int start, required int count,
     }) async {
       providers.add(provider + ':' + start.toString());
-      if (provider == NdlApi.national) {
+      if (provider == NdlApi.inProcess) {
         return const NdlSearchBatch(books: [], rawCount: 27, hasMore: true);
       }
       return NdlSearchBatch(
@@ -95,8 +95,8 @@ void main() {
     final first = await repo.fetchBooksByGenre('新着');
     expect(first.length, 9);
     expect(providers, [
-      NdlApi.national + ':1',
       NdlApi.inProcess + ':1',
+      NdlApi.national + ':1',
     ]);
   });
 
@@ -161,7 +161,7 @@ void main() {
       required int start, required int count,
     }) async {
       queries.add(provider + ':' + start.toString());
-      if (provider == NdlApi.national) {
+      if (provider == NdlApi.inProcess) {
         return const NdlSearchBatch(
           books: [], rawCount: 0, hasMore: false,
           temporarilyUnavailable: true,
@@ -175,7 +175,7 @@ void main() {
     final repo = BookRepository(homeFetcher: fetch);
     final newBooks = await repo.fetchBooksByGenre('新着');
     expect(newBooks.length, 9);
-    expect(queries, [NdlApi.national + ':1', NdlApi.inProcess + ':1']);
+    expect(queries, [NdlApi.inProcess + ':1', NdlApi.national + ':1']);
     expect(repo.hasMoreHomeBooks('新着'), true);
   });
 
@@ -202,11 +202,11 @@ void main() {
     expect(await repo.fetchBooksByGenre('新着'), isEmpty);
     // Both sources failed but remain retryable; this is NOT a zero-results page.
     expect(repo.hasMoreHomeBooks('新着'), true);
-    expect(offsets, [NdlApi.national + ':1', NdlApi.inProcess + ':1']);
+    expect(offsets, [NdlApi.inProcess + ':1', NdlApi.national + ':1']);
     unavailable = false;
     repo.resetHomeBooks('新着');
     expect((await repo.fetchBooksByGenre('新着')).length, 9);
-    expect(offsets.last, NdlApi.national + ':1');
+    expect(offsets.last, NdlApi.inProcess + ':1');
   });
 
   test('new arrivals use a recent publication window instead of a year-wide query', () async {
@@ -214,7 +214,7 @@ void main() {
       required String provider, String? any, String? from,
       required int start, required int count,
     }) async {
-      expect(provider, NdlApi.national);
+      expect(provider, NdlApi.inProcess);
       expect(from, isNotNull);
       final daysOld = DateTime.now().difference(DateTime.parse(from!)).inDays;
       expect(daysOld, inInclusiveRange(89, 91));
