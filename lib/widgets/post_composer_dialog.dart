@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/book.dart';
+import 'book_cover_image.dart';
 import '../models/post.dart';
 import '../services/content_safety_service.dart';
 import '../services/supabase_service.dart';
@@ -75,15 +76,7 @@ Future<bool> showPostComposerDialog({
                                 width: 88,
                                 height: 126,
                                 color: Colors.grey[350],
-                                child: book.coverUrl.trim().isNotEmpty
-                                    ? Image.network(
-                                        book.coverUrl,
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                _MissingCover(book: book),
-                                      )
-                                    : _MissingCover(book: book),
+                                child: BookCoverImage(book: book),
                               ),
                               const SizedBox(height: 8),
                               Text(
