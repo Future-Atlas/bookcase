@@ -35,6 +35,8 @@ begin
     ('private_data_admin_audit'),
     ('profiles'),
     ('session_ip_guards'),
+    ('totp_recovery_audit'),
+    ('totp_verification_limits'),
     ('want_to_read_books')
   ) as required(name)
   left join pg_class as relation
@@ -82,6 +84,8 @@ begin
       'private_data_admin_audit',
       'profiles',
       'session_ip_guards',
+      'totp_recovery_audit',
+      'totp_verification_limits',
       'want_to_read_books'
     ])
     and not relation.relrowsecurity
@@ -112,6 +116,12 @@ begin
   end if;
   if has_table_privilege('authenticated', 'public.private_data_admin_audit', 'SELECT') then
     raise exception 'SECURITY_AUDIT_PRIVATE_DATA_AUDIT_READ';
+  end if;
+  if has_table_privilege('authenticated', 'public.totp_recovery_audit', 'SELECT') then
+    raise exception 'SECURITY_AUDIT_TOTP_RECOVERY_AUDIT_READ';
+  end if;
+  if has_table_privilege('authenticated', 'public.totp_verification_limits', 'SELECT') then
+    raise exception 'SECURITY_AUDIT_TOTP_LIMIT_READ';
   end if;
   if has_table_privilege('authenticated', 'public.account_details', 'UPDATE') then
     raise exception 'SECURITY_AUDIT_DIRECT_ACCOUNT_DETAILS_UPDATE';
@@ -180,6 +190,13 @@ begin
     where version = '20261029143000'
   ) then
     raise exception 'SECURITY_AUDIT_PENDING_AUDITED_PRIVATE_DATA_MIGRATION';
+  end if;
+  if not exists (
+    select 1
+    from supabase_migrations.schema_migrations
+    where version = '20261031100000'
+  ) then
+    raise exception 'SECURITY_AUDIT_PENDING_TOTP_RECOVERY_MIGRATION';
   end if;
 end;
 $$;
