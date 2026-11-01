@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/book.dart';
+import 'book_cover_image.dart';
 
 class BookCard extends StatefulWidget {
   final Book book;
@@ -95,32 +96,9 @@ class _BookCardState extends State<BookCard> {
                   // information panel's existing height ratio.
                   Hero(
                     tag: 'book-cover-${widget.book.id}',
-                    child: Image.network(
-                      widget.book.coverUrl,
+                    child: BookCoverImage(
+                      book: widget.book,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: Colors.grey[300],
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.book,
-                            size: 40,
-                            color: Colors.grey,
-                          ),
-                        );
-                      },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          color: Colors.grey[200],
-                          alignment: Alignment.center,
-                          child: const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        );
-                      },
                     ),
                   ),
                   Align(
