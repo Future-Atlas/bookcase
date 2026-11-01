@@ -66,11 +66,21 @@ Compare ISBNs, order and screenshots for 20-30 old/new searches:
 - Check a known Open Library ISBN with a cover, e.g. `9780140328721`:
   the UI should use `https://covers.openlibrary.org/b/isbn/9780140328721-M.jpg?default=false`
   as a **real image** if its book's cover URL is absent.
-- Check a recent Japanese ISBN with no Open Library cover, e.g.
-  `9784488402327`: the API returns 404 and UI shows a title/author
-  placeholder clearly marked `表紙画像なし`, not a blank white rectangle.
-- With a valid original cover, verify it takes precedence over Open Library
-  and that a load error falls back to the ISBN-matched URL.
+- Check recent Japanese ISBN `9784488402327`: Open Library returns
+  404, while Google Books Dynamic Links returned a thumbnail URL in
+  the diagnostic probe. Confirm `/api/book-covers?isbn=9784488402327`
+  returns the ISBN-exact Google thumbnail and Google Books credit link;
+  the UI should show a clickable `Google ブックス` source badge.
+- When both Google and Open Library lack a usable image or a provider times
+  out, confirm a title/author placeholder marked `表紙画像なし`, not a
+  generic unrelated book cover or a blank rectangle.
+- With a valid original openBD cover, verify it takes precedence over
+  Google Books and Open Library and that an image load error falls back to
+  the ISBN-matched Open Library URL.
+- Verify a batch of 9 or 25 ISBNs results in ONE Dynamic Links lookup
+  through the Worker, not one request per book; verify rate-limit/timeout
+  failures leave all book data usable. Confirm source/credit URLs are
+  validated, and copied or mismatched ISBN covers are never shown.
 - Verify mobile and web, including cross-origin image fallback with
   CanvasKit, detail dialogs, profile/book search and favorites.
 - Verify no NDL source selection, 9-card/27-candidate pagination,
