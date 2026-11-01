@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/book.dart';
+import '../widgets/book_cover_image.dart';
 import '../repositories/book_repository.dart';
 import '../services/supabase_service.dart';
 import '../widgets/post_composer_dialog.dart';
@@ -213,20 +214,7 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
                   width: 72,
                   height: 104,
                   color: Colors.grey[300],
-                  child: book.coverUrl.trim().isNotEmpty
-                      ? Image.network(
-                          book.coverUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(
-                                Icons.menu_book_outlined,
-                                color: Colors.black45,
-                              ),
-                        )
-                      : const Icon(
-                          Icons.menu_book_outlined,
-                          color: Colors.black45,
-                        ),
+                  child: BookCoverImage(book: book),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
