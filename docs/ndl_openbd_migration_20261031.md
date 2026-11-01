@@ -50,29 +50,43 @@ NDL OpenSearch returns bibliographic records, not a usable cover URL;
 NDL's original cover API was discontinued on 2026-03-31. Absence of covers
 is **not a failure of the NDL ISBN parser or an openBD 502**.
 
-The shared `BookCoverImage` widget uses the verified existing `Book.coverUrl`
-(openBD, previously stored) first, then may request the matching ISBN at
+The shared `BookCoverImage` widget first uses the verified existing
+`Book.coverUrl` (e.g. openBD). For missing images, `OpenBdApi.enrich` calls
+the same-origin `/api/book-covers` proxy in batches of at most 25 ISBNs.
+The Worker requests Google's **keyless Dynamic Links** endpoint via the
+published `bibkeys=ISBN:...` interface and parses its JSONP strictly as
+JSON (never evaluates it). Google Books' ordinary REST API returned 429,
+but Dynamic Links returned actual thumbnail and `info_url` fields for
+both recent Japanese ISBNs in a live probe. Only exact requested ISBN
+keys, allowed Google hosts and results with a valid Google Books info-page
+link are accepted. The UI stores the source plus credit link in memory and
+displays a clickable **Google ブックス** badge on these thumbnails, and
+credits the source in `CatalogCredit`. No Google image bytes are copied
+or rehosted; successful proxy metadata is only edge-cached for five minutes.
+Google Books Dynamic Links' viewability varies by location, so we do not
+make preview/viewability claims based on this server-side thumbnail lookup.
+
+When Google has no image or the API fails, the UI requests the same ISBN at
 `https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg?default=false`.
-Open Library explicitly permits displaying their cover URLs on public pages;
+Open Library explicitly permits displaying its cover URLs on public pages;
 the `default=false` switch ensures nonexistent covers produce HTTP 404
-instead of a blank image. This is a **display-only** fallback: no unlicensed
-image downloads, persistence, rehosting or inferred title-based matches.
-Google Books public API returned 429 in live tests and is not used without
-approved credentials/attribution; online bookstores' catalog images are
-not copied. Open Library itself has a limit of 100 non-ID/OLID cover requests
-per IP per 5 minutes, so avoid crawling/prefetching all catalog results.
-The UI links to Open Library in `CatalogCredit`.
+instead of blank white images. No unlicensed book cover scraping, image
+downloads, permanent caching, rehosting or title-based guessed matches.
+Open Library limits non-ID/OLID requests to 100 per IP per 5 minutes:
+do not crawl or prefetch the entire catalogue.
 
 On Flutter Web, a cross-origin cover CDN without CORS may not work with
-`Image.network` default settings. Use
+`Image.network` default settings. Google Books thumbnails are shown only
+with explicit Google credit and an outbound information-page link. Use
 `WebHtmlElementStrategy.fallback` for original cover URLs and
 `WebHtmlElementStrategy.prefer` for Open Library image URLs to allow browser
 HTML image loading. If neither source has a cover, show the title and
 **表紙画像なし**; never invent an actual cover.
 
-**Important limitation:** for the two live-tested recent Japanese titles,
-Open Library returned 404. This change improves real cover availability
-where the service has one, and improves missing-image display; it cannot
-create actual missing licensed jackets. Broader recent Japanese coverage
-requires a legitimate cover-provider agreement (e.g. a publisher/JPRO-
-authorized source) and a separately reviewed integration.
+**Important limitation:** Open Library returned 404 for the two live-tested
+recent Japanese titles, but Google Books Dynamic Links returned thumbnail
+URLs. A thumbnail URL does not guarantee that an image can be loaded in every
+browser or territory; the image fallback continues to show `表紙画像なし`
+when neither provider supplies a usable jacket. Complete Japanese edition
+coverage still requires publisher/JPRO-authorized sources, separately reviewed
+for commercial usage and image licensing.
