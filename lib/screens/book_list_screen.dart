@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
+import '../widgets/book_cover_image.dart';
 import '../config/feature_flags.dart';
 import '../widgets/book_search_results.dart';
 import '../widgets/catalog_credit.dart';
@@ -466,21 +467,10 @@ class _BookListScreenState extends State<BookListScreen> {
                                 width: isNarrow ? double.infinity : 200,
                                 height: isNarrow ? 240 : 300,
                                 color: Colors.grey[400],
-                                child: hasCover
-                                    ? Image.network(
-                                        book.coverUrl,
-                                        fit: BoxFit.cover,
-                                        alignment: isNarrow
-                                            ? Alignment.topCenter
-                                            : Alignment.center,
-                                        errorBuilder:
-                                            (context, error, stackTrace) {
-                                              return _buildMissingCoverFallback(
-                                                book,
-                                              );
-                                            },
-                                      )
-                                    : _buildMissingCoverFallback(book),
+                                child: BookCoverImage(
+                                  book: book,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
                               const SizedBox(height: 12),
                               if (!hasCover) ...[
