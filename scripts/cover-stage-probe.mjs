@@ -1,7 +1,7 @@
 // Narrow, read-only staging diagnostic for ISBN-exact book covers.
 // Upstream outages and missing jackets are observations, not deploy failures.
 // Invalid app routing, malformed response shapes and unsafe URLs ARE failures.
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
 const sampleIsbn = '9784488402327'; // Japanese edition sampled in the catalog migration
@@ -13,6 +13,17 @@ function providerUrl(value, allowedHosts) {
     const url = new URL(value);
     return url.protocol === 'https:' && !url.username && !url.password &&
       !url.port && allowedHosts.includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function safeExternalCoverUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && Boolean(url.hostname) &&
+      !url.username && !url.password && !url.port;
   } catch {
     return false;
   }
@@ -96,7 +107,7 @@ export async function probeCoverStage(baseUrl, { request = fetch } = {}) {
     }
     const cover = summary?.cover;
     outcome.openbd_japanese_jacket = typeof cover === 'string' && cover.trim() ?
-      (providerUrl(cover.trim(), [new URL(cover).hostname]) ? 'metadata_available' : 'invalid_url') :
+      (safeExternalCoverUrl(cover.trim()) ? 'metadata_available' : 'invalid_url') :
       'not_available';
   } else {
     outcome.openbd_japanese_jacket = 'upstream_unavailable';
