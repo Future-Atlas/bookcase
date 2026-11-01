@@ -23,6 +23,19 @@ class NdlSearchBatch {
   final bool temporarilyUnavailable;
 }
 
+/// A page of the dedicated NDL OAI-PMH newly registered bibliography.
+class NdlNewArrivalBatch {
+  const NdlNewArrivalBatch({
+    required this.books,
+    this.continuationToken,
+    this.temporarilyUnavailable = false,
+  });
+
+  final List<Book> books;
+  final String? continuationToken;
+  final bool temporarilyUnavailable;
+}
+
 class NdlApi {
   static const _base = '/api/ndl';
   static const national = 'iss-ndl-opac-national';
@@ -97,6 +110,111 @@ class NdlApi {
         temporarilyUnavailable: true,
       );
     }
+  }
+
+
+  static Uri newArrivalUri({
+    required String from,
+    required String until,
+    String? continuationToken,
+    String provider = inProcess,
+  }) => Uri(
+    path: '/api/ndl-new-arrivals',
+    queryParameters: {
+      'set': provider,
+      if (continuationToken != null && continuationToken.isNotEmpty)
+        'token': continuationToken,
+      if (continuationToken == null || continuationToken.isEmpty) ...{
+        'from': from,
+        'until': until,
+      },
+    },
+  );
+
+  static Future<NdlNewArrivalBatch> fetchNewArrivalPage({
+    required String from,
+    required String until,
+    String? continuationToken,
+    String provider = inProcess,
+  }) async {
+    try {
+      final response = await http.get(newArrivalUri(
+        from: from, until: until, continuationToken: continuationToken,
+        provider: provider,
+      )).timeout(const Duration(seconds: 22));
+      if (response.statusCode != 200) {
+        return const NdlNewArrivalBatch(
+          books: [], temporarilyUnavailable: true,
+        );
+      }
+      return parseNewArrivalOai(utf8.decode(response.bodyBytes));
+    } catch (_) {
+      return const NdlNewArrivalBatch(
+        books: [], temporarilyUnavailable: true,
+      );
+    }
+  }
+
+  /// OAI-PMH uses record datestamps, not publication dates. XML metadata
+  /// payload is simple Dublin Core (oai_dc); skip deleted and ISBN-less items.
+  static NdlNewArrivalBatch parseNewArrivalOai(String xml) {
+    final doc = XmlDocument.parse(xml);
+    final errors = doc.descendants.whereType<XmlElement>()
+        .where((node) => node.name.local == 'error').toList();
+    if (errors.isNotEmpty) {
+      if (errors.every((e) => e.getAttribute('code') == 'noRecordsMatch')) {
+        return const NdlNewArrivalBatch(books: []);
+      }
+      throw const FormatException('NDL OAI-PMH returned an error');
+    }
+    final records = doc.descendants.whereType<XmlElement>()
+        .where((node) => node.name.local == 'record' &&
+            node.parentElement?.name.local == 'ListRecords');
+    final sorted = <MapEntry<DateTime, Book>>[];
+    final seen = <String>{};
+    for (final record in records) {
+      final headers = record.children.whereType<XmlElement>()
+          .where((node) => node.name.local == 'header');
+      if (headers.isEmpty) continue;
+      final header = headers.first;
+      if (header.getAttribute('status') == 'deleted') continue;
+      final metadataNodes = record.children.whereType<XmlElement>()
+          .where((node) => node.name.local == 'metadata');
+      if (metadataNodes.isEmpty) continue;
+      final dcNodes = metadataNodes.first.children.whereType<XmlElement>();
+      if (dcNodes.isEmpty) continue;
+      final dc = dcNodes.first;
+      final title = _value(dc, 'title') ?? '';
+      final isbn = _isbn(dc);
+      if (title.isEmpty || isbn.isEmpty || !seen.add(isbn)) continue;
+      final stamp = DateTime.tryParse(_value(header, 'datestamp') ?? '');
+      sorted.add(MapEntry(stamp ?? DateTime.utc(1970), Book(
+        id: isbn,
+        isbn: isbn,
+        title: title,
+        author: _value(dc, 'creator') ?? '',
+        publisher: _value(dc, 'publisher') ?? '',
+        pubDate: _value(dc, 'date') ?? '',
+        coverUrl: '',
+        genre: '新着',
+        description: _value(dc, 'description') ?? '',
+        languageCode: _languages(dc),
+        catalogSource: 'ndl',
+        catalogFetchedAt: DateTime.now().toUtc(),
+      )));
+    }
+    sorted.sort((a, b) => b.key.compareTo(a.key));
+    String? token;
+    for (final node in doc.descendants.whereType<XmlElement>()) {
+      if (node.name.local != 'resumptionToken') continue;
+      final value = node.innerText.trim();
+      if (value.isNotEmpty) token = value;
+      break;
+    }
+    return NdlNewArrivalBatch(
+      books: sorted.map((entry) => entry.value).toList(growable: false),
+      continuationToken: token,
+    );
   }
 
   static Future<List<Book>> search({
