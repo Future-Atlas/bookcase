@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/book.dart';
+import 'book_cover_image.dart';
 import '../services/favorite_retention_service.dart';
 import '../services/supabase_service.dart';
 
@@ -131,21 +132,7 @@ class _FavoriteReplacementDialogState
                               children: [
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(6),
-                                  child: book.coverUrl.isEmpty
-                                      ? const ColoredBox(
-                                          color: Color(0xFFE7E7E7),
-                                          child: Icon(Icons.menu_book),
-                                        )
-                                      : Image.network(
-                                          book.coverUrl,
-                                          fit: BoxFit.cover,
-                                          errorBuilder:
-                                              (context, error, stackTrace) =>
-                                                  const ColoredBox(
-                                                    color: Color(0xFFE7E7E7),
-                                                    child: Icon(Icons.menu_book),
-                                                  ),
-                                        ),
+                                  child: BookCoverImage(book: book),
                                 ),
                                 if (replacing)
                                   const ColoredBox(

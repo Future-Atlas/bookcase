@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/book.dart';
+import 'google_books_covers_api.dart';
 
 /// Optional, short-lived enrichment by openBD. The user-owned bookshelf and
 /// reviews must stay available when records or covers are absent/withdrawn.
@@ -39,10 +40,13 @@ class OpenBdApi {
         // Enrichment is optional: preserve the unaffected ISBNs.
       }
     }
-    return books.map((book) {
+    final enriched = books.map((book) {
       final record = byIsbn[book.isbn];
       return record == null ? book : enrichRecord(book, record);
     }).toList(growable: false);
+    // Official openBD jackets and ONIX adult classifications take priority;
+    // only missing jackets are enriched with exact-ISBN Google Books results.
+    return GoogleBooksCoversApi.enrich(enriched);
   }
 
   /// Pure transform to support fixture tests for ONIX safety classifications.
@@ -67,6 +71,8 @@ class OpenBdApi {
     final description = _description(onixData);
     return book.copyWith(
       coverUrl: validCover ? cover : book.coverUrl,
+      coverSource: validCover ? 'openbd' : book.coverSource,
+      coverAttributionUrl: validCover ? '' : book.coverAttributionUrl,
       description: description.isNotEmpty ? description : book.description,
       adultContentFlag: book.adultContentFlag || explicitlyAdult,
       ageRatingSource: codes.isEmpty ? book.ageRatingSource : 'openbd',

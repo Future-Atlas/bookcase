@@ -38,3 +38,55 @@ NDL documents that performance varies with query conditions and imposes access-c
 ### New-arrivals ISBN parsing defect (2026-11-01)
 
 The public NDL OpenSearch response and DC-NDL documentation include hyphenated ISBN identifiers (for example `978-4-297-13633-8`). The client previously used a regex matching only contiguous 10/13-digit sequences, silently dropping valid records **after a successful 200 RSS response**. Increasing request timeouts and reducing the publication date window cannot fix that. The parser now normalizes ISBN hyphens/spacing before validating the 10/13-digit ISBN representation and refuses to promote arbitrary NDL IDs/URLs. The home query now prioritizes the dedicated `iss-ndl-opac-inprocess` provider again; the PR #199 national-first workaround was necessary only while the ISBN parser was dropping hyphenated records. OAI-PMH `set=iss-ndl-opac-inprocess` is a separately supported source of recent *catalogue updates*; a live probe on 2026-11-01 timed out after 22 seconds, so do not replace the home feed with a live per-view OAI-PMH query without a controlled ingestion/cache design. Current release fix focuses on returning valid ISBNs from the existing official feed.
+
+
+
+### Cover-image display and rights (2026-11-01)
+
+The stage and direct openBD API both returned HTTP 200 for ISBNs
+`9784488402327` (new 2026 Japanese novel), `9784413299084` (2026 non-fiction) and
+`9784101010014`, but each response had **no `summary.cover`**.
+NDL OpenSearch returns bibliographic records, not a usable cover URL;
+NDL's original cover API was discontinued on 2026-03-31. Absence of covers
+is **not a failure of the NDL ISBN parser or an openBD 502**.
+
+The shared `BookCoverImage` widget first uses the verified existing
+`Book.coverUrl` (e.g. openBD). For missing images, `OpenBdApi.enrich` calls
+the same-origin `/api/book-covers` proxy in batches of at most 25 ISBNs.
+The Worker requests Google's **keyless Dynamic Links** endpoint via the
+published `bibkeys=ISBN:...` interface and parses its JSONP strictly as
+JSON (never evaluates it). Google Books' ordinary REST API returned 429,
+but Dynamic Links returned actual thumbnail and `info_url` fields for
+both recent Japanese ISBNs in a live probe. Only exact requested ISBN
+keys, allowed Google hosts and results with a valid Google Books info-page
+link are accepted. The UI stores the source plus credit link in memory and
+displays a clickable **Google ブックス** badge on these thumbnails, and
+credits the source in `CatalogCredit`. No Google image bytes are copied
+or rehosted; successful proxy metadata is only edge-cached for five minutes.
+Google Books Dynamic Links' viewability varies by location, so we do not
+make preview/viewability claims based on this server-side thumbnail lookup.
+
+When Google has no image or the API fails, the UI requests the same ISBN at
+`https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg?default=false`.
+Open Library explicitly permits displaying its cover URLs on public pages;
+the `default=false` switch ensures nonexistent covers produce HTTP 404
+instead of blank white images. No unlicensed book cover scraping, image
+downloads, permanent caching, rehosting or title-based guessed matches.
+Open Library limits non-ID/OLID requests to 100 per IP per 5 minutes:
+do not crawl or prefetch the entire catalogue.
+
+On Flutter Web, a cross-origin cover CDN without CORS may not work with
+`Image.network` default settings. Google Books thumbnails are shown only
+with explicit Google credit and an outbound information-page link. Use
+`WebHtmlElementStrategy.fallback` for original cover URLs and
+`WebHtmlElementStrategy.prefer` for Open Library image URLs to allow browser
+HTML image loading. If neither source has a cover, show the title and
+**表紙画像なし**; never invent an actual cover.
+
+**Important limitation:** Open Library returned 404 for the two live-tested
+recent Japanese titles, but Google Books Dynamic Links returned thumbnail
+URLs. A thumbnail URL does not guarantee that an image can be loaded in every
+browser or territory; the image fallback continues to show `表紙画像なし`
+when neither provider supplies a usable jacket. Complete Japanese edition
+coverage still requires publisher/JPRO-authorized sources, separately reviewed
+for commercial usage and image licensing.

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
+import '../widgets/book_cover_image.dart';
 import '../config/feature_flags.dart';
 import '../widgets/book_search_results.dart';
 import '../widgets/catalog_credit.dart';
@@ -466,21 +467,10 @@ class _BookListScreenState extends State<BookListScreen> {
                                 width: isNarrow ? double.infinity : 200,
                                 height: isNarrow ? 240 : 300,
                                 color: Colors.grey[400],
-                                child: hasCover
-                                    ? Image.network(
-                                        book.coverUrl,
-                                        fit: BoxFit.cover,
-                                        alignment: isNarrow
-                                            ? Alignment.topCenter
-                                            : Alignment.center,
-                                        errorBuilder:
-                                            (context, error, stackTrace) {
-                                              return _buildMissingCoverFallback(
-                                                book,
-                                              );
-                                            },
-                                      )
-                                    : _buildMissingCoverFallback(book),
+                                child: BookCoverImage(
+                                  book: book,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
                               const SizedBox(height: 12),
                               if (!hasCover) ...[
@@ -852,35 +842,6 @@ class _BookListScreenState extends State<BookListScreen> {
         );
       }
     }
-  }
-
-  Widget _buildMissingCoverFallback(Book book) {
-    return Container(
-      color: Colors.grey[300],
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.menu_book, size: 28, color: Colors.black54),
-          const SizedBox(height: 8),
-          Text(
-            book.title,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            book.author,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-          ),
-        ],
-      ),
-    );
   }
 
   @override

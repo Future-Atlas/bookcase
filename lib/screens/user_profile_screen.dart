@@ -5,6 +5,7 @@ import '../services/supabase_service.dart';
 import '../api/ndl_api.dart';
 import '../api/openbd_api.dart';
 import '../models/book.dart';
+import '../widgets/book_cover_image.dart';
 import '../models/user_profile.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
@@ -1578,15 +1579,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.network(
-                      book.coverUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: Colors.grey[300],
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.book, size: 36),
-                      ),
-                    ),
+                    BookCoverImage(book: book),
                     Positioned(
                       left: 0,
                       right: 0,
@@ -1769,14 +1762,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               width: 62,
               height: 96,
               color: Colors.grey[300],
-              child: book.coverUrl.trim().isNotEmpty
-                  ? Image.network(
-                      book.coverUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Icon(Icons.menu_book, color: Colors.black54),
-                    )
-                  : const Icon(Icons.menu_book, color: Colors.black54),
+              child: BookCoverImage(book: book),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -1903,21 +1889,15 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (book.coverUrl.trim().isNotEmpty)
-                        Center(
-                          child: SizedBox(
-                            height: narrow ? 220 : 300,
-                            child: Image.network(
-                              book.coverUrl,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, _, _) => const Icon(
-                                Icons.menu_book,
-                                size: 64,
-                                color: Colors.black54,
-                              ),
-                            ),
+                      Center(
+                        child: SizedBox(
+                          height: narrow ? 220 : 300,
+                          child: BookCoverImage(
+                            book: book,
+                            fit: BoxFit.contain,
                           ),
                         ),
+                      ),
                       const SizedBox(height: 12),
                       Text(
                         book.title.trim().isEmpty ? 'タイトル不明' : book.title,

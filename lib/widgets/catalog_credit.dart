@@ -8,6 +8,8 @@ class CatalogCredit extends StatelessWidget {
   static const _sourceUrl = 'https://ndlsearch.ndl.go.jp/';
   static const _licenseUrl = 'https://creativecommons.org/licenses/by/4.0/deed.ja';
   static const _openBdUrl = 'https://openbd.jp/';
+  static const _openLibraryUrl = 'https://openlibrary.org/';
+  static const _googleBooksUrl = 'https://books.google.com/';
 
   @override
   Widget build(BuildContext context) => Wrap(
@@ -26,6 +28,14 @@ class CatalogCredit extends StatelessWidget {
       TextButton(
         onPressed: () => launchUrl(Uri.parse(_openBdUrl)),
         child: const Text('書影等の一部：openBD'),
+      ),
+      TextButton(
+        onPressed: () => launchUrl(Uri.parse(_openLibraryUrl)),
+        child: const Text('書影の一部：Open Library'),
+      ),
+      TextButton(
+        onPressed: () => launchUrl(Uri.parse(_googleBooksUrl)),
+        child: const Text('書影の一部：Google ブックス'),
       ),
     ],
   );
