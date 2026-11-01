@@ -81,8 +81,40 @@ void main() {
         ),
       ),
     ));
+    final primary = tester.widget<Image>(find.byType(Image));
+    final context = tester.element(find.byType(Image));
+    expect(primary.frameBuilder, isNotNull);
+
+    // Before the first successful image frame, do not attribute a cover that
+    // has not been displayed. Once loaded, the badge must be visible.
+    final pending = primary.frameBuilder!(
+      context, const ColoredBox(color: Colors.black), null, false,
+    );
+    final loaded = primary.frameBuilder!(
+      context, const ColoredBox(color: Colors.black), 0, false,
+    );
+    // Simulate a rejected Google image: the ISBN-specific Open Library image
+    // is used instead, with no misleading Google attribution over the top.
+    final failed = primary.errorBuilder!(
+      context, StateError('image unavailable'), StackTrace.empty,
+    );
+    Widget frame(Widget child) => MaterialApp(
+      home: Scaffold(
+        body: SizedBox(width: 138, height: 202, child: child),
+      ),
+    );
+
+    await tester.pumpWidget(frame(pending));
+    expect(find.text('Google ブックス'), findsNothing);
+    await tester.pumpWidget(frame(loaded));
     expect(find.text('Google ブックス'), findsOneWidget);
     expect(find.byTooltip('表紙画像の情報：Google ブックス'), findsOneWidget);
+    await tester.pumpWidget(frame(failed));
+    expect(find.text('Google ブックス'), findsNothing);
+    expect(find.byTooltip('表紙画像の情報：Google ブックス'), findsNothing);
+    final fallback = tester.widget<Image>(find.byType(Image));
+    expect((fallback.image as NetworkImage).url,
+        BookCoverImage.openLibraryCoverUrl(sample.isbn));
   });
 
 }
