@@ -5,7 +5,8 @@ import '../models/book.dart';
 
 /// Prefer a catalog cover, then the edition-specific Open Library cover.
 /// The Open Library endpoint uses default=false to avoid false blank images.
-/// Flutter Web CanvasKit needs an HTML image fallback for CDNs without CORS.
+/// Flutter Web CanvasKit must use HTML-first rendering on known cover CDNs
+/// that do not provide the cross-origin headers required for byte fetching.
 class BookCoverImage extends StatelessWidget {
   const BookCoverImage({
     super.key,
@@ -38,6 +39,27 @@ class BookCoverImage extends StatelessWidget {
         parsed.scheme == 'https' &&
         parsed.host.isNotEmpty &&
         parsed.userInfo.isEmpty;
+  }
+
+  /// Prevent needless Flutter Web XMLHttpRequests that known book-cover CDNs
+  /// will reject due to missing CORS response headers. An HTML <img> can
+  /// display these public URLs without reading their response bytes in JS.
+  /// This affects only Web; native clients still use decoded image bytes.
+  /// Exact host checks prevent pretending an arbitrary URL is a known CDN.
+  static WebHtmlElementStrategy webImageStrategyForUrl(String url) {
+    final parsed = Uri.tryParse(url.trim());
+    const htmlFirstHosts = {
+      'cover.openbd.jp',
+      'books.google.com',
+      'books.googleusercontent.com',
+      'covers.openlibrary.org',
+    };
+    if (parsed != null && parsed.scheme == 'https' &&
+        parsed.userInfo.isEmpty && !parsed.hasPort &&
+        htmlFirstHosts.contains(parsed.host.toLowerCase())) {
+      return WebHtmlElementStrategy.prefer;
+    }
+    return WebHtmlElementStrategy.fallback;
   }
 
   Widget _placeholder(BuildContext context) => Container(
@@ -97,11 +119,9 @@ class BookCoverImage extends StatelessWidget {
           ? (context, image, frame, _) =>
               frame == null ? image : _withSourceCredit(image)
           : null,
-      // Open Library serves public image URLs directly. Prefer <img> for
-      // cross-origin covers to avoid a failed CORS fetch plus a second GET.
-      webHtmlElementStrategy: url.startsWith(
-        'https://covers.openlibrary.org/',
-      ) ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.fallback,
+      // Official cover CDNs do not consistently supply CORS headers.
+      // HTML-first avoids a guaranteed failed XHR before drawing the image.
+      webHtmlElementStrategy: webImageStrategyForUrl(url),
       errorBuilder: (_, error, stackTrace) => onError(),
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;

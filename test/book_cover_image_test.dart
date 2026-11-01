@@ -37,6 +37,56 @@ void main() {
     expect(BookCoverImage.isSafeRemoteCover(''), false);
   });
 
+  test('known cover CDNs use HTML-first rendering to avoid Flutter Web CORS fetch', () {
+    for (final url in [
+      'https://cover.openbd.jp/9784866162591.jpg',
+      'https://books.google.com/books/content?id=sample&img=1',
+      'https://books.googleusercontent.com/some-cover.jpg',
+      'https://covers.openlibrary.org/b/isbn/9780140328721-M.jpg?default=false',
+    ]) {
+      expect(BookCoverImage.webImageStrategyForUrl(url),
+          WebHtmlElementStrategy.prefer, reason: url);
+    }
+    for (final url in [
+      'https://books.google.com.evil.example/cover.jpg',
+      'https://books.google.com@evil.example/cover.jpg',
+      'https://evil.example/cover.jpg?site=cover.openbd.jp',
+      'https://covers.openlibrary.org.evil.example/jacket.jpg',
+      'https://user:pass@books.google.com/cover.jpg',
+      'http://cover.openbd.jp/cover.jpg',
+      'https://books.google.com:8443/cover.jpg',
+      'https://publisher.example/cover.jpg',
+      'not-a-valid-url',
+    ]) {
+      expect(BookCoverImage.webImageStrategyForUrl(url),
+          WebHtmlElementStrategy.fallback, reason: url);
+    }
+  });
+
+  testWidgets('book images use the HTML-first setting for Google and openBD', (tester) async {
+    for (final url in [
+      'https://books.google.com/books/content?id=sample&img=1',
+      'https://cover.openbd.jp/9784866162591.jpg',
+    ]) {
+      final covered = sample.copyWith(coverUrl: url);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: SizedBox(
+          width: 138, height: 202,
+          child: BookCoverImage(book: covered),
+        )),
+      ));
+      // A failed image may render an ISBN fallback Image as a child, so
+      // target this provider URL instead of assuming there is only one Image.
+      final target = find.byWidgetPredicate((widget) =>
+          widget is Image && widget.image is NetworkImage &&
+          (widget.image as NetworkImage).url == url);
+      expect(target, findsOneWidget);
+      final image = tester.widget<Image>(target);
+      expect((image.image as NetworkImage).webHtmlElementStrategy,
+          WebHtmlElementStrategy.prefer);
+    }
+  });
+
   testWidgets('missing ISBN does not create a network image or a fake jacket', (tester) async {
     final invalid = sample.copyWith(id: 'invalid', isbn: 'invalid');
     await tester.pumpWidget(MaterialApp(

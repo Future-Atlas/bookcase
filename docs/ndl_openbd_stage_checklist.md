@@ -88,3 +88,10 @@ Compare ISBNs, order and screenshots for 20-30 old/new searches:
 - Do not claim full Japanese book cover coverage: Open Library availability
   varies, openBD coverage is limited and using JPRO/retailer assets requires
   explicit rights.
+
+### Flutter Web image CORS regression (2026-11-01)
+- Chrome console sampled on staging: openBD (`cover.openbd.jp`) and Google Books (`books.google.com`) produced CORS-blocked XMLHttpRequests, even when the server returned the image as HTTP 200. The previous `WebHtmlElementStrategy.fallback` tried an XHR first, then used HTML `<img>` when it failed.
+- The book cover widget now chooses HTML-first rendering on the **exact official hosts** `cover.openbd.jp`, `books.google.com`, `books.googleusercontent.com` and `covers.openlibrary.org`. Never accept partial hostname matches or convert to an unlicensed rehosting proxy. Unrecognized remote covers retain the existing behavior; native mobile is unchanged.
+- In Chrome staging, open a home feed with both openBD and Google images, and confirm previously seen `Access to XMLHttpRequest ... blocked by CORS policy` messages no longer occur for those exact hosts. Confirm visible jackets, Google attribution badge and click-through, user book cards, list and detail views on desktop and mobile widths.
+- Verify Open Library missing ISBNs still produce an honest `表紙画像なし`. Its HTTP 404 requests are expected when no jacket is available, and are not evidence that NDL book metadata retrieval failed. Do not manufacture replacement cover art or suppress them with Open Library's generic default image.
+- Collect actual display outcome and cache/scroll behavior in a browser; unit tests and API response checks do not prove pixel-level rendering or third-party CDN availability. Do not promote to `main` from CI alone.
