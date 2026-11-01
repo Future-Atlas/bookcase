@@ -122,6 +122,13 @@ jobs:
           SMOKE_DIAGNOSTIC_FILE: ${{ runner.temp }}/cloudflare-staging-smoke-diagnostic.json
         run: node scripts/cloudflare-smoke.mjs
 
+      # Read-only sampling: an absent book jacket or transient upstream outage
+      # is recorded, not confused with a broken Cloudflare API route.
+      - name: Probe book cover provider availability (staging only)
+        env:
+          COVER_STAGE_BASE_URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: node scripts/cover-stage-probe.mjs
+
       - name: Upload safe smoke failure classification
         if: failure()
         uses: actions/upload-artifact@v4
