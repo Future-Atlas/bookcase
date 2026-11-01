@@ -67,4 +67,22 @@ void main() {
     expect((network.image as NetworkImage).url,
       BookCoverImage.openLibraryCoverUrl(sample.isbn));
   });
+  testWidgets('Google Books thumbnail keeps visible source attribution', (tester) async {
+    final credited = sample.copyWith(
+      coverUrl: 'https://books.google.com/books?id=example&img=1',
+      coverSource: 'google_books',
+      coverAttributionUrl: 'https://books.google.com/books?id=example',
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          width: 138, height: 202,
+          child: BookCoverImage(book: credited),
+        ),
+      ),
+    ));
+    expect(find.text('Google ブックス'), findsOneWidget);
+    expect(find.byTooltip('表紙画像の情報：Google ブックス'), findsOneWidget);
+  });
+
 }
