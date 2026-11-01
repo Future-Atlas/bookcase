@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/book.dart';
 
@@ -111,12 +112,59 @@ class BookCoverImage extends StatelessWidget {
     );
   }
 
+  /// Google Books requires a visible attribution link alongside thumbnails.
+  /// The responsive badge stays clickable even in small profile grids.
+  Widget _withSourceCredit(Widget image) {
+    if (book.coverSource != 'google_books') return image;
+    final url = Uri.tryParse(book.coverAttributionUrl);
+    if (url == null || url.scheme != 'https' ||
+        url.host != 'books.google.com' || url.userInfo.isNotEmpty) {
+      return image;
+    }
+    return LayoutBuilder(builder: (context, constraints) {
+      final tiny = constraints.maxWidth.isFinite &&
+          constraints.maxWidth < 90;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          image,
+          Positioned(
+            top: 3, right: 3,
+            child: Tooltip(
+              message: '表紙画像の情報：Google ブックス',
+              child: GestureDetector(
+                onTap: () => launchUrl(url, mode: LaunchMode.externalApplication),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xCC222222),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 3, vertical: 2,
+                  ),
+                  child: Text(
+                    tiny ? 'Google' : 'Google ブックス',
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final primary = book.coverUrl.trim();
     final fallback = openLibraryCoverUrl(book.isbn);
     if (isSafeRemoteCover(primary)) {
-      return _network(context, primary, onError: () {
+      return _withSourceCredit(_network(context, primary, onError: () {
         if (fallback == null || primary == fallback) {
           return _placeholder(context);
         }
@@ -124,7 +172,7 @@ class BookCoverImage extends StatelessWidget {
           context, fallback,
           onError: () => _placeholder(context),
         );
-      });
+      }));
     }
     if (fallback != null) {
       return _network(
