@@ -167,7 +167,7 @@ Main and develop diverged by 22 main-only and 47 develop-only commits. Security 
 
 1. Apply DB migrations 20261102160000 and 20261102183000 after backing up. Verify private aggregates, revoked privileged RPCs, the avatar trigger, and service-only live-session RPC.
 2. Deploy matching session-guard and admin-delete-account Supabase Edge Functions in the same release. IP headers from clients must not authorize any session action.
-3. Deploy the main-branch production Cloudflare Worker and Flutter assets with API_RATE_LIMIT and CATALOG_RATE_LIMIT. This deployment is MANUAL: merging code is not sufficient.
+3. Deploy the main-branch production Cloudflare Worker and Flutter assets with API_RATE_LIMIT and CATALOG_RATE_LIMIT. WARNING: CI on a main push **automatically** calls deploy-cloudflare-production.yaml after its Flutter job succeeds. Therefore finish the DB migrations and matching Edge Function deployments BEFORE merging this PR, or explicitly gate the CI deployment. The workflow also exposes a separate manual DEPLOY option.
 4. Verify real sign-in, post review visibility, image placeholders, TOTP enrollment, account deletion authorization and the production hostname. Do not flood-test live APIs.
 5. The real administrator must enroll a TOTP factor via Account Settings > 認証アプリ・二段階認証. After enrollment admin moderation requires AAL2. Administrative user deletion always requires AAL2; this assistant cannot enroll the user's authenticator.
 6. In Cloudflare Dashboard check DDoS, WAF and custom-hostname per-IP API rate rules. Free-plan worker rate limits are approximate per location. A public *.workers.dev entry point may not receive custom-domain zone WAF protection; verify routing before disabling it.
