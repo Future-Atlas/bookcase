@@ -307,3 +307,14 @@ test("NDL 504 responses are never cached and a later retry can succeed", async (
   assert.equal(attempts, 2);
   assert.equal(entries.size, 1);
 });
+
+
+test("SRU language metadata path validates input instead of serving SPA HTML", async () => {
+  const { env, requests } = environment();
+  const response = await worker.fetch(new Request(
+    "https://staging.example.test/api/ndl-sru?dpid=untrusted&title=Japan"
+  ), env);
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "invalid_catalog_query");
+  assert.equal(requests.length, 0);
+});
