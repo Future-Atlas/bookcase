@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 /// Public avatar images must belong to Sharemarium's own Supabase Storage
 /// bucket. Never load arbitrary profile-provided URLs in other users' browsers.
 /// This also protects historical rows that predate the database upload guard.
@@ -53,5 +55,10 @@ class AvatarUrlPolicy {
       return null;
     }
     return uri.toString();
+  }
+
+  static ImageProvider? image(String? url, {String? ownerId}) {
+    final approved = safeUrl(url, ownerId: ownerId);
+    return approved == null ? null : NetworkImage(approved);
   }
 }
