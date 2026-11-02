@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../services/avatar_url_policy.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
@@ -1688,7 +1689,7 @@ class _BookListScreenState extends State<BookListScreen> {
                   foregroundColor: Colors.black87,
                   backgroundImage: profile.avatarUrl.isEmpty
                       ? null
-                      : NetworkImage(profile.avatarUrl),
+                      : AvatarUrlPolicy.image(profile.avatarUrl),
                   child: profile.avatarUrl.isEmpty
                       ? const Icon(Icons.person)
                       : null,

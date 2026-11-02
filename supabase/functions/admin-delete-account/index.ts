@@ -45,6 +45,13 @@ Deno.serve(async (request) => {
     .maybeSingle()
   if (adminError || !adminRow) return response({ error: 'Forbidden' }, 403)
 
+  // Irreversible account deletion needs a recently MFA-verified JWT.
+  const { data: assurance, error: assuranceError } =
+    await admin.auth.mfa.getAuthenticatorAssuranceLevel(token)
+  if (assuranceError || assurance?.currentLevel !== 'aal2') {
+    return response({ error: 'admin_mfa_required' }, 403)
+  }
+
   const { data: denialId, error: recordError } = await admin.rpc(
     'record_admin_account_deletion',
     {

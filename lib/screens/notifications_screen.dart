@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../services/avatar_url_policy.dart';
 import 'package:provider/provider.dart';
 
 import '../models/social_models.dart';
@@ -268,7 +269,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             CircleAvatar(
                               backgroundImage:
                                   notification.actorAvatarUrl.isNotEmpty
-                                  ? NetworkImage(notification.actorAvatarUrl)
+                                  ? AvatarUrlPolicy.image(notification.actorAvatarUrl)
                                   : null,
                               child: notification.actorAvatarUrl.isEmpty
                                   ? const Icon(Icons.person)
