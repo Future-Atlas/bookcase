@@ -14,6 +14,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  ndl_metadata_probe:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Compare real SRU language metadata (read-only)
+        run: node scripts/ndl-sru-diagnostic.mjs
+
   flutter:
     runs-on: ubuntu-latest
     steps:
