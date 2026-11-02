@@ -149,6 +149,45 @@ https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/
 Free WAF rule parameters:
 https://developers.cloudflare.com/waf/rate-limiting-rules/
 
+## 5a. Supabase production security advisor follow-up (2026-11-02)
+
+A **read-only** remote review on 2026-11-02 found that all 26 public
+production tables have RLS enabled, including account and contact tables.
+There are still Security Advisor warnings; RLS status alone is not a full
+security audit:
+
+- 51 `anon_security_definer_function_executable` findings (anonymous RPC
+  grants, including admin/moderation endpoints); many functions check
+  `auth.uid()` or `is_current_user_admin()` internally, so a finding is
+  **not proof of exploitability**.
+- 72 `authenticated_security_definer_function_executable` findings. Many
+  authenticated entrypoints intentionally use privileged functions with
+  owner / administrator checks. Review their bodies individually rather than
+  blindly removing `authenticated` grants.
+- 3 `function_search_path_mutable` warnings on internal private
+  name/email/phone normalizers.
+- `auth_leaked_password_protection` warning: compromised-password checks
+  are not enabled. Enable after checking plan availability in Supabase Auth
+  password-security settings.
+- 7 `rls_enabled_no_policy` INFO findings on intentionally inaccessible
+  private/admin/audit tables; verify they remain inaccessible to browser
+  roles instead of adding overly permissive RLS policies to silence lints.
+
+The follow-up migration
+`20261102160000_restrict_anonymous_privileged_rpcs.sql` removes unnecessary
+anonymous `EXECUTE` privileges from **21** admin or authenticated-only RPC
+signatures, while retaining their required `authenticated` and
+`service_role` access and preserving public RLS helpers. It also pins the
+three private normalizers' `search_path`. Verify in staging first with the
+pgTAP tests `anonymous_privileged_rpcs_test.sql`, then re-run Supabase
+Security Advisor in both environments. Do not infer that all advisor warnings
+will disappear: remaining helper or authenticated-only definer functions
+require separate review.
+
+Production database remains **unchanged** until staged validation and an
+explicit production migration approval. Cloudflare WAF settings are another
+separate, dashboard-only action (see section 5).
+
 ## 6. Backups and restore drills
 
 - Paid Supabase projects: confirm daily backups under **Database > Backups**.
