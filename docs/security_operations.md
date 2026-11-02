@@ -92,21 +92,62 @@ are separate controls.
 
 ## 5. Cloudflare WAF and rate limits
 
-In the Cloudflare dashboard for `sharemarium.com`:
+### Verified in code (2026-11-02, PR security hardening)
 
-1. Open **Security** > **Security rules**.
-2. Confirm the Cloudflare Free Managed Ruleset is active.
-3. Create rate-limit rules initially in Log/Managed Challenge mode and review
-   normal traffic before switching to Block.
-4. Suggested starting points per source IP:
-   - `/api/rakuten`: 60 requests per minute;
-   - other `/api/*`: 120 requests per minute;
-   - repeated error-heavy traffic: Managed Challenge rather than a permanent
-     block.
-5. Keep the database contact-request limit of five per rolling 24 hours. It is
-   account-based while signed in and normalized-email-based while signed out.
+- Cloudflare Worker uses two native rate-limit bindings with independent
+  namespaces for default, staging, and production:
+  - `API_RATE_LIMIT`: 120 requests per 60 seconds per Cloudflare location
+    and connecting IP for API routes, sitemap, and dynamic bot/SEO rendering.
+  - `CATALOG_RATE_LIMIT`: 24 requests per 60 seconds for the shared
+    NDL/Open Library/openBD catalog proxy group, in addition to the general
+    API quota. Static Flutter assets do **not** consume API quotas.
+- Quota checks happen before the API handler contacts any third party;
+  blocked requests return 429, `Retry-After: 60`, and `Cache-Control:
+  no-store`. Missing or failing bindings cause 503 (fail-closed), protecting
+  free-tier upstream quotas rather than silently bypassing the check.
+- No user IPs are logged or stored by Sharemarium's code. The only identity
+  used is Cloudflare's trusted `cf-connecting-ip`; do not use spoofable
+  `x-forwarded-for` headers for quota keys.
+- Cloudflare's Worker Rate Limiting API is **approximate and per Cloudflare
+  edge location**. It is not a strict globally synchronized limit. Shared
+  home/work/campus NATs also share a per-IP allowance. Tune thresholds using
+  normal traffic data before moving to account-based quotas.
+- The existing catalog cache and in-flight coalescing and the Rakuten
+  Durable Object quota remain independent layers. No new Supabase tables or
+  permanent catalog storage are created by the quota bindings.
 
-Do not rate-limit Flutter static assets with the same threshold as APIs.
+### Dashboard action still required (NOT verifiable from GitHub)
+
+For the proxied custom domain `sharemarium.com`:
+
+1. Open Cloudflare **Security > Security rules**, verify the available
+   Free Managed Ruleset/WAF protection is enabled.
+2. Add a Free-plan rate limiting rule for `/api/*` using the expression
+   `starts_with(http.request.uri.path, "/api/")`. The Free plan's rule
+   action is **Block**, with a 10-second period; start with a conservative
+   threshold based on observed legitimate traffic, review events and tune
+   down only if abuse is observed. Do not apply this rule to `/assets/*`.
+3. Validate in Security Events that the rule is matching the **proxied
+   custom hostname** and is not blocking ordinary users. Test using
+   approved low-rate validation; never run synthetic DoS traffic.
+4. Workers served by their `*.workers.dev` hostname are not necessarily
+   covered by the custom-domain zone WAF. The current Wrangler config
+   still has `workers_dev: true` even for production. Once the production
+   custom domain and rollbacks are verified, disable that alternate public
+   endpoint (a separate reviewed production configuration change).
+5. For direct Supabase Auth/REST/Edge Functions requests, Cloudflare zone
+   rules do not automatically apply. Keep Supabase Auth rate limits,
+   session checking, RLS, JWT verification, and sensitive RPC protections.
+
+**Important:** GitHub contains operational instructions; it does not grant
+this assistant access to a Cloudflare-zone dashboard. Do **not** mark WAF
+activation complete until the dashboard is checked.
+
+Worker Rate Limiting API:
+https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/
+
+Free WAF rule parameters:
+https://developers.cloudflare.com/waf/rate-limiting-rules/
 
 ## 6. Backups and restore drills
 
