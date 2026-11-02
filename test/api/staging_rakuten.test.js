@@ -118,5 +118,25 @@ test("upstream errors and queue limits are uncached and do not leak secrets", as
   assert.equal(res.statusCode, 503);
   assert.equal(res.headers["retry-after"], "5");
   assert.equal(res.headers["cache-control"], "no-store");
-  assert.deepEqual(res.body, { error: "rakuten_busy" });
+  assert.deepEqual(res.body, {
+    error: "rakuten_busy", upstreamStatus: 429, source: "provider",
+  });
+});
+
+test("upstream errors safely distinguish quota denial from provider rejection", async () => {
+  for (const [upstream, expected] of [
+    [Response.json({ error: "upstream_not_allowed" }, { status: 403 }),
+     { error: "rakuten_unavailable", upstreamStatus: 403, source: "quota" }],
+    [Response.json({ error: "invalid_key", secret: "MUST_NOT_LEAK" }, { status: 403 }),
+     { error: "rakuten_unavailable", upstreamStatus: 403, source: "provider" }],
+    [Response.json({ error: "rakuten_upstream_unavailable" }, { status: 502 }),
+     { error: "rakuten_unavailable", upstreamStatus: 502, source: "quota" }],
+  ]) {
+    const handler = createHandler({ env, request: async () => upstream });
+    const res = recorder();
+    await handler({ method: "GET", query: { booksGenreId: "001" } }, res);
+    assert.equal(res.statusCode, 502);
+    assert.deepEqual(res.body, expected);
+    assert.ok(!JSON.stringify(res.body).includes("MUST_NOT_LEAK"));
+  }
 });
