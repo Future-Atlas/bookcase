@@ -17,14 +17,14 @@ for (const [name, provider, title] of probes) {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(22000) });
     const xml = await response.text();
-    const records = [...xml.matchAll(/<record(?:\\s[^>]*)?>([\\s\\S]*?)<\\/record>/gi)].map(m=>m[1]);
-    const languageValues = [...xml.matchAll(/<dcterms:language\\b[^>]*>([\\s\\S]*?)<\\/dcterms:language>/gi)]
+    const records = [...xml.matchAll(/<record(?:\s[^>]*)?>([\s\S]*?)<\/record>/gi)].map(m=>m[1]);
+    const languageValues = [...xml.matchAll(/<dcterms:language\b[^>]*>([\s\S]*?)<\/dcterms:language>/gi)]
       .map(m => m[1].replace(/<[^>]*>/g,"").trim().toLowerCase());
     const exampleTags = records[0] ?
-      [...new Set([...records[0].matchAll(/<([\\w:-]+)\\b/g)].map(m => m[1]))].filter(x=>/language|identifier|title|recordData/.test(x)).slice(0,12) : [];
+      [...new Set([...records[0].matchAll(/<([\w:-]+)\b/g)].map(m => m[1]))].filter(x=>/language|identifier|title|recordData/.test(x)).slice(0,12) : [];
     console.log(JSON.stringify({
       name, status: response.status, ms: Date.now()-started, bytes:xml.length,
-      numberOfRecords:xml.match(/<numberOfRecords>([^<]*)<\\/numberOfRecords>/)?.[1],
+      numberOfRecords:xml.match(/<numberOfRecords>([^<]*)<\/numberOfRecords>/)?.[1],
       sruRecords: records.length, languageValues:languageValues.slice(0,20),
       languageTags:languageValues.length, isbnTypeAttributes:
         [...xml.matchAll(/rdf:datatype="[^"]*ISBN"/g)].length,
