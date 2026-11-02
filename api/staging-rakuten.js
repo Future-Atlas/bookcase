@@ -100,11 +100,31 @@ function createHandler({ request, env = {} } = {}) {
         origin: env.RAKUTEN_REFERER || "https://staging.sharemarium.com/",
       });
       if (!upstream.ok) {
-        if (upstream.status === 429 || upstream.status === 503) {
-          res.setHeader("Retry-After", upstream.headers.get("retry-after") || "5");
-          return res.status(503).json({ error: "rakuten_busy" });
+        // The coordinator and Rakuten provider have distinct failure modes.
+        // Only emit a numeric upstream status and a static, allowlisted code;
+        // NEVER echo the upstream error body or credential-bearing URL.
+        const status = upstream.status;
+        let source = "provider";
+        if (status === 502 || status === 403) {
+          try {
+            const payload = await upstream.json();
+            if (typeof payload?.error === "string" &&
+                ["rakuten_upstream_unavailable", "upstream_not_allowed",
+                  "rakuten_queue_full", "rakuten_backoff_active",
+                  "invalid_upstream_request"].includes(payload.error)) {
+              source = "quota";
+            }
+          } catch { /* upstream body is not trusted */ }
         }
-        return res.status(502).json({ error: "rakuten_unavailable" });
+        if (status === 429 || status === 503) {
+          res.setHeader("Retry-After", upstream.headers.get("retry-after") || "5");
+          return res.status(503).json({
+            error: "rakuten_busy", upstreamStatus: status, source,
+          });
+        }
+        return res.status(502).json({
+          error: "rakuten_unavailable", upstreamStatus: status, source,
+        });
       }
       const body = await upstream.text();
       if (body.length > 3_000_000) {
