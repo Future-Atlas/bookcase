@@ -183,7 +183,52 @@ function withEnvironmentHeaders(response, env, request) {
   });
 }
 
-async function routeRequest(request, env) {
+// The public NDL proxy must not repeat the same slow upstream search on
+// each visit. Cloudflare Cache API is per data center; in-flight coalescing
+// prevents concurrent requests in one isolate from amplifying a timeout.
+// Only successful public RSS is cacheable (api/ndl.js sets the 10m TTL).
+const ndlInFlight = new Map();
+
+async function serveNdl(request, context, { cache, requestHandler } = {}) {
+  if (request.method !== "GET") return invoke(ndl, request);
+  const edgeCache = cache === undefined ? globalThis.caches?.default : cache;
+  const key = new Request(request.url, { method: "GET" });
+  const pending = ndlInFlight.get(key.url);
+  if (pending) return (await pending).clone();
+
+  const loading = (async () => {
+    if (edgeCache) {
+      try {
+        const hit = await edgeCache.match(key);
+        if (hit) return hit;
+      } catch {
+        // A cache failure must not break catalog search.
+      }
+    }
+    const response = await (requestHandler
+      ? requestHandler()
+      : invoke(ndl, request));
+    // Never cache 400/429/5xx or JSON errors as empty book results.
+    if (edgeCache && response.status === 200 &&
+        /^application\/xml\b/i.test(response.headers.get("Content-Type") || "")) {
+      const store = Promise.resolve()
+        .then(() => edgeCache.put(key, response.clone()))
+        .catch(() => {});
+      if (context?.waitUntil) context.waitUntil(store);
+      else await store;
+    }
+    return response;
+  })();
+
+  ndlInFlight.set(key.url, loading);
+  try {
+    return (await loading).clone();
+  } finally {
+    if (ndlInFlight.get(key.url) === loading) ndlInFlight.delete(key.url);
+  }
+}
+
+async function routeRequest(request, env, context) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/{2,}/g, "/");
 
@@ -211,7 +256,7 @@ async function routeRequest(request, env) {
   if (path === "/sitemap.xml" || path === "/api/sitemap") {
     return invoke(sitemap, request);
   }
-  if (path === "/api/ndl") return invoke(ndl, request);
+  if (path === "/api/ndl") return serveNdl(request, context);
   if (path === "/api/openbd") return invoke(openbd, request);
   if (path === "/api/book-covers") return invoke(bookCovers, request);
   if (path === "/api/rakuten") return new Response(JSON.stringify({error:"catalog_migrated"}), {status:410,headers:{"Content-Type":"application/json"}});
@@ -254,7 +299,7 @@ async function routeRequest(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, context) {
     try {
       const url = new URL(request.url);
       if (url.protocol === "http:") {
@@ -262,7 +307,7 @@ export default {
         return Response.redirect(url.toString(), 308);
       }
       return withEnvironmentHeaders(
-        await routeRequest(request, env),
+        await routeRequest(request, env, context),
         env,
         request,
       );
@@ -283,6 +328,7 @@ export const _test = {
   VercelResponseAdapter,
   queryFromUrl,
   routeRequest,
+  serveNdl,
 };
 
 // Wrangler Durable Object binding targets the entrypoint's named export.
