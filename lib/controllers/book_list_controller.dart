@@ -451,12 +451,14 @@ class BookListController extends ChangeNotifier {
     // Do not let a slow NDL new-arrivals query block the independent
     // language feeds or the user's timeline. Language feeds stay sequential
     // to avoid parallel requests to the low-volume public metadata service.
+    Future<void> loadLanguages() async {
+      await loadJapanese();
+      await loadWestern();
+    }
+
     await Future.wait<void>([
       loadRecommended(),
-      () async {
-        await loadJapanese();
-        await loadWestern();
-      }(),
+      loadLanguages(),
       loadPopular(),
       _loadTimeline(),
     ]);
