@@ -123,3 +123,66 @@ test('openBD rejects non-ISBN input',async()=>{
   await handler({method:'GET',query:{isbn:'../../../private'}},res);
   assert.equal(res.statusCode,400);
 });
+
+
+test('SRU language proxy uses official bounded DC-NDL schema and requested provider', async () => {
+  const sru = require('../../api/ndl-sru');
+  let upstreamUrl = '';
+  const handler = sru.createHandler({request:async url => {
+    upstreamUrl = url;
+    return {ok:true,text:async()=>'<searchRetrieveResponse><numberOfRecords>0</numberOfRecords></searchRetrieveResponse>'};
+  }});
+  const res=recorder();
+  await handler({method:'GET',query:{
+    dpid:'iss-ndl-opac-national',title:'日本',cnt:'27',idx:'1',
+  }},res);
+  assert.equal(res.statusCode,200);
+  const url=new URL(upstreamUrl);
+  assert.equal(url.pathname,'/api/sru');
+  assert.equal(url.searchParams.get('recordSchema'),'dcndl');
+  assert.equal(url.searchParams.get('recordPacking'),'xml');
+  assert.equal(url.searchParams.get('onlyBib'),'true');
+  assert.equal(url.searchParams.get('startRecord'),'1');
+  assert.equal(url.searchParams.get('maximumRecords'),'27');
+  assert.match(url.searchParams.get('query'),/dpid="iss-ndl-opac-national" AND title="日本"/);
+});
+
+test('SRU proxy rejects unsupported providers, bare requests and injected CQL', async () => {
+  const sru = require('../../api/ndl-sru');
+  const handler=sru.createHandler({request:async()=>{throw Error('must not fetch');}});
+  for(const query of [
+    {dpid:'jpro',title:'Japan'},
+    {dpid:'ndl-boj'},
+    {dpid:'ndl-boj',title:'Japan" OR isbn="123'},
+    {dpid:'ndl-boj',title:'Japan',query:'isbn=123'},
+  ]) {
+    const res=recorder();
+    await handler({method:'GET',query},res);
+    assert.equal(res.statusCode,400);
+    assert.equal(res.body.error,'invalid_catalog_query');
+  }
+});
+
+test('SRU proxy preserves upstream timeout as a retryable uncached error', async () => {
+  const sru = require('../../api/ndl-sru');
+  const handler=sru.createHandler({request:async()=> {
+    const e=new Error('timeout');e.name='TimeoutError';throw e;
+  }});
+  const res=recorder();
+  await handler({method:'GET',query:{dpid:'ndl-boj',title:'Japan'}},res);
+  assert.equal(res.statusCode,504);
+  assert.equal(res.body.error,'ndl_timeout');
+  assert.equal(res.headers['Cache-Control'],'no-store');
+  assert.equal(res.headers['Retry-After'],'3');
+});
+
+test('SRU proxy never caches a successful HTTP envelope with SRU diagnostics', async () => {
+  const sru = require('../../api/ndl-sru');
+  const handler=sru.createHandler({request:async()=>({
+    ok:true,text:async()=>'<searchRetrieveResponse><diagnostics/></searchRetrieveResponse>'
+  })});
+  const res=recorder();
+  await handler({method:'GET',query:{dpid:'ndl-boj',title:'Japan'}},res);
+  assert.equal(res.statusCode,502);
+  assert.equal(res.headers['Cache-Control'],'no-store');
+});
