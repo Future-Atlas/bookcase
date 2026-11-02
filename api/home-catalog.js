@@ -4,7 +4,7 @@
 // No Open Library cover images are requested or stored.
 const SEARCH_URL = "https://openlibrary.org/search.json";
 const DETAILS_URL = "https://openlibrary.org/api/books.json";
-const WINDOW = 60;
+const WINDOW = 27;
 const TOPICS = Object.freeze({
   jpn: new Set(["日本", "物語", "文学"]),
   eng: new Set(["Japan", "Tokyo"]),
