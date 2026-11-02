@@ -65,6 +65,24 @@
             "RakutenCoordinator"
           ]
         }
+      ],
+      "ratelimits": [
+        {
+          "name": "API_RATE_LIMIT",
+          "namespace_id": "2626110211",
+          "simple": {
+            "limit": 120,
+            "period": 60
+          }
+        },
+        {
+          "name": "CATALOG_RATE_LIMIT",
+          "namespace_id": "2626110212",
+          "simple": {
+            "limit": 24,
+            "period": 60
+          }
+        }
       ]
     },
     "production": {
@@ -91,6 +109,24 @@
             "RakutenCoordinator"
           ]
         }
+      ],
+      "ratelimits": [
+        {
+          "name": "API_RATE_LIMIT",
+          "namespace_id": "2626110221",
+          "simple": {
+            "limit": 120,
+            "period": 60
+          }
+        },
+        {
+          "name": "CATALOG_RATE_LIMIT",
+          "namespace_id": "2626110222",
+          "simple": {
+            "limit": 24,
+            "period": 60
+          }
+        }
       ]
     }
   },
@@ -108,6 +144,24 @@
       "new_sqlite_classes": [
         "RakutenCoordinator"
       ]
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "API_RATE_LIMIT",
+      "namespace_id": "2626110201",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    },
+    {
+      "name": "CATALOG_RATE_LIMIT",
+      "namespace_id": "2626110202",
+      "simple": {
+        "limit": 24,
+        "period": 60
+      }
     }
   ]
 }
