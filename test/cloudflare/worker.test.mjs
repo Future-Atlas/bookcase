@@ -9,6 +9,8 @@ function environment({ appEnv = "staging", assetStatus = 200 } = {}) {
   return {
     env: {
       APP_ENV: appEnv,
+      API_RATE_LIMIT: { async limit() { return { success: true }; } },
+      CATALOG_RATE_LIMIT: { async limit() { return { success: true }; } },
       ASSETS: {
         async fetch(request) {
           requests.push(request.url);
