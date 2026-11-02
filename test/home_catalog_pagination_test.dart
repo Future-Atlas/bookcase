@@ -100,7 +100,7 @@ void main() {
     ]);
   });
 
-  test('foreign feed scans further and excludes Japanese-only books', () async {
+  test('western feed scans further and displays only explicit eng', () async {
     final providers = <String>[];
     Future<NdlSearchBatch> fetch({
       required String provider, String? any, String? from,
@@ -116,6 +116,13 @@ void main() {
             candidate(73, language: ''),
             candidate(74, language: 'deu', restricted: true),
             candidate(75, language: 'eng'),
+            candidate(76, language: 'zho'),
+            candidate(77, language: 'chi'),
+            candidate(78, language: 'kor'),
+            candidate(79, language: 'jpn eng'),
+            candidate(80, language: 'en'),
+            candidate(81, language: 'english'),
+            candidate(82, language: 'eng spa'),
           ],
           rawCount: 27, hasMore: true,
         );
@@ -130,7 +137,7 @@ void main() {
       expect(provider, NdlApi.holdings);
       expect(any, 'English');
       return NdlSearchBatch(
-        books: List.generate(15, (i) =>
+        books: List.generate(22, (i) =>
             candidate(170 + i, language: 'eng')),
         rawCount: 27, hasMore: true,
       );
@@ -138,18 +145,18 @@ void main() {
     final repo = BookRepository(homeFetcher: fetch);
     final western = await repo.fetchBooksByGenre('English');
     expect(western.length, 9);
-    expect(western.where((book) => book.languageCode.isNotEmpty)
-        .every(NdlApi.isForeignLanguage), true);
-    expect(western.any((book) => book.id == candidate(71).id), true);
-    expect(western.any((book) => book.id == candidate(72).id), false);
-    // ndl-boj is an explicitly foreign-language bibliography even if an
-    // individual record omits the optional language tag.
-    expect(western.any((book) => book.id == candidate(73).id), true);
-    expect(western.any((book) => book.id == candidate(74).id), false);
+    expect(western.every(NdlApi.isEnglishLanguage), true);
+    expect(western.any((book) => book.id == candidate(70).id), true);
+    expect(western.any((book) => book.id == candidate(75).id), true);
+    for (final excludedId in [71, 72, 73, 74, 76, 77, 78, 79, 80, 81, 82]) {
+      expect(western.any((book) => book.id == candidate(excludedId).id), false,
+          reason: 'non-eng or missing language must not appear');
+    }
     expect(providers.first, NdlApi.foreignBibliography + ':1:');
     expect(providers, contains(NdlApi.holdings + ':1:English'));
     final next = await repo.fetchBooksByGenre('English', page: 2);
     expect(next.length, 9);
+    expect(next.every(NdlApi.isEnglishLanguage), true);
     expect(western.map((book) => book.id).toSet()
       .intersection(next.map((book) => book.id).toSet()), isEmpty);
   });
@@ -241,13 +248,17 @@ void main() {
     expect(repo.hasMoreHomeBooks('洋書'), isFalse);
   });
 
-  test('foreign language policy checks language, not title words', () {
-    expect(NdlApi.isForeignLanguage(candidate(1, language: 'eng')), true);
-    expect(NdlApi.isForeignLanguage(candidate(2, language: 'spa')), true);
-    expect(NdlApi.isForeignLanguage(candidate(3, language: 'jpn eng')), true);
-    expect(NdlApi.isForeignLanguage(candidate(4, language: 'jpn')), false);
-    expect(NdlApi.isForeignLanguage(candidate(5, language: 'und')), false);
-    expect(NdlApi.isForeignLanguage(candidate(
+  test('western language policy accepts only a single explicit eng tag', () {
+    expect(NdlApi.isEnglishLanguage(candidate(1, language: 'eng')), true);
+    expect(NdlApi.isEnglishLanguage(candidate(2, language: ' ENG ')), true);
+    for (final language in [
+      'spa', 'zho', 'chi', 'kor', 'fra', 'deu', 'jpn', 'jpn eng',
+      'eng jpn', 'eng spa', 'en', 'english', 'und', 'mul', ''
+    ]) {
+      expect(NdlApi.isEnglishLanguage(candidate(3, language: language)), false,
+          reason: language);
+    }
+    expect(NdlApi.isEnglishLanguage(candidate(
       6, language: '', title: 'An English Language Book',
     )), false);
   });

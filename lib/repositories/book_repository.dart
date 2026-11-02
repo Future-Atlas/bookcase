@@ -303,10 +303,10 @@ class BookRepository {
       ]);
     }
     return _HomeCatalogCursor([
-      // Japan-related foreign-language books: NDL-maintained CC BY metadata.
-      // Unlike "any=English", this source is selected by catalog provenance.
+      // NDL Japan-related foreign-language bibliography: some records may
+      // have an explicit "eng" language tag. Others must be excluded.
       _HomeCatalogSource(provider: NdlApi.foreignBibliography),
-      // Enlarge coverage using holdings; post-filter by explicit language.
+      // Enlarge coverage using holdings; post-filter to exact "eng".
       _HomeCatalogSource(provider: NdlApi.holdings, any: 'English'),
       _HomeCatalogSource(provider: NdlApi.holdings, any: 'novel'),
       _HomeCatalogSource(provider: NdlApi.holdings, any: 'Japan'),
@@ -392,16 +392,10 @@ class BookRepository {
 
       final candidates = <Book>[];
       for (final book in response.books) {
-        // NDL's ndl-boj is itself a foreign-language bibliography.
-        // Missing item-level language metadata is acceptable only from this
-        // provider, never from the generic Japanese/foreign holdings search.
-        final language = book.languageCode.trim().toLowerCase();
-        final providerClassifiedForeign =
-            source.provider == NdlApi.foreignBibliography &&
-            (language.isEmpty || language == 'und' || language == 'unknown');
-        if (!newArrivals &&
-            !NdlApi.isForeignLanguage(book) &&
-            !providerClassifiedForeign) {
+        // The "洋書" section shows only books explicitly tagged "eng".
+        // Reject Chinese, Korean, other languages, bilingual records and
+        // missing language tags, including items from NDL's ndl-boj catalog.
+        if (!newArrivals && !NdlApi.isEnglishLanguage(book)) {
           continue;
         }
         if (cursor.seenIsbns.add(book.id)) candidates.add(book);
