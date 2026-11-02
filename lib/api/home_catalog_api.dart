@@ -8,7 +8,7 @@ import 'ndl_api.dart';
 /// Low-volume, read-only home catalog. No Supabase metadata storage.
 /// The server verifies each edition's explicit language and ISBN.
 class HomeCatalogApi {
-  static const windowSize = 60;
+  static const windowSize = 27;
 
   static Uri searchUri({
     required String language,
