@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/book.dart';
-import 'google_books_covers_api.dart';
 
 /// Optional, short-lived enrichment by openBD. The user-owned bookshelf and
 /// reviews must stay available when records or covers are absent/withdrawn.
@@ -44,9 +43,11 @@ class OpenBdApi {
       final record = byIsbn[book.isbn];
       return record == null ? book : enrichRecord(book, record);
     }).toList(growable: false);
-    // Official openBD jackets and ONIX adult classifications take priority;
-    // only missing jackets are enriched with exact-ISBN Google Books results.
-    return GoogleBooksCoversApi.enrich(enriched);
+    // The openBD provider explicitly permits book introduction/promotion by
+    // organizations and companies under its terms. Do not query Google Books:
+    // its paid-application rights have not been cleared for Sharemarium.
+    // No unlicensed secondary cover provider is used.
+    return enriched;
   }
 
   /// Pure transform to support fixture tests for ONIX safety classifications.
