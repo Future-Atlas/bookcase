@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 
-import worker from "../../cloudflare/worker.mjs";
+import worker, { _test } from "../../cloudflare/worker.mjs";
 
 function environment({ appEnv = "staging", assetStatus = 200 } = {}) {
   const requests = [];
@@ -232,4 +232,78 @@ test("Cloudflare staging smoke diagnostics disclose only classification codes", 
   assert.match(workflow, /cloudflare-staging-smoke-diagnostic\.json/);
   assert.match(workflow, /name: cloudflare-staging-smoke-diagnostic/);
   assert.match(workflow, /retention-days: 1/);
+});
+
+test("NDL edge cache reuses successful RSS without an extra upstream fetch", async () => {
+  const entries = new Map();
+  const cache = {
+    async match(key) { return entries.get(key.url)?.clone(); },
+    async put(key, response) { entries.set(key.url, response.clone()); },
+  };
+  const request = new Request("https://staging.example.test/api/ndl?dpid=ndl-boj&title=Japan&idx=1&cnt=27");
+  let upstreamCalls = 0;
+  const requestHandler = async () => {
+    upstreamCalls++;
+    return new Response("<rss><channel /></rss>", {
+      status: 200,
+      headers: {
+        "Content-Type": "application/xml; charset=utf-8",
+        "Cache-Control": "public, max-age=0, s-maxage=600",
+      },
+    });
+  };
+  const first = await _test.serveNdl(request, undefined, { cache, requestHandler });
+  const second = await _test.serveNdl(request, undefined, { cache, requestHandler });
+  assert.equal(first.status, 200);
+  assert.equal(await first.text(), await second.text());
+  assert.equal(upstreamCalls, 1);
+  assert.equal(entries.size, 1);
+});
+
+test("NDL cache collapses simultaneous identical requests", async () => {
+  const cache = { async match() { return undefined; }, async put() {} };
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  let calls = 0;
+  const request = new Request("https://staging.example.test/api/ndl?dpid=ndl-boj&title=Tokyo&cnt=27");
+  const requestHandler = async () => {
+    calls++;
+    await gate;
+    return new Response("<rss/>", {
+      status: 200,
+      headers: { "Content-Type": "application/xml" },
+    });
+  };
+  const first = _test.serveNdl(request, undefined, { cache, requestHandler });
+  const second = _test.serveNdl(request, undefined, { cache, requestHandler });
+  release();
+  const [a, b] = await Promise.all([first, second]);
+  assert.equal(calls, 1);
+  assert.equal(await a.text(), "<rss/>");
+  assert.equal(await b.text(), "<rss/>");
+});
+
+test("NDL 504 responses are never cached and a later retry can succeed", async () => {
+  const entries = new Map();
+  const cache = {
+    async match(key) { return entries.get(key.url)?.clone(); },
+    async put(key, response) { entries.set(key.url, response.clone()); },
+  };
+  let attempts = 0;
+  const request = new Request("https://staging.example.test/api/ndl?dpid=ndl-boj&title=Japan&cnt=27&idx=28");
+  const requestHandler = async () => {
+    attempts++;
+    if (attempts === 1) {
+      return Response.json({ error: "ndl_timeout" }, { status: 504 });
+    }
+    return new Response("<rss/>", {
+      status: 200,
+      headers: { "Content-Type": "application/xml" },
+    });
+  };
+  assert.equal((await _test.serveNdl(request, undefined, { cache, requestHandler })).status, 504);
+  assert.equal(entries.size, 0);
+  assert.equal((await _test.serveNdl(request, undefined, { cache, requestHandler })).status, 200);
+  assert.equal(attempts, 2);
+  assert.equal(entries.size, 1);
 });
