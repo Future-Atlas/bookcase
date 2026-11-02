@@ -1,8 +1,8 @@
 // Temporary, bounded read-only check of work->edition language/ISBN coverage.
 // One request per language, no retries. No book titles or ISBNs in CI logs.
 const queries = [
-  ["japanese", "language:jpn AND title:日本", "jpn"],
-  ["english", "language:eng AND title:Japan", "eng"],
+  ["japanese", "language:jpn AND isbn:* AND title:日本", "jpn"],
+  ["english", "language:eng AND isbn:* AND title:Japan", "eng"],
 ];
 for (const [label, q, lang] of queries) {
   const url = new URL("https://openlibrary.org/search.json");
@@ -48,7 +48,7 @@ for (const [label, q, lang] of queries) {
       .filter(value=>typeof value==="string" && /^\/books\/OL\d+M$/.test(value))
       .slice(0,20);
     let detailStatus = null, detailCount=0, detailLanguageMatch=0;
-    let detailISBN13=0, detailEligible=0;
+    let detailISBN13=0, detailISBN10=0, detailEligible=0;
     let detailKeys=[], detailLanguageShapes=[];
     if(selected.length) {
       await new Promise(resolve=>setTimeout(resolve,1450));
@@ -78,7 +78,9 @@ for (const [label, q, lang] of queries) {
           if(match)detailLanguageMatch++;
           const hasIsbn=(detail.isbn_13??[]).some(x=>/^97[89]\d{10}$/.test(x));
           if(hasIsbn)detailISBN13++;
-          if(match&&hasIsbn)detailEligible++;
+          const hasIsbn10=(detail.isbn_10??[]).some(x=>/^\d{9}[\dXx]$/.test(x));
+          if(hasIsbn10)detailISBN10++;
+          if(match&&(hasIsbn||hasIsbn10))detailEligible++;
         }
       }
     }
@@ -87,7 +89,7 @@ for (const [label, q, lang] of queries) {
       declaredMatches:data.numFound??data.num_found,
       editions,matchingLanguage,validIsbn,strictBoth,
       languages,editionKeys:keys,
-      detailStatus,detailCount,detailLanguageMatch,detailISBN13,detailEligible,
+      detailStatus,detailCount,detailLanguageMatch,detailISBN13,detailISBN10,detailEligible,
       detailKeys,detailLanguageShapes}));
   }catch(e){console.log(JSON.stringify({label,error:e?.name||"network_error",ms:Date.now()-started}));}
   await new Promise(resolve=>setTimeout(resolve,1500));
