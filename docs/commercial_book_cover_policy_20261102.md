@@ -1,6 +1,6 @@
 # Book cover licensing policy for commercial Sharemarium (2026-11-02)
 
-## Decision: Only book covers returned by openBD are enabled
+## Decision: openBD first, then ISBN-exact covers from two explicitly permission-granting publishers
 
 Sharemarium is intended to be monetized. Source availability is **not**
 permission for commercial use. Google Books, Open Library and Rakuten
@@ -13,10 +13,22 @@ retailer image URLs must not be used as generic automatic cover fallback.
   resell, sublicense or retain withdrawn book images. The app must keep book
   descriptions and cover data tied to books and respond to corrections/removal.
   Source: https://openbd.jp/terms/
-- Publisher/author-supplied images: may be added in a *separate* feature only
-  after recording explicit grants **by title or publisher** (allowed usage,
-  monetization, display context, expiry, withdrawal and attribution).
-  Source context: https://www.hanmoto.com/permission-for-use/agreement
+- **あかね書房 / Akane Shobo**: directly permits individual and company book
+  introductions on websites using unmodified cover images copied from its
+  own site, without prior request. An ISBN-exact official-site image URL
+  template for the publisher's assigned 978-4-251 ISBNs is enabled only as
+  fallback when an approved openBD jacket is absent.
+  https://www.akaneshobo.co.jp/mail/form_copyright/coveronly.php
+- **語研 / Goken**: explicitly permits book covers for introductions, reviews
+  and affiliate-based promotion without prior permission. Its ISBN-exact
+  official-site low-resolution image URL template for 978-4-87615 ISBNs is
+  enabled only as fallback when openBD has no approved jacket.
+  https://www.goken-net.co.jp/info/company_profile.html
+- **Other publisher/author-supplied images**: disabled unless source-specific
+  approval, publication credit and image access conditions are recorded.
+  Publisher-wide licenses must not be inferred from a book's mere availability
+  on a publisher site. Source context:
+  https://www.hanmoto.com/permission-for-use/agreement
 
 **Not enabled:**
 
@@ -40,16 +52,21 @@ retailer image URLs must not be used as generic automatic cover fallback.
 
 1. `OpenBdApi.enrich` uses NDL book identity and ISBN-exact openBD metadata,
    returns records without querying Google.
-2. `BookCoverImage` only renders HTTPS cover URLs from **fresh openBD
-   metadata** (`coverSource == 'openbd'`) or the official openBD cover CDN for
-   older, unlabelled saved-book data. It blocks known Google/OL/Rakuten
-   hosts even if a legacy record claims openBD as its source.
-3. Images from old posts, profiles and saved items without evidence of a
-   cleared source show `表紙画像なし`. Never fetch another provider based
-   solely on an ISBN.
-4. The old `/api/book-covers` route returns HTTP 410 with no outbound calls;
+2. `BookCoverImage` prefers HTTPS cover URLs with trustworthy openBD
+   provenance (`coverSource == 'openbd'`) or the official openBD cover CDN
+   for older, unlabelled saved-book data.
+3. If no approved openBD image exists, `OfficialPublisherCovers` uses an
+   **ISBN-13 checksum** and an **explicit publisher-assigned prefix
+   allowlist** to construct an official Akane or Goken cover URL. No arbitrary
+   publisher lookup, HTML scraping, bulk site crawl or external API key
+   is performed. Only one image request is made when that book is rendered.
+   A missing or failed image shows `表紙画像なし`.
+4. All jackets are rendered with `BoxFit.contain`; book-card labels occupy a
+   separate area and do not obscure the cover. Old Google/Rakuten/Open Library
+   images remain blocked, even if the stored post contains their URLs.
+5. The old `/api/book-covers` route returns HTTP 410 with no outbound calls;
    the same behavior applies to Vercel and Cloudflare routing.
-5. NDL book results, adult-content policy, user reviews, user profiles, book
+6. NDL book results, adult-content policy, user reviews, user profiles, book
    search and stored user content are **not** deleted.
 
 ## Limitations and obligations
@@ -58,6 +75,23 @@ retailer image URLs must not be used as generic automatic cover fallback.
   unapproved changes, and asks consumers to apply updates and withdrawals.
   The product owner should confirm that **every** planned paid-feature cover
   placement fits that scope before rolling out commercially.
+- Akane and Goken permit use of their **own** published jackets to introduce
+  books on the web, including individual/company or affiliate contexts. The
+  user plans ad revenue and an optional *ad removal only* paid membership,
+  not sale of image files. Nonetheless, their published pages do **not**
+  expressly address automated ISBN-path generation, hotlink bandwidth, or
+  unlimited high-traffic downloads. Before high-volume/production use,
+  request written clarification if publisher hosting or monetization terms
+  are uncertain. The published permission is not a blanket crawling license.
+- Both official image URL layouts are inferred from multiple live book pages;
+  their continued availability and suitability for remote embedding must be
+  checked in a staging browser before production. Images may fail to load,
+  be replaced, or be removed by the publisher; no rights-free fallback is used.
+- 青弓社 is not an automatic source yet. Its conditions require author/title/
+  publisher together beside the jacket plus notice of the publication URL.
+  Its cover overlap with openBD is significant. Maintain this exclusion until
+  those obligations are demonstrably met throughout the UI.
+  https://www.seikyusha.co.jp/shoeinogoriyou/
 - Source material may be deleted or changed. Do not permanently retain a
   URL as authoritative without refreshing provider metadata. Respect removal
   requests and keep a way to suppress withdrawn covers.
