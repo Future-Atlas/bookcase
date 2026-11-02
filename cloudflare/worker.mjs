@@ -1,5 +1,6 @@
 import adEntitlement from "../api/ad-entitlement.js";
 import ndl from "../api/ndl.js";
+import homeCatalog from "../api/home-catalog.js";
 import openbd from "../api/openbd.js";
 import bookCovers from "../api/book-covers.js";
 import homeAdEligibility from "../api/home-ad-eligibility.js";
@@ -189,8 +190,10 @@ function withEnvironmentHeaders(response, env, request) {
 // Only successful public RSS is cacheable (api/ndl.js sets the 10m TTL).
 const ndlInFlight = new Map();
 
-async function serveNdl(request, context, { cache, requestHandler } = {}) {
-  if (request.method !== "GET") return invoke(ndl, request);
+async function serveNdl(request, context, { cache, requestHandler, cacheJson = false } = {}) {
+  if (request.method !== "GET") {
+    return requestHandler ? requestHandler() : invoke(ndl, request);
+  }
   const edgeCache = cache === undefined ? globalThis.caches?.default : cache;
   const key = new Request(request.url, { method: "GET" });
   const pending = ndlInFlight.get(key.url);
@@ -209,8 +212,10 @@ async function serveNdl(request, context, { cache, requestHandler } = {}) {
       ? requestHandler()
       : invoke(ndl, request));
     // Never cache 400/429/5xx or JSON errors as empty book results.
+    const contentType = response.headers.get("Content-Type") || "";
     if (edgeCache && response.status === 200 &&
-        /^application\/xml\b/i.test(response.headers.get("Content-Type") || "")) {
+        (/^application\/xml\b/i.test(contentType) ||
+        (cacheJson && /^application\/json\b/i.test(contentType)))) {
       const store = Promise.resolve()
         .then(() => edgeCache.put(key, response.clone()))
         .catch(() => {});
@@ -257,6 +262,12 @@ async function routeRequest(request, env, context) {
     return invoke(sitemap, request);
   }
   if (path === "/api/ndl") return serveNdl(request, context);
+  if (path === "/api/home-catalog") {
+    return serveNdl(request, context, {
+      requestHandler: () => invoke(homeCatalog, request),
+      cacheJson: true,
+    });
+  }
   if (path === "/api/openbd") return invoke(openbd, request);
   if (path === "/api/book-covers") return invoke(bookCovers, request);
   if (path === "/api/rakuten") return new Response(JSON.stringify({error:"catalog_migrated"}), {status:410,headers:{"Content-Type":"application/json"}});
