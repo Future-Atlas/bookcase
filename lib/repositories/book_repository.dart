@@ -3,6 +3,7 @@ import 'dart:math';
 
 import '../models/book.dart';
 import '../api/ndl_api.dart';
+import '../api/home_catalog_api.dart';
 import '../api/openbd_api.dart';
 import '../services/content_safety_service.dart';
 import '../services/supabase_service.dart';
@@ -344,6 +345,17 @@ class BookRepository {
         from: source.from, start: source.offset, count: count,
       );
     }
+    if (_isJapaneseGenre(genre) || _isForeignGenre(genre)) {
+      // The real NDL OpenSearch RSS has no language element. Never infer
+      // language from the NDL provider or the title. This low-volume API
+      // checks each edition's explicit language and ISBN instead.
+      return HomeCatalogApi.searchPage(
+        language: _isJapaneseGenre(genre) ? 'jpn' : 'eng',
+        topic: source.title!,
+        start: source.offset,
+        genre: genre,
+      );
+    }
     return NdlApi.searchPage(
       provider: source.provider, any: source.any, title: source.title,
       from: source.from, start: source.offset, count: count, genre: genre,
@@ -378,7 +390,12 @@ class BookRepository {
     var requests = 0;
     // Network is bounded to avoid hammering NDL or blocking the home screen
     // indefinitely. Already-retrieved eligible books are never discarded.
-    const maxRawWindowsPerPage = 4;
+    // Edition-level home lookup already batches many works per request.
+    // Cap uncached fetches to two windows rather than scanning four
+    // external pages on initial view. Existing injected NDL tests remain
+    // unchanged; new-arrivals continue to use their original four windows.
+    final maxRawWindowsPerPage =
+        homeFetcher == null && !newArrivals ? 2 : 4;
     const legacyCandidateWindow = 27;
 
     while (page.length < 9) {
