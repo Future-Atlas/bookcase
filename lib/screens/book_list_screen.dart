@@ -428,7 +428,7 @@ class _BookListScreenState extends State<BookListScreen> {
       await showDialog(
         context: context,
         builder: (context) {
-          final hasCover = book.coverUrl.trim().isNotEmpty;
+          final hasCover = BookCoverImage.isApprovedCover(book);
           final service = Provider.of<SupabaseService>(context, listen: false);
           final isReadFuture = service.isBookReadByCurrentUser(bookId: book.id);
           final isFavoriteFuture = FeatureFlags.favoritesUiEnabled
@@ -467,10 +467,7 @@ class _BookListScreenState extends State<BookListScreen> {
                                 width: isNarrow ? double.infinity : 200,
                                 height: isNarrow ? 240 : 300,
                                 color: Colors.grey[400],
-                                child: BookCoverImage(
-                                  book: book,
-                                  fit: BoxFit.cover,
-                                ),
+                                child: BookCoverImage(book: book),
                               ),
                               const SizedBox(height: 12),
                               if (!hasCover) ...[

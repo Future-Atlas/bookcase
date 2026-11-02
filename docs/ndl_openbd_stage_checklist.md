@@ -78,3 +78,24 @@ Compare ISBNs, order and screenshots for 20-30 old/new searches:
 - Read `docs/commercial_book_cover_policy_20261102.md` before rollout.
 - Only promote to `main` after reviewing all paid feature cover placement
   contexts and any provider withdrawal/delete obligations.
+
+### Publisher-hosted ISBN covers (Akane / Goken)
+
+- Confirm the book with ISBN `9784251096883` displays the unchanged jacket
+  from Akane's official site when openBD provides no jacket.
+- Confirm ISBN `9784876154647` displays Goken's official low-resolution
+  jacket when openBD provides no jacket.
+- Check failed/offline image requests show `表紙画像なし` rather than a
+  third-party retailer/Google/Open Library image.
+- Check untrusted Google/Rakuten URLs saved on old books are **never**
+  requested even if an authorized publisher ISBN cover is available.
+- Check card and detail views show the entire cover (no `BoxFit.cover`,
+  lower text panel overlapping the jacket, or image-overlay badges).
+- Verify 404/HTTP errors, CSP and browser loading on desktop/mobile.
+- Before production, confirm with publishers whether direct image hotlink
+  traffic and any bulk automated access are allowed; this change only
+  constructs URLs for visible, checksum-valid ISBNs and does not crawl sites.
+- The code needs no new API key, registration, or secret for these publisher
+  URLs. Keep Blue Bow (青弓社), Amazon, Google and NDL's retired cover route
+  disabled as independent cover fallbacks.
+
