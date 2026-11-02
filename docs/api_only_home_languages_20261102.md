@@ -15,7 +15,7 @@ returned 429 or timed out in live trials.
 - Only homepage 和書 and English-only 洋書 use read-only `/api/home-catalog`.
   新着 and ordinary search stay on NDL, popular remains Sharemarium posts.
 - The Cloudflare Worker checks a strict allowlist of `lang`, `topic` and
-  `page` and calls Open Library Search API once to get up to 60 edition keys.
+  `page` and calls Open Library Search API once to get up to 27 edition keys.
   It then calls the **batched** Books API once for those same editions.
 - Books are accepted only when the **specific edition** explicitly has one
   language (jpn/eng) and a valid checksum-verified ISBN-13, or a valid ISBN-10
