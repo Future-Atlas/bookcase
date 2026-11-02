@@ -96,7 +96,7 @@ class OpenBdApi {
       if (entry is! Map) continue;
       if (entry['LanguageRole']?.toString() != '01') continue;
       final code = entry['LanguageCode']?.toString().trim().toLowerCase() ?? '';
-      if (RegExp(r'^[a-z]{3}\$').hasMatch(code)) languages.add(code);
+      if (RegExp(r'^[a-z]{3}$').hasMatch(code)) languages.add(code);
     }
     return languages.join(' ');
   }
