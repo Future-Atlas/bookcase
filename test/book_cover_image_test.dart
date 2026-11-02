@@ -46,20 +46,25 @@ void main() {
     ]) {
       expect(BookCoverImage.isApprovedCover(sample.copyWith(coverUrl: url)),
           false, reason: url);
-      expect(BookCoverImage.isApprovedCover(
-        sample.copyWith(coverUrl: url, coverSource: 'openbd')),
-          ![
-            'books.google.com',
-            'books.googleusercontent.com',
-            'covers.openlibrary.org',
-            'thumbnail.image.rakuten.co.jp',
-            'images.weserv.nl',
-          ].contains(Uri.parse(url).host), reason: url);
+      // URLs without trustworthy provenance may never be rendered.
+      // A caller-supplied source label cannot bypass known banned providers.
     }
     expect(BookCoverImage.isApprovedCover(sample.copyWith(
       coverUrl: 'https://cover.openbd.jp/book.jpg',
       coverSource: 'google_books',
     )), false);
+    for (final url in [
+      'https://books.google.com/book.jpg',
+      'https://books.googleusercontent.com/book.jpg',
+      'https://covers.openlibrary.org/book.jpg',
+      'https://thumbnail.image.rakuten.co.jp/img.jpg',
+      'https://images.weserv.nl/img.jpg',
+      'https://books.google.com@evil.example/book.jpg',
+    ]) {
+      expect(BookCoverImage.isApprovedCover(sample.copyWith(
+        coverUrl: url, coverSource: 'openbd',
+      )), false, reason: url);
+    }
     expect(BookCoverImage.isSafeRemoteCover('http://cover.openbd.jp/book.jpg'),
         false);
     expect(BookCoverImage.isSafeRemoteCover(
