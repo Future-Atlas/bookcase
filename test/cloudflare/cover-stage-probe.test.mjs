@@ -2,102 +2,105 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { probeCoverStage } from '../../scripts/cover-stage-probe.mjs';
 
-const japanese = '9784488402327';
-const foreign = '9780140328721';
-function json(status, value) {
-  return new Response(JSON.stringify(value), {
-    status, headers: { 'content-type': 'application/json; charset=utf-8' },
-  });
-}
+const isbn = '9784488402327';
+const json = (status, value) => new Response(JSON.stringify(value), {
+  status, headers: { 'content-type': 'application/json; charset=utf-8' },
+});
 
-function fakeFetch({googleStatus = 200, googleImage = true, googleUrl, creditUrl,
-                    openbdStatus = 200, openbdCover = '', invalidStatus = 400} = {}) {
-  return async (url) => {
-    if (url.includes('isbn=not-an-isbn')) return json(invalidStatus, {error:'invalid_isbn_list'});
-    if (url.includes('/api/book-covers?isbn=')) {
-      if (googleStatus !== 200) return json(googleStatus, {error:'cover_lookup_unavailable'});
-      return json(200, {covers: googleImage ? {
-        [japanese]: {
-          coverUrl: googleUrl || 'https://books.google.com/books?id=real&img=1',
-          creditUrl: creditUrl || 'https://books.google.com/books?id=real',
-        },
-      } : {}});
+function fakeFetch({ retiredStatus = 410, retiredBody, invalidStatus = 400,
+                     openbdStatus = 200, openbdCover = '',
+                     openbdIsbn = isbn } = {}) {
+  const outbound = [];
+  const request = async (input) => {
+    const url = new URL(input);
+    outbound.push(url);
+    if (url.hostname !== 'sharemarium-staging.example') {
+      throw new Error('unexpected third-party request');
     }
-    if (url.includes('/api/openbd?isbn=')) {
+    if (url.pathname === '/api/book-covers') {
+      return json(retiredStatus, retiredBody || {
+        error:'provider_disabled_pending_rights',
+      });
+    }
+    if (url.pathname === '/api/openbd') {
+      if (url.searchParams.get('isbn') === 'not-an-isbn') {
+        return json(invalidStatus, {error:'invalid_isbn_list'});
+      }
       return openbdStatus === 200 ?
-        json(200, [{summary:{isbn:japanese, cover:openbdCover}}]) :
-        json(502, {error:'openbd_unavailable'});
+        json(200, [{summary:{isbn:openbdIsbn, cover:openbdCover}}]) :
+        json(openbdStatus, {error:'openbd_unavailable'});
     }
-    if (new URL(url).hostname === 'covers.openlibrary.org') {
-      return new Response(null, {status:200,headers:{'content-type':'image/jpeg'}});
-    }
-    throw new Error('unexpected request ' + url);
+    throw new Error('unexpected API path');
   };
+  return { request, outbound };
 }
 
-test('staging reports image metadata without logging URLs', async () => {
-  const result = await probeCoverStage('https://sharemarium-staging.example/', {
-    request: fakeFetch({openbdCover:'https://example.org/jacket.jpg'}),
-  });
-  assert.equal(result.invalid_isbn_http, 400);
-  assert.equal(result.google_api_http, 200);
-  assert.equal(result.google_japanese_jacket, 'metadata_available');
+test('staging verifies Google Books is disabled and openBD is available', async () => {
+  const mock = fakeFetch({openbdCover:'https://cover.openbd.jp/book.jpg'});
+  const result = await probeCoverStage('https://sharemarium-staging.example/', mock);
+  assert.equal(result.google_endpoint_http, 410);
+  assert.equal(result.openbd_invalid_isbn_http, 400);
+  assert.equal(result.openbd_http, 200);
   assert.equal(result.openbd_japanese_jacket, 'metadata_available');
-  assert.equal(result.openlibrary_known_jacket, 'available');
+  assert.equal(mock.outbound.length, 3);
+  assert.ok(mock.outbound.every(u => u.hostname === 'sharemarium-staging.example'));
 });
 
-test('provider outages are not misreported as missing ISBN jackets', async () => {
-  const result = await probeCoverStage('https://sharemarium-staging.example/', {
-    request: fakeFetch({googleStatus:503, openbdStatus:502}),
-  });
-  assert.equal(result.google_japanese_jacket, 'upstream_unavailable');
-  assert.equal(result.openbd_japanese_jacket, 'upstream_unavailable');
+test('missing cover is not confused with provider outage', async () => {
+  const absent = await probeCoverStage('https://sharemarium-staging.example/',
+    fakeFetch());
+  assert.equal(absent.openbd_japanese_jacket, 'not_available');
+  const outage = await probeCoverStage('https://sharemarium-staging.example/',
+    fakeFetch({openbdStatus:502}));
+  assert.equal(outage.openbd_japanese_jacket, 'upstream_unavailable');
 });
 
-test('reject fake Google thumbnail or attribution hosts', async () => {
+test('retired endpoint must return 410 with a known response', async () => {
   for (const props of [
-    {googleUrl:'https://books.google.com.evil.example/book.jpg'},
-    {googleUrl:'https://books.google.com@evil.example/book.jpg'},
-    {creditUrl:'https://evil.example/books?host=books.google.com'},
+    {retiredStatus:200},
+    {retiredStatus:503},
+    {retiredBody:{error:'covers_available'}},
   ]) {
-    await assert.rejects(() => probeCoverStage('https://sharemarium-staging.example/', {
-      request: fakeFetch(props),
-    }), /cover_probe_invalid_google_cover/);
+    await assert.rejects(
+      () => probeCoverStage('https://sharemarium-staging.example/',fakeFetch(props)),
+      /cover_probe_google_not_disabled|cover_probe_bad_disabled_response/,
+    );
   }
 });
 
-test('reject broken app routing and invalid base URLs', async () => {
-  await assert.rejects(() => probeCoverStage('http://example.org/', {
-    request: fakeFetch(),
-  }), /cover_probe_invalid_origin/);
-  await assert.rejects(() => probeCoverStage('https://sharemarium-staging.example/', {
-    request: fakeFetch({invalidStatus:404}),
-  }), /cover_probe_route_validation_failed/);
+test('reject invalid origin and API routes', async () => {
+  await assert.rejects(
+    () => probeCoverStage('http://sharemarium-staging.example/',fakeFetch()),
+    /cover_probe_invalid_origin/);
+  await assert.rejects(
+    () => probeCoverStage('https://sharemarium-staging.example/',
+      fakeFetch({invalidStatus:404})),
+    /cover_probe_route_validation_failed/);
 });
 
-test('an empty valid provider result remains distinguishable from a routing failure', async () => {
-  const r = await probeCoverStage('https://sharemarium-staging.example/', {
-    request: fakeFetch({googleImage:false}),
-  });
-  assert.equal(r.google_japanese_jacket, 'not_available');
-  assert.equal(r.google_api_http, 200);
+test('bad publisher cover URL is not considered available', async () => {
+  const result = await probeCoverStage('https://sharemarium-staging.example/',
+    fakeFetch({openbdCover:'javascript:alert(1)'}));
+  assert.equal(result.openbd_japanese_jacket, 'invalid_url');
 });
 
-test('malformed openBD cover URLs are classified without crashing staging checks', async () => {
-  const r = await probeCoverStage('https://sharemarium-staging.example/', {
-    request: fakeFetch({openbdCover:'not a url'}),
-  });
-  assert.equal(r.openbd_japanese_jacket, 'invalid_url');
-});
-
-test('an HTML SPA fallback cannot masquerade as a valid cover API', async () => {
-  const req = async (url) => {
-    if (url.includes('isbn=not-an-isbn')) return json(400, {error:'invalid_isbn_list'});
-    return new Response('<html>fallback</html>', {
-      status:200, headers:{'content-type':'text/html'},
-    });
+test('mismatched ISBN and invalid content type are rejected', async () => {
+  await assert.rejects(
+    () => probeCoverStage('https://sharemarium-staging.example/',
+      fakeFetch({openbdIsbn:'9780140328721'})),
+    /cover_probe_mismatched_openbd_isbn/);
+  const fake = fakeFetch();
+  const original = fake.request;
+  fake.request = async (url) => {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/api/book-covers') {
+      return new Response('<html>SPA fallback</html>',{
+        status:410,headers:{'content-type':'text/html'},
+      });
+    }
+    return original(url);
   };
-  await assert.rejects(() => probeCoverStage('https://sharemarium-staging.example/', {
-    request:req,
-  }), /cover_probe_invalid_content_type/);
+  await assert.rejects(
+    () => probeCoverStage('https://sharemarium-staging.example/',fake),
+    /cover_probe_invalid_content_type/);
 });
