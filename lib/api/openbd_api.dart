@@ -84,10 +84,8 @@ class OpenBdApi {
     );
   }
 
-  /// ONIX List 22: role "01" identifies the language of the book text.
-  /// "04" is original language and must not be mistaken for the text
-  /// language. Preserve multiple text languages so bilingual records fail
-  /// the strict home jpn/eng classification.
+  /// ONIX List 22: LanguageRole 01 is the book text language.
+  /// Original language (04) must not be mistaken for the book language.
   static String _textLanguages(Map onix) {
     final descriptive = onix['DescriptiveDetail'];
     if (descriptive is! Map) return '';
@@ -98,41 +96,7 @@ class OpenBdApi {
       if (entry is! Map) continue;
       if (entry['LanguageRole']?.toString() != '01') continue;
       final code = entry['LanguageCode']?.toString().trim().toLowerCase() ?? '';
-      if (RegExp(r'^[a-z]{3}Object? node, List<String> output) {
-    if (node is Map) {
-      if (node['AudienceCodeType']?.toString() == '22') {
-        final value = node['AudienceCodeValue']?.toString() ??
-            node['AudienceCode']?.toString();
-        if (value != null && RegExp(r'^[0-9]{1,2}$').hasMatch(value)) {
-          output.add(value.padLeft(2, '0'));
-        }
-      }
-      for (final value in node.values) {
-        _collectAdultAudienceCodes(value, output);
-      }
-    } else if (node is List) {
-      for (final value in node) {
-        _collectAdultAudienceCodes(value, output);
-      }
-    }
-  }
-
-  static String _description(Map onix) {
-    final collateral = onix['CollateralDetail'];
-    if (collateral is! Map) return '';
-    final texts = collateral['TextContent'];
-    final candidates = texts is List ? texts : [texts];
-    for (final item in candidates) {
-      if (item is Map && item['Text'] is String) {
-        final value = (item['Text'] as String)
-            .replaceAll(RegExp(r'<[^>]*>'), '').trim();
-        if (value.isNotEmpty) return value;
-      }
-    }
-    return '';
-  }
-}
-).hasMatch(code)) languages.add(code);
+      if (RegExp(r'^[a-z]{3}\$').hasMatch(code)) languages.add(code);
     }
     return languages.join(' ');
   }
