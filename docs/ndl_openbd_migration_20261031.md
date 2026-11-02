@@ -1,3 +1,8 @@
+> **Historical document — superseded for cover rights on 2026-11-02.**
+> Google Books and Open Library automatic cover fallbacks described below are
+> **disabled**. See [commercial book cover policy](commercial_book_cover_policy_20261102.md).
+> Do not restore the older fallback logic without approved commercial licenses.
+
 # NDL + openBD migration (PR #194, draft)
 
 ## Intent and boundaries
