@@ -46,6 +46,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('post-book-cover-post-1')));
     await tester.tap(find.byKey(const ValueKey('post-book-title-post-1')));
     expect(taps, 2);
+    // A persisted book URL without licensing provenance must not be loaded.
+    final cover = find.byKey(const ValueKey('post-book-cover-post-1'));
+    expect(find.descendant(of: cover, matching: find.byType(Image)), findsNothing);
   });
 
   testWidgets('mobile cover and title open the book details', (tester) async {

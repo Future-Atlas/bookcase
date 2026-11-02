@@ -159,7 +159,9 @@ function normalizeRakutenBooks(items, sectionTitle) {
     return {
       title: data.title || "不明なタイトル",
       author: data.author || "不明な著者",
-      coverUrl: rakutenUrl ? (data.largeImageUrl || "") : "",
+      // Rakuten-sourced artwork is not licensed for use as a general
+      // paid reading-management service thumbnail.
+      coverUrl: "",
       genre: sectionTitle,
       description: rakutenUrl ? (data.itemCaption || "") : "",
       rakutenUrl,
@@ -296,7 +298,8 @@ async function fetchRakutenBookByIsbn(isbn, diagnostics, request = requestRakute
   return {
     title: first.title || compact,
     author: first.author || "",
-    coverUrl: first.largeImageUrl || "",
+    // No retailer jacket is displayed without a compatible image license.
+    coverUrl: "",
     description: first.itemCaption || "",
     publisher: first.publisherName || "",
     isbn: compact,

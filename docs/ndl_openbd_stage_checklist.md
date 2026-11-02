@@ -59,39 +59,22 @@ Compare ISBNs, order and screenshots for 20-30 old/new searches:
 
 
 
-## Cover-image availability after fallback
-- Confirm `/api/openbd?isbn=9784488402327,9784413299084` returns 200 with
-  `summary.cover` blank (the records still contain valid bibliographic
-  information). An empty image field is not a failed request.
-- Check a known Open Library ISBN with a cover, e.g. `9780140328721`:
-  the UI should use `https://covers.openlibrary.org/b/isbn/9780140328721-M.jpg?default=false`
-  as a **real image** if its book's cover URL is absent.
-- Check recent Japanese ISBN `9784488402327`: Open Library returns
-  404, while Google Books Dynamic Links returned a thumbnail URL in
-  the diagnostic probe. Confirm `/api/book-covers?isbn=9784488402327`
-  returns the ISBN-exact Google thumbnail and Google Books credit link;
-  the UI should show a clickable `Google ブックス` source badge.
-- When both Google and Open Library lack a usable image or a provider times
-  out, confirm a title/author placeholder marked `表紙画像なし`, not a
-  generic unrelated book cover or a blank rectangle.
-- With a valid original openBD cover, verify it takes precedence over
-  Google Books and Open Library and that an image load error falls back to
-  the ISBN-matched Open Library URL.
-- Verify a batch of 9 or 25 ISBNs results in ONE Dynamic Links lookup
-  through the Worker, not one request per book; verify rate-limit/timeout
-  failures leave all book data usable. Confirm source/credit URLs are
-  validated, and copied or mismatched ISBN covers are never shown.
-- Verify mobile and web, including cross-origin image fallback with
-  CanvasKit, detail dialogs, profile/book search and favorites.
-- Verify no NDL source selection, 9-card/27-candidate pagination,
-  ISBN identity, adult-content classification or user posts changed.
-- Do not claim full Japanese book cover coverage: Open Library availability
-  varies, openBD coverage is limited and using JPRO/retailer assets requires
-  explicit rights.
+## Commercial-use cover QA (2026-11-02)
 
-### Flutter Web image CORS regression (2026-11-01)
-- Chrome console sampled on staging: openBD (`cover.openbd.jp`) and Google Books (`books.google.com`) produced CORS-blocked XMLHttpRequests, even when the server returned the image as HTTP 200. The previous `WebHtmlElementStrategy.fallback` tried an XHR first, then used HTML `<img>` when it failed.
-- The book cover widget now chooses HTML-first rendering on the **exact official hosts** `cover.openbd.jp`, `books.google.com`, `books.googleusercontent.com` and `covers.openlibrary.org`. Never accept partial hostname matches or convert to an unlicensed rehosting proxy. Unrecognized remote covers retain the existing behavior; native mobile is unchanged.
-- In Chrome staging, open a home feed with both openBD and Google images, and confirm previously seen `Access to XMLHttpRequest ... blocked by CORS policy` messages no longer occur for those exact hosts. Confirm visible jackets, Google attribution badge and click-through, user book cards, list and detail views on desktop and mobile widths.
-- Verify Open Library missing ISBNs still produce an honest `表紙画像なし`. Its HTTP 404 requests are expected when no jacket is available, and are not evidence that NDL book metadata retrieval failed. Do not manufacture replacement cover art or suppress them with Open Library's generic default image.
-- Collect actual display outcome and cache/scroll behavior in a browser; unit tests and API response checks do not prove pixel-level rendering or third-party CDN availability. Do not promote to `main` from CI alone.
+- Google Books API `/api/book-covers?isbn=9784488402327` MUST return HTTP 410
+  with `provider_disabled_pending_rights` and must NOT contact Google.
+- openBD `/api/openbd?isbn=9784488402327` returns JSON and may have an empty
+  `summary.cover`. The book still appears with its title and author.
+- Books with an **approved** openBD cover use its original HTTPS URL and
+  `coverSource == 'openbd'`. Verify the jacket is visible on desktop/mobile.
+- Books without approved images show the honest title placeholder
+  `表紙画像なし`, with no calls to Open Library.
+- Legacy Google/Rakuten/Open Library URLs in saved reviews, posts and
+  shelf data MUST NOT trigger network image requests.
+- Validate correct source provenance on featured books and the SEO HTML
+  book details. No external retail images without appropriate licensing.
+- Verify book review posting, NDL search, age safety, and user-owned data are
+  unaffected by hiding unapproved images.
+- Read `docs/commercial_book_cover_policy_20261102.md` before rollout.
+- Only promote to `main` after reviewing all paid feature cover placement
+  contexts and any provider withdrawal/delete obligations.

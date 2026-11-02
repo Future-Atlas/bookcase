@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/book.dart';
 
-/// Prefer a catalog cover, then the edition-specific Open Library cover.
-/// The Open Library endpoint uses default=false to avoid false blank images.
-/// Flutter Web CanvasKit must use HTML-first rendering on known cover CDNs
-/// that do not provide the cross-origin headers required for byte fetching.
+/// Only show cover art with a documented right to use it for book
+/// introduction/promotion. openBD permits this use by companies, subject
+/// to its terms: https://openbd.jp/terms/
+///
+/// Google Books, Open Library and legacy retailer URLs are intentionally not
+/// automatic image sources. A URL reachable on the internet is not a license.
 class BookCoverImage extends StatelessWidget {
   const BookCoverImage({
     super.key,
@@ -21,48 +22,47 @@ class BookCoverImage extends StatelessWidget {
   final double? width;
   final double? height;
 
-  static String? openLibraryCoverUrl(String isbn) {
-    final normalized = isbn.trim().replaceAll(
-      RegExp(r'[\s\u3000\-‐‑‒–—―−]'), '',
-    ).toUpperCase();
-    if (!RegExp(r'^(?:97[89]\d{10}|\d{9}[\dX])$')
-        .hasMatch(normalized)) {
-      return null;
-    }
-    return 'https://covers.openlibrary.org/b/isbn/'
-        '$normalized-M.jpg?default=false';
-  }
-
   static bool isSafeRemoteCover(String url) {
     final parsed = Uri.tryParse(url.trim());
     return parsed != null &&
         parsed.scheme == 'https' &&
         parsed.host.isNotEmpty &&
-        parsed.userInfo.isEmpty;
+        parsed.userInfo.isEmpty &&
+        !parsed.hasPort;
   }
 
-  /// Prevent needless Flutter Web XMLHttpRequests that known book-cover CDNs
-  /// will reject due to missing CORS response headers. An HTML <img> can
-  /// display these public URLs without reading their response bytes in JS.
-  /// This affects only Web; native clients still use decoded image bytes.
-  /// Exact host checks prevent pretending an arbitrary URL is a known CDN.
-  static WebHtmlElementStrategy webImageStrategyForUrl(String url) {
-    final parsed = Uri.tryParse(url.trim());
-    const htmlFirstHosts = {
-      'cover.openbd.jp',
+  /// The source tag is assigned only by OpenBdApi.enrichRecord. For old
+  /// persisted post data without a source tag, allow just the official
+  /// openBD image host; never infer rights for arbitrary publisher/CDN URLs.
+  static bool isApprovedCover(Book book) {
+    if (!isSafeRemoteCover(book.coverUrl)) return false;
+    if (book.coverSource.isNotEmpty && book.coverSource != 'openbd') {
+      return false;
+    }
+    final host = Uri.parse(book.coverUrl.trim()).host.toLowerCase();
+    const excluded = {
       'books.google.com',
       'books.googleusercontent.com',
       'covers.openlibrary.org',
+      'images.weserv.nl',
+      'thumbnail.image.rakuten.co.jp',
+      'image.rakuten.co.jp',
     };
-    if (parsed != null && parsed.scheme == 'https' &&
-        parsed.userInfo.isEmpty && !parsed.hasPort &&
-        htmlFirstHosts.contains(parsed.host.toLowerCase())) {
-      return WebHtmlElementStrategy.prefer;
-    }
-    return WebHtmlElementStrategy.fallback;
+    if (excluded.contains(host)) return false;
+    if (book.coverSource == 'openbd') return true;
+    return host == 'cover.openbd.jp';
   }
 
+  /// Covers returned by openBD may reside on publishers' own HTTPS hosts.
+  /// HTML-first rendering avoids speculative CORS-blocked XHRs in Flutter Web.
+  static WebHtmlElementStrategy webImageStrategyForBook(Book book) =>
+      isApprovedCover(book)
+          ? WebHtmlElementStrategy.prefer
+          : WebHtmlElementStrategy.never;
+
   Widget _placeholder(BuildContext context) => Container(
+    width: width,
+    height: height,
     color: Theme.of(context).brightness == Brightness.dark
         ? const Color(0xFF32353A)
         : const Color(0xFFE9E5DD),
@@ -100,29 +100,18 @@ class BookCoverImage extends StatelessWidget {
     ),
   );
 
-  Widget _network(
-    BuildContext context,
-    String url, {
-    required Widget Function() onError,
-    bool showGoogleCredit = false,
-  }) {
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isApprovedCover(book)) return _placeholder(context);
     return Image.network(
-      url,
+      book.coverUrl.trim(),
       fit: fit,
       width: width,
       height: height,
-      semanticLabel: book.title + 'の表紙',
-      // Attach credit to a successfully painted Google image, not to the
-      // fallback result. This also avoids labeling an Open Library image as
-      // Google Books when the primary thumbnail fails.
-      frameBuilder: showGoogleCredit
-          ? (context, image, frame, _) =>
-              frame == null ? image : _withSourceCredit(image)
-          : null,
-      // Official cover CDNs do not consistently supply CORS headers.
-      // HTML-first avoids a guaranteed failed XHR before drawing the image.
-      webHtmlElementStrategy: webImageStrategyForUrl(url),
-      errorBuilder: (_, error, stackTrace) => onError(),
+      semanticLabel: '${book.title}の表紙',
+      webHtmlElementStrategy: webImageStrategyForBook(book),
+      errorBuilder: (_, error, stackTrace) => _placeholder(context),
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;
         return ColoredBox(
@@ -131,88 +120,13 @@ class BookCoverImage extends StatelessWidget {
               : const Color(0xFFE7E7E7),
           child: const Center(
             child: SizedBox(
-              height: 20, width: 20,
+              height: 20,
+              width: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
           ),
         );
       },
     );
-  }
-
-  /// Google Books requires a visible attribution link alongside thumbnails.
-  /// The responsive badge stays clickable even in small profile grids.
-  Widget _withSourceCredit(Widget image) {
-    if (book.coverSource != 'google_books') return image;
-    final url = Uri.tryParse(book.coverAttributionUrl);
-    if (url == null || url.scheme != 'https' ||
-        url.host != 'books.google.com' || url.userInfo.isNotEmpty) {
-      return image;
-    }
-    return LayoutBuilder(builder: (context, constraints) {
-      final tiny = constraints.maxWidth.isFinite &&
-          constraints.maxWidth < 90;
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          image,
-          Positioned(
-            top: 3, right: 3,
-            child: Tooltip(
-              message: '表紙画像の情報：Google ブックス',
-              child: GestureDetector(
-                onTap: () => launchUrl(url, mode: LaunchMode.externalApplication),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xCC222222),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 3, vertical: 2,
-                  ),
-                  child: Text(
-                    tiny ? 'Google' : 'Google ブックス',
-                    maxLines: 1,
-                    style: const TextStyle(
-                      fontSize: 9,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = book.coverUrl.trim();
-    final fallback = openLibraryCoverUrl(book.isbn);
-    if (isSafeRemoteCover(primary)) {
-      return _network(
-        context,
-        primary,
-        showGoogleCredit: book.coverSource == 'google_books',
-        onError: () {
-          if (fallback == null || primary == fallback) {
-            return _placeholder(context);
-          }
-          return _network(
-            context, fallback,
-            onError: () => _placeholder(context),
-          );
-        },
-      );
-    }
-    if (fallback != null) {
-      return _network(
-        context, fallback,
-        onError: () => _placeholder(context),
-      );
-    }
-    return _placeholder(context);
   }
 }
