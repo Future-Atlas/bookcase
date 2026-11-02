@@ -18,6 +18,7 @@ class BookListController extends ChangeNotifier {
   Timer? _searchDebounce;
   bool isLoading = true;
   bool isLoadingRecommended = true;
+  bool isLoadingJapanese = true;
   bool isLoadingWestern = true;
   bool isLoadingPopular = true;
   bool isLoadingTimeline = true;
@@ -42,6 +43,14 @@ class BookListController extends ChangeNotifier {
   final Map<int, List<Book>> _recommendedPageCache = {};
   bool _recommendedReachedEnd = false;
   bool get canLoadPreviousRecommended => recommendedPage > 1;
+
+  List<Book> japaneseBooks = [];
+  int japanesePage = 1;
+  bool hasMoreJapanese = true;
+  bool isLoadingMoreJapanese = false;
+  final Map<int, List<Book>> _japanesePageCache = {};
+  bool _japaneseReachedEnd = false;
+  bool get canLoadPreviousJapanese => japanesePage > 1;
 
   List<Book> westernBooks = [];
   int westernPage = 1;
@@ -309,6 +318,7 @@ class BookListController extends ChangeNotifier {
     }
     isLoading = true;
     isLoadingRecommended = true;
+    isLoadingJapanese = true;
     isLoadingWestern = true;
     isLoadingPopular = true;
     isLoadingFeatured = true;
@@ -320,18 +330,23 @@ class BookListController extends ChangeNotifier {
     final repository = _repository;
 
     recommendedPage = 1;
+    japanesePage = 1;
     westernPage = 1;
     popularPage = 1;
     hasMoreRecommended = true;
+    hasMoreJapanese = true;
     hasMoreWestern = true;
     hasMorePopular = true;
     _recommendedPageCache.clear();
+    _japanesePageCache.clear();
     _westernPageCache.clear();
     _popularPageCache.clear();
     _recommendedReachedEnd = false;
+    _japaneseReachedEnd = false;
     _westernReachedEnd = false;
     _popularReachedEnd = false;
     recommendedBooks = [];
+    japaneseBooks = [];
     westernBooks = [];
     popularBooks = [];
     featuredBooks = [];
@@ -373,6 +388,23 @@ class BookListController extends ChangeNotifier {
       hasMoreRecommended = false;
     } finally {
       isLoadingRecommended = false;
+      notifyListeners();
+    }
+
+    try {
+      japaneseBooks = await repository.fetchBooksByGenre(
+        '和書',
+        page: japanesePage,
+      );
+      _japanesePageCache[japanesePage] = japaneseBooks;
+      _japaneseReachedEnd = japaneseBooks.isEmpty ||
+          !repository.hasMoreHomeBooks('和書');
+      hasMoreJapanese = !_japaneseReachedEnd;
+    } catch (_) {
+      japaneseBooks = [];
+      hasMoreJapanese = false;
+    } finally {
+      isLoadingJapanese = false;
       notifyListeners();
     }
 
@@ -454,6 +486,29 @@ class BookListController extends ChangeNotifier {
     }
   }
 
+  Future<void> retryJapanese() async {
+    if (isLoadingJapanese || isLoadingMoreJapanese) return;
+    isLoadingJapanese = true;
+    notifyListeners();
+    try {
+      _repository.resetHomeBooks('和書');
+      final books = await _repository.fetchBooksByGenre('和書', page: 1);
+      japaneseBooks = books;
+      japanesePage = 1;
+      _japanesePageCache
+        ..clear()
+        ..[1] = books;
+      _japaneseReachedEnd =
+          books.isEmpty || !_repository.hasMoreHomeBooks('和書');
+      hasMoreJapanese = !_japaneseReachedEnd;
+    } catch (_) {
+      hasMoreJapanese = false;
+    } finally {
+      isLoadingJapanese = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> retryWestern() async {
     if (isLoadingWestern || isLoadingMoreWestern) return;
     isLoadingWestern = true;
@@ -524,6 +579,56 @@ class BookListController extends ChangeNotifier {
     recommendedBooks = cachedBooks;
     recommendedPage = previousPage;
     hasMoreRecommended = true;
+    notifyListeners();
+  }
+
+  Future<void> loadMoreJapanese() async {
+    if (isLoadingMoreJapanese || !hasMoreJapanese) return;
+    final nextPage = japanesePage + 1;
+    final cachedBooks = _japanesePageCache[nextPage];
+    if (cachedBooks != null) {
+      japaneseBooks = cachedBooks;
+      japanesePage = nextPage;
+      hasMoreJapanese =
+          _japanesePageCache.containsKey(nextPage + 1) ||
+          !_japaneseReachedEnd;
+      notifyListeners();
+      return;
+    }
+
+    isLoadingMoreJapanese = true;
+    notifyListeners();
+
+    try {
+      final newBooks = await _repository.fetchBooksByGenre(
+        '和書',
+        page: nextPage,
+      );
+
+      if (newBooks.isEmpty) {
+        _japaneseReachedEnd = true;
+        hasMoreJapanese = false;
+      } else {
+        _japanesePageCache[nextPage] = newBooks;
+        japaneseBooks = newBooks;
+        japanesePage = nextPage;
+        _japaneseReachedEnd = !_repository.hasMoreHomeBooks('和書');
+        hasMoreJapanese = !_japaneseReachedEnd;
+      }
+    } finally {
+      isLoadingMoreJapanese = false;
+      notifyListeners();
+    }
+  }
+
+  void loadPreviousJapanese() {
+    if (!canLoadPreviousJapanese || isLoadingMoreJapanese) return;
+    final previousPage = japanesePage - 1;
+    final cachedBooks = _japanesePageCache[previousPage];
+    if (cachedBooks == null) return;
+    japaneseBooks = cachedBooks;
+    japanesePage = previousPage;
+    hasMoreJapanese = true;
     notifyListeners();
   }
 
@@ -629,6 +734,7 @@ class BookListController extends ChangeNotifier {
 
   List<Book> get books => [
     ...recommendedBooks,
+    ...japaneseBooks,
     ...westernBooks,
     ...popularBooks,
   ];
