@@ -284,6 +284,8 @@ class BookListController extends ChangeNotifier {
       if (index < 0) continue;
       final hydrated = original.copyWith(
         coverUrl: fresh.coverUrl,
+        coverSource: fresh.coverSource,
+        coverAttributionUrl: fresh.coverAttributionUrl,
         description: fresh.description,
         rakutenAffiliateUrl: fresh.rakutenAffiliateUrl,
         catalogSource: fresh.catalogSource,
