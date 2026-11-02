@@ -54,6 +54,9 @@ test("only API and live server-rendered routes consume rate counters", () => {
   assert.deepEqual(p(new Request("https://site.test/api/ndl?cnt=10")), {
     protectedPath: true, costly: true,
   });
+  assert.deepEqual(p(new Request("https://site.test/api/rakuten?booksGenreId=001")), {
+    protectedPath: true, costly: true,
+  });
   assert.equal(p(new Request("https://site.test/api/posts-seo")).protectedPath,true);
   assert.equal(p(new Request("https://site.test/sitemap.xml")).protectedPath,true);
   assert.equal(p(new Request("https://site.test/")).protectedPath,false);

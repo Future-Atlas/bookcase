@@ -167,15 +167,63 @@ test("crawler legal requests use server-rendered HTML", async () => {
   assert.equal(requests.length, 0);
 });
 
-test("API routes do not fall through to Flutter assets", async () => {
+test("staging-only Rakuten proxy uses the existing quota object, not Flutter assets", async () => {
   const { env, requests } = environment();
+  const called = [];
+  env.RAKUTEN_APP_ID = "staging-id";
+  env.RAKUTEN_ACCESS_KEY = "staging-access-key";
+  env.RAKUTEN_QUOTA = {
+    idFromName(name) {
+      assert.equal(name, "staging-id");
+      return "global-app-quota";
+    },
+    get(id) {
+      assert.equal(id, "global-app-quota");
+      return {
+        async fetch(_url, options) {
+          const data = JSON.parse(options.body);
+          called.push(data.url);
+          return Response.json({ Items: [{ Item: { title: "Book" } }] });
+        },
+      };
+    },
+  };
   const response = await worker.fetch(
-    new Request("https://staging.example.test/api/rakuten?title=test"),
+    new Request(
+      "https://staging.example.test/api/rakuten?endpoint=book&booksGenreId=001&hits=3",
+    ),
     env,
   );
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).Items.length, 1);
+  assert.equal(requests.length, 0);
+  assert.equal(called.length, 1);
+  const url = new URL(called[0]);
+  assert.equal(url.hostname, "openapi.rakuten.co.jp");
+  assert.equal(url.searchParams.get("accessKey"), "staging-access-key");
+});
 
+test("production keeps the removed Rakuten endpoint disabled", async () => {
+  const { env, requests } = environment({ appEnv: "production" });
+  const response = await worker.fetch(
+    new Request("https://www.sharemarium.com/api/rakuten?booksGenreId=001"),
+    env,
+  );
   assert.equal(response.status, 410);
   assert.equal((await response.json()).error, "catalog_migrated");
+  assert.equal(requests.length, 0);
+});
+
+test("staging Rakuten fails closed without quota or secrets", async () => {
+  const { env, requests } = environment();
+  env.RAKUTEN_APP_ID = "staging-id";
+  env.RAKUTEN_ACCESS_KEY = "staging-access-key";
+  const response = await worker.fetch(
+    new Request("https://staging.example.test/api/rakuten?booksGenreId=001"),
+    env,
+  );
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "rakuten_busy");
   assert.equal(requests.length, 0);
 });
 
