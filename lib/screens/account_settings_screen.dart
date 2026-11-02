@@ -16,6 +16,7 @@ import 'community_guidelines_screen.dart';
 import 'contact_screen.dart';
 import 'external_transmission_screen.dart';
 import 'infringement_policy_screen.dart';
+import 'mfa_settings_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'profile_onboarding_screen.dart';
 import 'subscription_status_screen.dart';
@@ -190,6 +191,14 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                     subtitle: const Text('ユーザー名・ユーザーID（変更不可）・鍵アカウント'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _push(const _PublicAccountSettingsScreen()),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.verified_user_outlined),
+                    title: const Text('二段階認証（MFA）'),
+                    subtitle: const Text('認証アプリを登録・確認してアカウントを保護'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _push(const MfaSettingsScreen()),
                   ),
                   const Divider(height: 1),
                   ListTile(
