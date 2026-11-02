@@ -307,3 +307,45 @@ test("NDL 504 responses are never cached and a later retry can succeed", async (
   assert.equal(attempts, 2);
   assert.equal(entries.size, 1);
 });
+
+
+test("home language metadata API rejects bad query without reaching Flutter SPA", async () => {
+  const { env, requests } = environment();
+  const r = await worker.fetch(new Request(
+    "https://staging.example.test/api/home-catalog?lang=invalid&topic=Japan&page=1"
+  ), env);
+  assert.equal(r.status, 400);
+  assert.equal((await r.json()).error, "invalid_home_catalog_query");
+  assert.equal(requests.length, 0);
+});
+
+test("home metadata JSON edge-cache reuses 200 pages but not 503 failures", async () => {
+  const entries = new Map();
+  const cache = {
+    async match(key) { return entries.get(key.url)?.clone(); },
+    async put(key, response) { entries.set(key.url, response.clone()); },
+  };
+  let calls=0;
+  const req = new Request(
+    "https://staging.example.test/api/home-catalog?lang=eng&topic=Japan&page=1"
+  );
+  const requestHandler=async()=>{
+    calls++;
+    if(calls===1)return Response.json({error:"catalog_source_busy"},{
+      status:503,headers:{"Cache-Control":"no-store"}
+    });
+    return Response.json({books:[{isbn:"9780140328721"}]},{
+      status:200,headers:{"Cache-Control":"public, max-age=0, s-maxage=600"}
+    });
+  };
+  const first=await _test.serveNdl(req,undefined,{cache,cacheJson:true,requestHandler});
+  assert.equal(first.status,503);
+  assert.equal(entries.size,0);
+  const second=await _test.serveNdl(req,undefined,{cache,cacheJson:true,requestHandler});
+  const third=await _test.serveNdl(req,undefined,{cache,cacheJson:true,requestHandler});
+  assert.equal(second.status,200);
+  assert.equal(third.status,200);
+  assert.equal(calls,2);
+  assert.equal(entries.size,1);
+  assert.deepEqual(await third.json(),{books:[{isbn:"9780140328721"}]});
+});
