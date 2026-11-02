@@ -43,11 +43,52 @@ for (const [label, q, lang] of queries) {
         if(isbn13&&exact)strictBoth++;
       }
     }
+    // Batch edition detail lookup: one request for all selected OL edition IDs.
+    const selected = docs.map(work=>work.editions?.docs?.[0]?.key)
+      .filter(value=>typeof value==="string" && /^\/books\/OL\d+M$/.test(value))
+      .slice(0,20);
+    let detailStatus = null, detailCount=0, detailLanguageMatch=0;
+    let detailISBN13=0, detailEligible=0;
+    let detailKeys=[], detailLanguageShapes=[];
+    if(selected.length) {
+      await new Promise(resolve=>setTimeout(resolve,1450));
+      const detailUrl=new URL("https://openlibrary.org/api/books.json");
+      detailUrl.search=new URLSearchParams({
+        bibkeys:selected.map(key=>"OLID:"+key.split("/").pop()).join(","),
+        jscmd:"details",
+      }).toString();
+      const detailResponse=await fetch(detailUrl,{
+        headers:{Accept:"application/json",
+          "User-Agent":"Sharemarium book discovery / low-volume evaluation (https://www.sharemarium.com)"},
+        signal:AbortSignal.timeout(15000),
+      });
+      detailStatus=detailResponse.status;
+      if(detailResponse.ok) {
+        const all=await detailResponse.json();
+        detailCount=Object.keys(all).length;
+        for(const [name, value] of Object.entries(all)){
+          const detail=value?.details??value??{};
+          if(!detailKeys.length)detailKeys=Object.keys(detail).slice(0,30);
+          const languages=Array.isArray(detail.languages)?detail.languages:[];
+          if(!detailLanguageShapes.length&&languages.length)
+            detailLanguageShapes=languages.slice(0,3);
+          const codes=languages.map(v=>typeof v==="string"?v:v?.key??"")
+             .map(v=>v.split("/").pop().toLowerCase()).filter(Boolean);
+          const match=codes.length===1&&codes[0]===lang;
+          if(match)detailLanguageMatch++;
+          const hasIsbn=(detail.isbn_13??[]).some(x=>/^97[89]\d{10}$/.test(x));
+          if(hasIsbn)detailISBN13++;
+          if(match&&hasIsbn)detailEligible++;
+        }
+      }
+    }
     console.log(JSON.stringify({label,status:response.status,
       ms:Date.now()-started,works:docs.length,
       declaredMatches:data.numFound??data.num_found,
       editions,matchingLanguage,validIsbn,strictBoth,
-      languages,editionKeys:keys}));
+      languages,editionKeys:keys,
+      detailStatus,detailCount,detailLanguageMatch,detailISBN13,detailEligible,
+      detailKeys,detailLanguageShapes}));
   }catch(e){console.log(JSON.stringify({label,error:e?.name||"network_error",ms:Date.now()-started}));}
   await new Promise(resolve=>setTimeout(resolve,1500));
 }
