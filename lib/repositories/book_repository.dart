@@ -344,6 +344,15 @@ class BookRepository {
         from: source.from, start: source.offset, count: count,
       );
     }
+    if (_isJapaneseGenre(genre) || _isForeignGenre(genre)) {
+      // NDL OpenSearch RSS has no language field in real staging responses.
+      // Resolve language-specific home cards via official SRU DC-NDL, which
+      // supplies dcterms:language. Keep strict jpn/eng filtering below.
+      return NdlApi.searchSruPage(
+        provider: source.provider, title: source.title!,
+        from: source.from, start: source.offset, count: count, genre: genre,
+      );
+    }
     return NdlApi.searchPage(
       provider: source.provider, any: source.any, title: source.title,
       from: source.from, start: source.offset, count: count, genre: genre,
