@@ -27,7 +27,7 @@ void main() {
   test('new-arrival pages fill 9 while preserving unseen ISBNs and skips', () async {
     final requested = <int>[];
     Future<NdlSearchBatch> fetch({
-      required String provider, String? any, String? from,
+      required String provider, String? any, String? title, String? from,
       required int start, required int count,
     }) async {
       expect(provider, NdlApi.inProcess);
@@ -79,7 +79,7 @@ void main() {
   test('new arrivals fall back to completed national bibliography after sparse draft metadata', () async {
     final providers = <String>[];
     Future<NdlSearchBatch> fetch({
-      required String provider, String? any, String? from,
+      required String provider, String? any, String? title, String? from,
       required int start, required int count,
     }) async {
       providers.add(provider + ':' + start.toString());
@@ -103,10 +103,10 @@ void main() {
   test('western feed scans further and displays only explicit eng', () async {
     final providers = <String>[];
     Future<NdlSearchBatch> fetch({
-      required String provider, String? any, String? from,
+      required String provider, String? any, String? title, String? from,
       required int start, required int count,
     }) async {
-      providers.add(provider + ':' + start.toString() + ':' + (any ?? ''));
+      providers.add(provider + ':' + start.toString() + ':' + (title ?? ''));
       if (provider == NdlApi.foreignBibliography && start == 1) {
         return NdlSearchBatch(
           books: [
@@ -135,7 +135,7 @@ void main() {
         );
       }
       expect(provider, NdlApi.holdings);
-      expect(any, 'English');
+      expect(title, 'Japan');
       return NdlSearchBatch(
         books: List.generate(22, (i) =>
             candidate(170 + i, language: 'eng')),
@@ -152,8 +152,8 @@ void main() {
       expect(western.any((book) => book.id == candidate(excludedId).id), false,
           reason: 'non-eng or missing language must not appear');
     }
-    expect(providers.first, NdlApi.foreignBibliography + ':1:');
-    expect(providers, contains(NdlApi.holdings + ':1:English'));
+    expect(providers.first, NdlApi.foreignBibliography + ':1:Japan');
+    expect(providers, contains(NdlApi.holdings + ':1:Japan'));
     final next = await repo.fetchBooksByGenre('English', page: 2);
     expect(next.length, 9);
     expect(next.every(NdlApi.isEnglishLanguage), true);
@@ -161,10 +161,61 @@ void main() {
       .intersection(next.map((book) => book.id).toSet()), isEmpty);
   });
 
+  test('Japanese home section filters NDL language and supports paging', () async {
+    final lookups = <String>[];
+    Future<NdlSearchBatch> fetch({
+      required String provider, String? any, String? title, String? from,
+      required int start, required int count,
+    }) async {
+      expect(provider, NdlApi.national);
+      expect(title, isNotEmpty, reason: 'avoid broad searches without a term');
+      lookups.add(title! + ':' + start.toString());
+      if (title == '日本' && start == 1) {
+        return NdlSearchBatch(
+          books: [
+            candidate(200, language: 'jpn'),
+            candidate(201, language: 'ja'),
+            candidate(202, language: 'eng'),
+            candidate(203, language: 'zho'),
+            candidate(204, language: ''),
+            candidate(205, language: 'jpn eng'),
+            candidate(206, language: 'jpn'),
+          ],
+          rawCount: 27, hasMore: true,
+        );
+      }
+      return NdlSearchBatch(
+        books: List.generate(30, (i) =>
+            candidate(240 + i, language: i.isEven ? 'jpn' : 'ja')),
+        rawCount: 27, hasMore: true,
+      );
+    }
+    final repo = BookRepository(homeFetcher: fetch);
+    final first = await repo.fetchBooksByGenre('和書');
+    expect(first.length, 9);
+    expect(first.every(NdlApi.isJapaneseLanguage), true);
+    expect(first.any((b) => b.id == candidate(200).id), true);
+    for (final excluded in [202, 203, 204, 205]) {
+      expect(first.any((b) => b.id == candidate(excluded).id), false);
+    }
+    final second = await repo.fetchBooksByGenre('和書', page: 2);
+    expect(second.length, 9);
+    expect(second.every(NdlApi.isJapaneseLanguage), true);
+    expect(first.map((b) => b.id).toSet()
+        .intersection(second.map((b) => b.id).toSet()), isEmpty);
+    final cached = await repo.fetchBooksByGenre('和書');
+    expect(cached.map((b) => b.id), first.map((b) => b.id));
+    expect(lookups.first, '日本:1');
+    repo.resetHomeBooks('和書');
+    final fresh = await repo.fetchBooksByGenre('和書');
+    expect(fresh.length, 9);
+    expect(lookups.where((x) => x == '日本:1').length, 2);
+  });
+
   test('new arrivals fail over when a source times out without advancing idx', () async {
     final queries = <String>[];
     Future<NdlSearchBatch> fetch({
-      required String provider, String? any, String? from,
+      required String provider, String? any, String? title, String? from,
       required int start, required int count,
     }) async {
       queries.add(provider + ':' + start.toString());
@@ -190,7 +241,7 @@ void main() {
     var unavailable = true;
     final offsets = <String>[];
     Future<NdlSearchBatch> fetch({
-      required String provider, String? any, String? from,
+      required String provider, String? any, String? title, String? from,
       required int start, required int count,
     }) async {
       offsets.add(provider + ':' + start.toString());
@@ -218,7 +269,7 @@ void main() {
 
   test('new arrivals use a recent publication window instead of a year-wide query', () async {
     Future<NdlSearchBatch> fetch({
-      required String provider, String? any, String? from,
+      required String provider, String? any, String? title, String? from,
       required int start, required int count,
     }) async {
       expect(provider, NdlApi.inProcess);
@@ -236,7 +287,7 @@ void main() {
 
   test('no placeholder books are manufactured when NDL has no matches', () async {
     Future<NdlSearchBatch> fetch({
-      required String provider, String? any, String? from,
+      required String provider, String? any, String? title, String? from,
       required int start, required int count,
     }) async => const NdlSearchBatch(
       books: [], rawCount: 0, hasMore: false,
@@ -244,8 +295,23 @@ void main() {
     final repo = BookRepository(homeFetcher: fetch);
     expect(await repo.fetchBooksByGenre('新着'), isEmpty);
     expect(repo.hasMoreHomeBooks('新着'), isFalse);
+    expect(await repo.fetchBooksByGenre('和書'), isEmpty);
+    expect(repo.hasMoreHomeBooks('和書'), isFalse);
     expect(await repo.fetchBooksByGenre('洋書'), isEmpty);
     expect(repo.hasMoreHomeBooks('洋書'), isFalse);
+  });
+
+  test('Japanese language policy accepts only a single jpn or ja tag', () {
+    expect(NdlApi.isJapaneseLanguage(candidate(1, language: 'jpn')), true);
+    expect(NdlApi.isJapaneseLanguage(candidate(2, language: 'ja')), true);
+    expect(NdlApi.isJapaneseLanguage(candidate(3, language: ' JPN ')), true);
+    for (final language in [
+      'eng', 'zho', 'chi', 'kor', 'jpn eng', 'eng jpn',
+      'ja eng', 'und', 'unknown', 'japanese', ''
+    ]) {
+      expect(NdlApi.isJapaneseLanguage(candidate(4, language: language)), false,
+          reason: language);
+    }
   });
 
   test('western language policy accepts only a single explicit eng tag', () {
