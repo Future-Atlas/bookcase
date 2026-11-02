@@ -1579,7 +1579,11 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    BookCoverImage(book: book),
+                    // Reserve the lower rating strip; never cover the jacket.
+                    Positioned.fill(
+                      bottom: 32,
+                      child: BookCoverImage(book: book),
+                    ),
                     Positioned(
                       left: 0,
                       right: 0,
@@ -1892,10 +1896,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       Center(
                         child: SizedBox(
                           height: narrow ? 220 : 300,
-                          child: BookCoverImage(
-                            book: book,
-                            fit: BoxFit.contain,
-                          ),
+                          child: BookCoverImage(book: book),
                         ),
                       ),
                       const SizedBox(height: 12),
