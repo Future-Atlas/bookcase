@@ -109,9 +109,14 @@ function requestHeaders(request) {
     ]),
   );
   const connectingIp = request.headers.get("cf-connecting-ip");
+  // Do not forward spoofable browser-supplied X-Forwarded-For/X-Real-IP.
+  // The Cloudflare edge supplies the connecting IP for its own requests.
   if (connectingIp) {
-    headers["x-real-ip"] ||= connectingIp;
-    headers["x-forwarded-for"] ||= connectingIp;
+    headers["x-real-ip"] = connectingIp;
+    headers["x-forwarded-for"] = connectingIp;
+  } else {
+    delete headers["x-real-ip"];
+    delete headers["x-forwarded-for"];
   }
   return headers;
 }
