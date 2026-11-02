@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:crop_your_image/crop_your_image.dart';
 import 'package:flutter/material.dart';
+import '../services/avatar_url_policy.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
@@ -807,7 +808,7 @@ class _PublicAccountSettingsScreenState
                                 radius: 52,
                                 backgroundImage: _avatarUrl.isEmpty
                                     ? null
-                                    : NetworkImage(_avatarUrl),
+                                    : AvatarUrlPolicy.image(_avatarUrl),
                                 child: _avatarUrl.isEmpty
                                     ? const Icon(Icons.person, size: 52)
                                     : null,
@@ -1207,7 +1208,7 @@ class _BlockedAccountsScreenState extends State<_BlockedAccountsScreen> {
                 leading: CircleAvatar(
                   backgroundImage: profile.avatarUrl.isEmpty
                       ? null
-                      : NetworkImage(profile.avatarUrl),
+                      : AvatarUrlPolicy.image(profile.avatarUrl),
                   child: profile.avatarUrl.isEmpty
                       ? const Icon(Icons.person_outline)
                       : null,
