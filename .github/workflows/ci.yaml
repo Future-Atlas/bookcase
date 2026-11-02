@@ -20,8 +20,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Compare real SRU language metadata (read-only)
-        run: node scripts/ndl-sru-diagnostic.mjs
+      - name: Check openBD language coverage for NDL ISBNs (read-only)
+        run: node scripts/ndl-openbd-language-diagnostic.mjs
 
   flutter:
     runs-on: ubuntu-latest
