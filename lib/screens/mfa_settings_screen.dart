@@ -75,7 +75,7 @@ class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
       if (!mounted) return;
       setState(() {
         _factorId = enrollment.id;
-        _pendingSecret = enrollment.totp.secret;
+        _pendingSecret = enrollment.totp?.secret;
         _busy = false;
       });
     } catch (_) {
