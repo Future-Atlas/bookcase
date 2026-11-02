@@ -76,3 +76,24 @@ DROP TRIGGER IF EXISTS enforce_allowed_avatar_url_trigger ON public.profiles;
 CREATE TRIGGER enforce_allowed_avatar_url_trigger
 BEFORE INSERT OR UPDATE ON public.profiles
 FOR EACH ROW EXECUTE FUNCTION public.enforce_allowed_avatar_url();
+
+
+-- Admins who have a verified MFA factor must present an AAL2 JWT for all
+-- moderation RPCs using is_current_user_admin(). This is staged enrollment:
+-- before factor enrollment the existing administrator is not unexpectedly
+-- locked out; immediately after verifying a TOTP factor, step-up is enforced.
+CREATE OR REPLACE FUNCTION public.is_current_user_admin()
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
+AS $body$
+  SELECT EXISTS (
+      SELECT 1 FROM public.app_admins WHERE profile_id = auth.uid()
+    )
+    AND (
+      NOT EXISTS (
+        SELECT 1 FROM auth.mfa_factors AS factor
+        WHERE factor.user_id = auth.uid() AND factor.status = 'verified'
+      )
+      OR coalesce(auth.jwt()->>'aal', 'aal1') = 'aal2'
+    );
+$body$;
