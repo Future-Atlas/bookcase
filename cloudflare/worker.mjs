@@ -1,4 +1,5 @@
 import adEntitlement from "../api/ad-entitlement.js";
+import { guardRequest } from "./request-guard.mjs";
 import ndl from "../api/ndl.js";
 import homeCatalog from "../api/home-catalog.js";
 import openbd from "../api/openbd.js";
@@ -317,6 +318,11 @@ export default {
         url.protocol = "https:";
         return Response.redirect(url.toString(), 308);
       }
+      const block = await guardRequest(request, env, {
+        isCrawler: BOT_PATTERN.test(request.headers.get("user-agent") || ""),
+        seoPath: SEO_PATH_PATTERN.test(url.pathname),
+      });
+      if (block) return withEnvironmentHeaders(block, env, request);
       return withEnvironmentHeaders(
         await routeRequest(request, env, context),
         env,
