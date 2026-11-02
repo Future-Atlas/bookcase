@@ -184,26 +184,11 @@ class NdlApi {
     return values.join(' ');
   }
 
-  /// Do not infer foreign-language identity from words in a title.
-  static bool isForeignLanguage(Book book) {
-    final value = book.languageCode.toLowerCase().trim();
-    if (value.isEmpty) return false;
-    const ignore = {'ja','jpn','japanese','日本語','und','mul','zxx','unknown','none'};
-    const names = {
-      'english','french','german','spanish','chinese','korean',
-      'russian','italian','portuguese','英語','フランス語',
-      'ドイツ語','スペイン語','中国語','韓国語','ロシア語',
-      'イタリア語'
-    };
-    final codes = value.split(RegExp(r'[\s,;|/]+'));
-    return codes.any((raw) {
-      final part = raw.split('-').first;
-      if (ignore.contains(part) || part.isEmpty) return false;
-      return names.contains(part) ||
-          ((part.length == 2 || part.length == 3) &&
-              RegExp(r'^[a-z]+').stringMatch(part) == part);
-    });
-  }
+  /// The home "洋書" section is English-only, as requested.
+  /// Require a single, explicit NDL language tag "eng": do not guess from
+  /// titles, provider type, missing tags, aliases or bilingual "jpn eng".
+  static bool isEnglishLanguage(Book book) =>
+      book.languageCode.trim().toLowerCase() == 'eng';
 
   static String _ndc(XmlElement item) {
     for (final element in item.descendants.whereType<XmlElement>()) {
@@ -296,8 +281,8 @@ class NdlApi {
         selectedGenre.contains('洋書')) {
       provider = holdings;
       // The OpenSearch interface has no verified language-only selector.
-      // Restrict to records that explicitly say 'eng'/'en' below instead of
-      // showing Japanese books merely mentioning the word "English".
+      // Filter results to the exact NDL language code "eng" below.
+      // Keyword matches and other foreign languages are not sufficient.
       any = 'English';
     } else if (selectedGenre.contains('文学') ||
         selectedGenre.contains('小説')) {
@@ -340,10 +325,7 @@ class NdlApi {
     );
     if (selectedGenre.contains('English') ||
         selectedGenre.contains('洋書')) {
-      return matches.where((book) {
-        final lang = book.languageCode.toLowerCase();
-        return lang == 'eng' || lang == 'en' || lang == 'english';
-      }).toList(growable: false);
+      return matches.where(isEnglishLanguage).toList(growable: false);
     }
     return matches;
   }
