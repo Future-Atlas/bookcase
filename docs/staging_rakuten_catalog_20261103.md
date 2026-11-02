@@ -36,6 +36,25 @@
   publisher covers; retailer thumbnails and `images.weserv.nl` are not
   displayed. ISBN/user-created content is not bulk-stored or migrated.
 
+## Provider app registration prerequisite
+
+At 2026-11-03 08:12 JST the deployed stage probes returned HTTP 502 from
+Sharemarium, with **upstream HTTP 403 from Rakuten** for both book and foreign
+book search. These are not Cloudflare 429s. The actual origin/referer in this
+Worker is now `https://sharemarium-staging.sharemarium.workers.dev/` (not
+`https://staging.sharemarium.com/`). Before re-testing, the operator should
+check the Rakuten Web Service app dashboard
+https://webservice.rakuten.co.jp/app/list for:
+
+1. A valid and matching `RAKUTEN_APP_ID` and `RAKUTEN_ACCESS_KEY` for
+   the staging Worker (never put either value in Flutter or GitHub logs).
+2. The active staging hostname in the app's allowed websites / referrers.
+3. API access scopes including the Rakuten Books Book / ForeignBook APIs.
+
+A 403 alone cannot distinguish credential, site-allowlist and scope denial.
+The app dashboard must be verified; code cannot override provider controls.
+Do not falsify the Referer using production's hostname or bypass security.
+
 ## Availability and commerce limitations
 
 The service provider's book-search documentation requires application ID
