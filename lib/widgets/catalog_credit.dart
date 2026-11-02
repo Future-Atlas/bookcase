@@ -31,7 +31,7 @@ class CatalogCredit extends StatelessWidget {
       ),
       TextButton(
         onPressed: () => launchUrl(Uri.parse(_openLibraryUrl)),
-        child: const Text('書影の一部：Open Library'),
+        child: const Text('書誌情報の一部：Open Library'),
       ),
       TextButton(
         onPressed: () => launchUrl(Uri.parse(_googleBooksUrl)),
