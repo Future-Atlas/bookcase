@@ -8,6 +8,10 @@ class CatalogCredit extends StatelessWidget {
   static const _sourceUrl = 'https://ndlsearch.ndl.go.jp/';
   static const _licenseUrl = 'https://creativecommons.org/licenses/by/4.0/deed.ja';
   static const _openBdUrl = 'https://openbd.jp/';
+  static const _rakutenUrl = 'https://webservice.rakuten.co.jp/';
+  static const _stagingRakuten = bool.fromEnvironment(
+    'STAGING_RAKUTEN_CATALOG', defaultValue: false,
+  );
   static const _openLibraryUrl = 'https://openlibrary.org/';
   static const _googleBooksUrl = 'https://books.google.com/';
 
@@ -17,6 +21,11 @@ class CatalogCredit extends StatelessWidget {
     crossAxisAlignment: WrapCrossAlignment.center,
     alignment: WrapAlignment.center,
     children: [
+      if (_stagingRakuten)
+        TextButton(
+          onPressed: () => launchUrl(Uri.parse(_rakutenUrl)),
+          child: const Text('書誌情報の一部：楽天ブックス（楽天ウェブサービス）'),
+        ),
       TextButton(
         onPressed: () => launchUrl(Uri.parse(_sourceUrl)),
         child: const Text('書誌情報：国立国会図書館サーチ（国立国会図書館）'),
