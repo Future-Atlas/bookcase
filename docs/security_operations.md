@@ -159,3 +159,20 @@ one unavailable account holder.
   any affected server secret. Changing only the access token is not enough.
 - Never log authorization headers, OAuth callbacks, refresh tokens, or full
   request bodies containing credentials.
+
+
+## Production security-only hotfix 2026-11-02
+
+Main and develop diverged by 22 main-only and 47 develop-only commits. Security PR #225 selectively backports the fixes rather than overwriting main's existing TOTP and account recovery.
+
+1. Apply DB migrations 20261102160000 and 20261102183000 after backing up. Verify private aggregates, revoked privileged RPCs, the avatar trigger, and service-only live-session RPC.
+2. Deploy matching session-guard and admin-delete-account Supabase Edge Functions in the same release. IP headers from clients must not authorize any session action.
+3. Deploy the main-branch production Cloudflare Worker and Flutter assets with API_RATE_LIMIT and CATALOG_RATE_LIMIT. This deployment is MANUAL: merging code is not sufficient.
+4. Verify real sign-in, post review visibility, image placeholders, TOTP enrollment, account deletion authorization and the production hostname. Do not flood-test live APIs.
+5. The real administrator must enroll a TOTP factor via Account Settings > 認証アプリ・二段階認証. After enrollment admin moderation requires AAL2. Administrative user deletion always requires AAL2; this assistant cannot enroll the user's authenticator.
+6. In Cloudflare Dashboard check DDoS, WAF and custom-hostname per-IP API rate rules. Free-plan worker rate limits are approximate per location. A public *.workers.dev entry point may not receive custom-domain zone WAF protection; verify routing before disabling it.
+7. Inspect hosted Supabase Auth password policies, session expiry, CAPTCHA, email verification and auth rate limits. Local config.toml is not proof of hosted settings. Leaked-password checking is a Pro-tier feature.
+8. Weekly Dependabot and CodeQL are enabled. They do not replace regular audits and independent penetration testing. CSP currently includes unsafe-inline for Flutter/ad compatibility and requires a separate non-breaking remediation.
+
+Security guarantees at the storage boundary: counts follow viewer visibility; new avatar_url writes require a Sharemarium-owned Supabase Storage bucket and the correct profile path. Historical external URLs are not bulk-deleted, but Flutter refuses to load them.
+Production WAF status cannot be verified with the connected repository tools; do not mark that item complete without a dashboard check.
