@@ -61,6 +61,8 @@ class BookCoverImage extends StatelessWidget {
           : WebHtmlElementStrategy.never;
 
   Widget _placeholder(BuildContext context) => Container(
+    width: width,
+    height: height,
     color: Theme.of(context).brightness == Brightness.dark
         ? const Color(0xFF32353A)
         : const Color(0xFFE9E5DD),
