@@ -26,4 +26,34 @@ void main(){
    final restricted=OpenBdApi.enrichRecord(book.copyWith(adultContentFlag:true),record('00'));
    expect(restricted.adultContentFlag,isTrue);
  });
+
+ test('ONIX language role 01 supplies explicitly verified book text language',(){
+   final enriched=OpenBdApi.enrichRecord(book,{
+     'summary':{'isbn':book.isbn},
+     'onix':{'DescriptiveDetail':{'Language':[
+       {'LanguageRole':'04','LanguageCode':'eng'},
+       {'LanguageRole':'01','LanguageCode':'jpn'},
+     ]}}
+   });
+   expect(enriched.languageCode,'jpn',
+       reason:'original language eng must not classify a Japanese edition as English');
+ });
+ test('bilingual ONIX text language stays bilingual rather than being guessed',(){
+   final enriched=OpenBdApi.enrichRecord(book,{
+     'onix':{'DescriptiveDetail':{'Language':[
+       {'LanguageRole':'01','LanguageCode':'jpn'},
+       {'LanguageRole':'01','LanguageCode':'eng'},
+     ]}}
+   });
+   expect(enriched.languageCode,'jpn eng');
+ });
+ test('existing NDL language always takes priority over ONIX enrich',(){
+   final original=book.copyWith(languageCode:'eng');
+   final enriched=OpenBdApi.enrichRecord(original,{
+     'onix':{'DescriptiveDetail':{'Language':[
+       {'LanguageRole':'01','LanguageCode':'jpn'}
+     ]}}
+   });
+   expect(enriched.languageCode,'eng');
+ });
 }
