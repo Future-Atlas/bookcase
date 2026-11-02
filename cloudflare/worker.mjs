@@ -1,4 +1,5 @@
 import adEntitlement from "../api/ad-entitlement.js";
+import { guardRequest } from "./request-guard.mjs";
 import homeAdEligibility from "../api/home-ad-eligibility.js";
 import legalSeo from "../api/legal-seo.js";
 import postSeo from "../api/post-seo.js";
@@ -106,8 +107,11 @@ function requestHeaders(request) {
   );
   const connectingIp = request.headers.get("cf-connecting-ip");
   if (connectingIp) {
-    headers["x-real-ip"] ||= connectingIp;
-    headers["x-forwarded-for"] ||= connectingIp;
+    headers["x-real-ip"] = connectingIp;
+    headers["x-forwarded-for"] = connectingIp;
+  } else {
+    delete headers["x-real-ip"];
+    delete headers["x-forwarded-for"];
   }
   return headers;
 }
@@ -233,6 +237,11 @@ export default {
         url.protocol = "https:";
         return Response.redirect(url.toString(), 308);
       }
+      const block = await guardRequest(request, env, {
+        isCrawler: BOT_PATTERN.test(request.headers.get("user-agent") || ""),
+        seoPath: SEO_PATH_PATTERN.test(url.pathname),
+      });
+      if (block) return withEnvironmentHeaders(block, env, request);
       return withEnvironmentHeaders(
         await routeRequest(request, env),
         env,
