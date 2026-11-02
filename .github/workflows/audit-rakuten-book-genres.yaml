@@ -45,7 +45,7 @@ jobs:
           GENRE_AUDIT_OUTPUT: "${{ runner.temp }}/rakuten-genre-audit.json"
         run: node scripts/audit-rakuten-books-genres.mjs
       - name: Save taxonomy candidates for manual review
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rakuten-books-genre-audit
           path: ${{ runner.temp }}/rakuten-genre-audit.json

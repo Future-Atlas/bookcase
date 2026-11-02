@@ -54,7 +54,7 @@ jobs:
 
       - name: Upload nonsecret missing-name diagnostic
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cloudflare-staging-missing-secret-names
           path: ${{ runner.temp }}/cloudflare-staging-missing-secret-names.txt
@@ -140,7 +140,7 @@ jobs:
 
       - name: Upload safe smoke failure classification
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cloudflare-staging-smoke-diagnostic
           path: ${{ runner.temp }}/cloudflare-staging-smoke-diagnostic.json
