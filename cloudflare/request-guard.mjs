@@ -5,6 +5,7 @@ const COSTLY_PATHS = new Set([
   "/api/home-catalog",
   "/api/ndl",
   "/api/openbd",
+  "/api/rakuten",
 ]);
 
 function protectedRoute(request, { isCrawler = false, seoPath = false } = {}) {
