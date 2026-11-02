@@ -20,6 +20,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Probe one NDL OAI GetRecord for explicit language (read-only)
+        run: node scripts/ndl-oai-getrecord-diagnostic.mjs
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
