@@ -59,6 +59,7 @@ class _BookListScreenState extends State<BookListScreen> {
   final GlobalKey<_PagedBookScrollerState> _popularScrollerKey = GlobalKey();
   final GlobalKey<_PagedBookScrollerState> _newArrivalsScrollerKey =
       GlobalKey();
+  final GlobalKey<_PagedBookScrollerState> _japaneseScrollerKey = GlobalKey();
   final GlobalKey<_PagedBookScrollerState> _westernScrollerKey = GlobalKey();
   String? _openingBookId;
   bool _isServiceIntroductionExpanded = false;
@@ -939,10 +940,29 @@ class _BookListScreenState extends State<BookListScreen> {
                                 timelineAdDisplayReady &&
                                 widget.initialGenre == null &&
                                 _controller.recommendedBooks.isNotEmpty &&
-                                _controller.westernBooks.isNotEmpty)
+                                _controller.japaneseBooks.isNotEmpty)
                               const TimelineAdSlot(
-                                key: ValueKey('home-ad-between-new-western'),
+                                key: ValueKey('home-ad-between-new-japanese'),
                                 slotIndex: 1,
+                              ),
+                            if (widget.initialGenre == null ||
+                                widget.initialGenre == 'japanese')
+                              _buildGenreSection(
+                                title: '和書',
+                                scrollerKey: _japaneseScrollerKey,
+                                bookList: _controller.japaneseBooks,
+                                pageNumber: _controller.japanesePage,
+                                onLoadMore: _controller.loadMoreJapanese,
+                                onLoadPrevious:
+                                    _controller.loadPreviousJapanese,
+                                canLoadPrevious:
+                                    _controller.canLoadPreviousJapanese,
+                                isLoadingMore: _controller.isLoadingMoreJapanese,
+                                hasMore: _controller.hasMoreJapanese,
+                                isLoadingInitial: _controller.isLoadingJapanese,
+                                onRetry: () => unawaited(
+                                  _controller.retryJapanese(),
+                                ),
                               ),
                             if (widget.initialGenre == null ||
                                 widget.initialGenre == 'western')
