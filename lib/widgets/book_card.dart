@@ -91,14 +91,16 @@ class _BookCardState extends State<BookCard> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // The cover fills the whole card. Book information is
-                  // overlaid on its lower portion without changing the
-                  // information panel's existing height ratio.
-                  Hero(
-                    tag: 'book-cover-${widget.book.id}',
-                    child: BookCoverImage(
-                      book: widget.book,
-                      fit: BoxFit.cover,
+                  // Keep the entire cover in the image area above the
+                  // information panel; never cover or crop publisher artwork.
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: cardHeight * widget.coverHeightRatio,
+                    child: Hero(
+                      tag: 'book-cover-${widget.book.id}',
+                      child: BookCoverImage(book: widget.book),
                     ),
                   ),
                   Align(
