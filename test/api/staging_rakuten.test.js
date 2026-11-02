@@ -18,7 +18,7 @@ const env = {
   RAKUTEN_APP_ID: "server-only-id",
   RAKUTEN_ACCESS_KEY: "server-only-access-key",
   RAKUTEN_AFFILIATE_ID: "server-only-affiliate",
-  RAKUTEN_REFERER: "https://staging.sharemarium.com/",
+  RAKUTEN_REFERER: "https://sharemarium-staging.sharemarium.workers.dev/",
 };
 
 test("staging Rakuten proxy uses server credentials and an allowlisted upstream only", async () => {
