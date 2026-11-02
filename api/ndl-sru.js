@@ -58,6 +58,7 @@ function createHandler({ request = (...args) => fetch(...args) } = {}) {
       }
       const xml = await response.text();
       if (xml.length > 4000000 ||
+          !/<(?:[a-zA-Z]+:)?searchRetrieveResponse\b/i.test(xml) ||
           /<(?:[a-zA-Z]+:)?diagnostics\b/i.test(xml)) {
         res.setHeader("Cache-Control", "no-store");
         return res.status(502).json({ error: "ndl_sru_invalid_response" });
