@@ -5,6 +5,7 @@ import '../models/book.dart';
 import '../api/ndl_api.dart';
 import '../api/home_catalog_api.dart';
 import '../api/openbd_api.dart';
+import '../api/rakuten_api.dart';
 import '../services/content_safety_service.dart';
 import '../services/supabase_service.dart';
 
@@ -24,6 +25,14 @@ typedef NdlHomeFetcher = Future<NdlSearchBatch> Function({
   required int start,
   required int count,
 });
+
+/// Injection points keep the staging-only Rakuten transport/paging testable.
+typedef StagingRakutenGenreFetcher = Future<List<Book>> Function(
+  String genre, int upstreamPage, int count,
+);
+typedef StagingRakutenKeywordFetcher = Future<List<Book>> Function(
+  String keyword, int upstreamPage, int count,
+);
 
 class BookSearchBatch {
   const BookSearchBatch({required this.books, required this.hasMore});
@@ -46,11 +55,19 @@ class BookRepository {
     this.allowAdultContent = false,
     this.fieldFetcher,
     this.homeFetcher,
-  });
+    this.stagingRakutenGenreFetcher,
+    this.stagingRakutenKeywordFetcher,
+    bool? stagingRakuten,
+  }) : _stagingRakuten = stagingRakuten ??
+         const bool.fromEnvironment('STAGING_RAKUTEN_CATALOG', defaultValue: false);
 
   final bool allowAdultContent;
   final NdlFieldFetcher? fieldFetcher;
   final NdlHomeFetcher? homeFetcher;
+  final StagingRakutenGenreFetcher? stagingRakutenGenreFetcher;
+  final StagingRakutenKeywordFetcher? stagingRakutenKeywordFetcher;
+  final bool _stagingRakuten;
+  final Map<String, _RakutenStagingCursor> _rakutenStagingCursors = {};
   final Map<String, _HomeCatalogCursor> _homeCatalogCursors = {};
   String _activeQuery = '';
   int _nextSearchPage = 1;
@@ -240,6 +257,11 @@ class BookRepository {
   Future<List<Book>> fetchBooksByGenre(String genre, {int page = 1}) async {
     if (page < 1 || page > 50) return const <Book>[];
     try {
+      // Only the staging build enables Rakuten; all other builds preserve
+      // their existing NDL/Open Library catalog and Supabase popular ranking.
+      if (_stagingRakuten) {
+        return await _fetchStagingRakutenSection(genre, page: page);
+      }
       if (genre.contains('ベストセラー') || genre.contains('人気')) {
         final ranked = await (_popularCache ??=
             SupabaseService().fetchPopularBooks(limit: 200));
@@ -283,16 +305,67 @@ class BookRepository {
   /// Explicit user retry starts again at the first, complete-bibliography
   /// source, without invalidating the currently displayed page until fetched.
   void resetHomeBooks(String genre) {
+    if (_stagingRakuten) {
+      _rakutenStagingCursors.remove(genre);
+      return;
+    }
     if (_isHomeGenre(genre)) {
       _homeCatalogCursors.remove(_homeKey(genre));
     }
   }
 
   bool hasMoreHomeBooks(String genre) {
+    if (_stagingRakuten) {
+      final cursor = _rakutenStagingCursors[genre];
+      return cursor == null || cursor.ready.isNotEmpty || !cursor.finished;
+    }
     if (!_isHomeGenre(genre)) return true;
     final cursor = _homeCatalogCursors[_homeKey(genre)];
     if (cursor == null) return true;
     return cursor.ready.isNotEmpty || cursor.sourceIndex < cursor.sources.length;
+  }
+
+  /// Retain all 27 catalog rows in memory and show nine per page, instead of
+  /// issuing a separate Rakuten request for every swipe or discarding 18 rows.
+  /// The 27-item windows are serialized upstream by the Worker Durable Object.
+  Future<List<Book>> _fetchStagingRakutenSection(
+    String genre, {required int page}
+  ) async {
+    final cursor = _rakutenStagingCursors.putIfAbsent(
+      genre, () => _RakutenStagingCursor(),
+    );
+    while (cursor.pages.length < page) {
+      if (cursor.ready.isEmpty && cursor.finished) return const <Book>[];
+      final next = <Book>[];
+      var windows = 0;
+      while (next.length < 9) {
+        if (cursor.ready.isNotEmpty) {
+          next.add(cursor.ready.removeFirst());
+          continue;
+        }
+        if (cursor.finished || windows >= 2) break;
+        final upstreamPage = cursor.upstreamPage++;
+        // '和書' is a UI section name, not a Rakuten query keyword: the
+        // ordinary Japanese BooksBook API starts at genre 001.
+        final requestGenre = genre == '和書' ? '' : genre;
+        final incoming = stagingRakutenGenreFetcher != null
+            ? await stagingRakutenGenreFetcher!(requestGenre, upstreamPage, 27)
+            : await RakutenApi.searchBySelectedGenre(
+                selectedGenre: requestGenre,
+                page: upstreamPage,
+                count: 27,
+              );
+        windows++;
+        if (incoming.length < 27) cursor.finished = true;
+        final safe = _filterForViewer(incoming);
+        for (final book in safe) {
+          if (cursor.seenIds.add(book.id)) cursor.ready.addLast(book);
+        }
+      }
+      if (next.isEmpty) return const <Book>[];
+      cursor.pages.add(List<Book>.unmodifiable(next));
+    }
+    return cursor.pages[page - 1];
   }
 
   _HomeCatalogCursor _createHomeCursor(String genre) {
@@ -477,6 +550,14 @@ class BookRepository {
 
   Future<List<Book>> fetchAllBooks() async {
     try {
+      if (_stagingRakuten) {
+        final books = stagingRakutenGenreFetcher != null
+            ? await stagingRakutenGenreFetcher!('', 1, 20)
+            : await RakutenApi.searchBySelectedGenre(
+                selectedGenre: '', page: 1, count: 20,
+              );
+        return _filterForViewer(books);
+      }
       final books = await NdlApi.search(
         any: '本', provider: NdlApi.national, count: 20,
       );
@@ -563,6 +644,28 @@ class BookRepository {
     if (!allowAdultContent &&
         ContentSafetyService.isAdultSearchQuery(clean)) {
       return const BookSearchBatch(books: [], hasMore: false);
+    }
+    if (_stagingRakuten) {
+      try {
+        final incoming = stagingRakutenKeywordFetcher != null
+            ? await stagingRakutenKeywordFetcher!(clean, page, count)
+            : await RakutenApi.searchByKeyword(
+                keyword: clean,
+                page: page,
+                count: count,
+                searchFields: searchFieldPriority(clean)
+                    .map((field) => field.apiName).toList(),
+              );
+        final results = rankSearchResults(
+          _filterForViewer(incoming), clean,
+        ).take(count).toList(growable: false);
+        return BookSearchBatch(
+          books: results,
+          hasMore: incoming.length >= count && results.isNotEmpty,
+        );
+      } catch (_) {
+        return const BookSearchBatch(books: [], hasMore: false);
+      }
     }
     if (page == 1 || clean != _activeQuery || page != _nextSearchPage) {
       _resetSearch(clean);
@@ -678,6 +781,14 @@ class _NdlFieldCursor {
   }
 }
 
+
+class _RakutenStagingCursor {
+  final Queue<Book> ready = Queue<Book>();
+  final List<List<Book>> pages = [];
+  final Set<String> seenIds = <String>{};
+  int upstreamPage = 1;
+  bool finished = false;
+}
 
 class _HomeCatalogSource {
   _HomeCatalogSource({
