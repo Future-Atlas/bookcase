@@ -87,7 +87,8 @@ class VercelResponseAdapter {
 }
 
 function queryFromUrl(url) {
-  const query = {};
+  // Avoid inherited '__proto__' and 'constructor' keys from untrusted URLs.
+  const query = Object.create(null);
   for (const [key, value] of url.searchParams) {
     if (query[key] == null) {
       query[key] = value;
