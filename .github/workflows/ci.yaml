@@ -14,23 +14,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  ndl_metadata_probe:
-    if: ${{ github.event_name == 'pull_request' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-      - name: Check openBD language coverage for NDL ISBNs (read-only)
-        run: node scripts/ndl-openbd-language-diagnostic.mjs
-
   flutter:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-
-      - name: Diagnose public NDL staging RSS structure (read-only)
-        run: node scripts/ndl-stage-diagnostic.mjs
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
