@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/avatar_url_policy.dart';
 import 'package:flutter/rendering.dart';
 import '../config/feature_flags.dart';
 import '../models/post.dart';
@@ -232,7 +233,7 @@ class _PostCardState extends State<PostCard> {
                     children: [
                       CircleAvatar(
                         backgroundImage: post.userAvatarUrl.isNotEmpty
-                            ? NetworkImage(post.userAvatarUrl)
+                            ? AvatarUrlPolicy.image(post.userAvatarUrl)
                             : null,
                         radius: 18,
                         child: post.userAvatarUrl.isEmpty
@@ -634,7 +635,7 @@ class _PostCardState extends State<PostCard> {
                     children: [
                       CircleAvatar(
                         backgroundImage: post.userAvatarUrl.isNotEmpty
-                            ? NetworkImage(post.userAvatarUrl)
+                            ? AvatarUrlPolicy.image(post.userAvatarUrl)
                             : null,
                         radius: 18,
                         child: post.userAvatarUrl.isEmpty
@@ -1072,7 +1073,7 @@ class _PostCardState extends State<PostCard> {
                   child: CircleAvatar(
                     radius: 16,
                     backgroundImage: reply.userAvatarUrl.isNotEmpty
-                        ? NetworkImage(reply.userAvatarUrl)
+                        ? AvatarUrlPolicy.image(reply.userAvatarUrl)
                         : null,
                     child: reply.userAvatarUrl.isEmpty
                         ? const Icon(Icons.person, size: 17)
