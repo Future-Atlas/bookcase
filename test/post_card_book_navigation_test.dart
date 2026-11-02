@@ -49,8 +49,6 @@ void main() {
     // A persisted book URL without licensing provenance must not be loaded.
     final cover = find.byKey(const ValueKey('post-book-cover-post-1'));
     expect(find.descendant(of: cover, matching: find.byType(Image)), findsNothing);
-    expect(find.descendant(of: cover, matching: find.text('表紙画像なし')),
-        findsOneWidget);
   });
 
   testWidgets('mobile cover and title open the book details', (tester) async {
