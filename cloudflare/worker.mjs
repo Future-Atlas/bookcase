@@ -9,6 +9,7 @@ import legalSeo from "../api/legal-seo.js";
 import postSeo from "../api/post-seo.js";
 import postsSeo from "../api/posts-seo.js";
 import rakuten from "../api/rakuten.js";
+import stagingRakuten from "../api/staging-rakuten.js";
 import seo from "../api/seo.js";
 import seoHome from "../api/seo-home.js";
 import seoRouter from "../api/seo-router.js";
@@ -277,7 +278,21 @@ async function routeRequest(request, env, context) {
   }
   if (path === "/api/openbd") return invoke(openbd, request);
   if (path === "/api/book-covers") return invoke(bookCovers, request);
-  if (path === "/api/rakuten") return new Response(JSON.stringify({error:"catalog_migrated"}), {status:410,headers:{"Content-Type":"application/json"}});
+  if (path === "/api/rakuten") {
+    // Production and default environments retain the retired 410 route.
+    // Staging alone uses the server-owned credentials and existing global
+    // per-app quota Durable Object; never call Rakuten directly per card.
+    if (env.APP_ENV !== "staging") {
+      return new Response(JSON.stringify({ error: "catalog_migrated" }), {
+        status: 410,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      });
+    }
+    return invoke(stagingRakuten.createHandler({
+      env,
+      request: coordinatedRakutenRequest(env),
+    }), request);
+  }
   if (path === "/api/ad-entitlement") {
     return invoke(adEntitlement, request);
   }
