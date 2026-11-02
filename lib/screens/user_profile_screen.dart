@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/avatar_url_policy.dart';
 import 'package:provider/provider.dart';
 import '../config/feature_flags.dart';
 import '../services/supabase_service.dart';
@@ -1053,7 +1054,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 CircleAvatar(
                   radius: avatarRadius,
                   backgroundImage: _profile!.avatarUrl.isNotEmpty
-                      ? NetworkImage(_profile!.avatarUrl)
+                      ? AvatarUrlPolicy.image(_profile!.avatarUrl)
                       : null,
                   child: _profile!.avatarUrl.isEmpty
                       ? Icon(Icons.person, size: avatarRadius)

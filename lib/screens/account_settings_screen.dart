@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:crop_your_image/crop_your_image.dart';
 import 'package:flutter/material.dart';
+import '../services/avatar_url_policy.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
@@ -15,6 +16,7 @@ import 'community_guidelines_screen.dart';
 import 'contact_screen.dart';
 import 'external_transmission_screen.dart';
 import 'infringement_policy_screen.dart';
+import 'mfa_settings_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'profile_onboarding_screen.dart';
 import 'subscription_status_screen.dart';
@@ -189,6 +191,14 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                     subtitle: const Text('ユーザー名・ユーザーID（変更不可）・鍵アカウント'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _push(const _PublicAccountSettingsScreen()),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.verified_user_outlined),
+                    title: const Text('二段階認証（MFA）'),
+                    subtitle: const Text('認証アプリを登録・確認してアカウントを保護'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _push(const MfaSettingsScreen()),
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -807,7 +817,7 @@ class _PublicAccountSettingsScreenState
                                 radius: 52,
                                 backgroundImage: _avatarUrl.isEmpty
                                     ? null
-                                    : NetworkImage(_avatarUrl),
+                                    : AvatarUrlPolicy.image(_avatarUrl),
                                 child: _avatarUrl.isEmpty
                                     ? const Icon(Icons.person, size: 52)
                                     : null,
@@ -1207,7 +1217,7 @@ class _BlockedAccountsScreenState extends State<_BlockedAccountsScreen> {
                 leading: CircleAvatar(
                   backgroundImage: profile.avatarUrl.isEmpty
                       ? null
-                      : NetworkImage(profile.avatarUrl),
+                      : AvatarUrlPolicy.image(profile.avatarUrl),
                   child: profile.avatarUrl.isEmpty
                       ? const Icon(Icons.person_outline)
                       : null,

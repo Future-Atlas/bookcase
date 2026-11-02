@@ -45,6 +45,14 @@ Deno.serve(async (request) => {
     .maybeSingle()
   if (adminError || !adminRow) return response({ error: 'Forbidden' }, 403)
 
+  // Deleting another person's account is irreversible. Always require a
+  // verified TOTP/MFA step-up, not only a first-factor admin JWT.
+  const { data: aalData, error: aalError } =
+    await admin.auth.mfa.getAuthenticatorAssuranceLevel(token)
+  if (aalError || aalData?.currentLevel !== 'aal2') {
+    return response({ error: 'admin_mfa_required' }, 403)
+  }
+
   const { data: denialId, error: recordError } = await admin.rpc(
     'record_admin_account_deletion',
     {

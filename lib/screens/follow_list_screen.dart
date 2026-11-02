@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/avatar_url_policy.dart';
 import 'package:provider/provider.dart';
 
 import '../models/social_models.dart';
@@ -184,7 +185,7 @@ class _FollowListScreenState extends State<FollowListScreen> {
                     leading: CircleAvatar(
                       backgroundImage: profile.avatarUrl.isEmpty
                           ? null
-                          : NetworkImage(profile.avatarUrl),
+                          : AvatarUrlPolicy.image(profile.avatarUrl),
                       child: profile.avatarUrl.isEmpty
                           ? const Icon(Icons.person)
                           : null,

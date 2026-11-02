@@ -450,42 +450,47 @@ class SupabaseService extends ChangeNotifier {
     _sessionGuardTimer = null;
   }
 
+  /// Verify a signed-in JWT still belongs to a live Supabase Auth session.
+  /// An IP change alone is not proof of account takeover (mobile networks
+  /// legitimately change IPs, and caller-provided forwarding headers may lie).
   Future<bool> _enforceSessionIpGuard() async {
     if (!_isInitialized || _client == null || !isAuthenticated) return true;
     final checkedToken = _client!.auth.currentSession?.accessToken;
+
+    Future<bool> revokeCurrentSession() async {
+      if (_client!.auth.currentSession?.accessToken != checkedToken) {
+        // A delayed guard result must not sign out a newer login.
+        return true;
+      }
+      debugPrint('Active session no longer valid. Signing out.');
+      await signOut();
+      return false;
+    }
+
     try {
       final response = await _client!.functions.invoke(
         'session-guard',
         body: const <String, dynamic>{},
       );
+      if (response.status == 401) return revokeCurrentSession();
       if (response.status < 200 || response.status >= 300) {
-        debugPrint(
-          'Session guard endpoint returned status ${response.status}.',
-        );
-        return true;
+        debugPrint('Live session check temporarily unavailable.');
+        return true; // Do not lock users out on a transient backend outage.
       }
-
       final payload = response.data;
       final data = payload is Map<String, dynamic>
           ? payload
           : payload is Map
           ? Map<String, dynamic>.from(payload)
           : const <String, dynamic>{};
-      if (data['ipChanged'] == true) {
-        // A delayed response from a previous session cannot sign out a new one.
-        if (_client!.auth.currentSession?.accessToken != checkedToken) {
-          return true;
-        }
-        debugPrint('IP change detected. Signing out to protect the session.');
-        await signOut();
-        return false;
-      }
+      if (data['sessionActive'] == false) return revokeCurrentSession();
       return true;
     } on FunctionException catch (e) {
-      debugPrint('Session guard function exception: $e');
+      if (e.status == 401) return revokeCurrentSession();
+      debugPrint('Live session check temporarily unavailable.');
       return true;
-    } catch (e) {
-      debugPrint('Session guard failed: $e');
+    } catch (_) {
+      debugPrint('Live session check temporarily unavailable.');
       return true;
     }
   }
