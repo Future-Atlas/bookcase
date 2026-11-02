@@ -81,7 +81,7 @@ class HomeCatalogApi {
       final rawCount = count is num ? count.toInt() : 0;
       return NdlSearchBatch(
         books: books,
-        rawCount: rawCount.clamp(0, windowSize),
+        rawCount: rawCount.clamp(0, windowSize).toInt(),
         hasMore: decoded['hasMore'] == true,
       );
     } catch (_) {
