@@ -70,6 +70,7 @@ class OpenBdApi {
     const restrictedCodes = {'01', '02', '03'};
     final explicitlyAdult = codes.any(restrictedCodes.contains);
     final description = _description(onixData);
+    final officialTextLanguages = _textLanguages(onixData);
     return book.copyWith(
       coverUrl: validCover ? cover : book.coverUrl,
       coverSource: validCover ? 'openbd' : book.coverSource,
@@ -77,7 +78,27 @@ class OpenBdApi {
       description: description.isNotEmpty ? description : book.description,
       adultContentFlag: book.adultContentFlag || explicitlyAdult,
       ageRatingSource: codes.isEmpty ? book.ageRatingSource : 'openbd',
+      languageCode: book.languageCode.isNotEmpty
+          ? book.languageCode
+          : officialTextLanguages,
     );
+  }
+
+  /// ONIX List 22: LanguageRole 01 is the book text language.
+  /// Original language (04) must not be mistaken for the book language.
+  static String _textLanguages(Map onix) {
+    final descriptive = onix['DescriptiveDetail'];
+    if (descriptive is! Map) return '';
+    final raw = descriptive['Language'];
+    final entries = raw is List ? raw : [raw];
+    final languages = <String>{};
+    for (final entry in entries) {
+      if (entry is! Map) continue;
+      if (entry['LanguageRole']?.toString() != '01') continue;
+      final code = entry['LanguageCode']?.toString().trim().toLowerCase() ?? '';
+      if (RegExp(r'^[a-z]{3}$').hasMatch(code)) languages.add(code);
+    }
+    return languages.join(' ');
   }
 
   static void _collectAdultAudienceCodes(Object? node, List<String> output) {

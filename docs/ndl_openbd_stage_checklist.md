@@ -100,3 +100,31 @@ Compare ISBNs, order and screenshots for 20-30 old/new searches:
   URLs. Keep Blue Bow (青弓社), Amazon, Google and NDL's retired cover route
   disabled as independent cover fallbacks.
 
+
+## Staging: language-bearing SRU/DC-NDL (2026-11-02)
+
+A read-only GitHub Actions probe on staging found that OpenSearch returned HTTP
+200 and up to 27 items in each of the first `日本`, `Tokyo` and `Japan`
+windows, including 19/12/27 ISBN-bearing records respectively. **None of the
+81 sampled RSS items contained a language element**. Thus the strict jpn/eng
+home filters correctly rejected every item. HTTP 200, Cloudflare HIT and ISBN
+counts do **not** prove that an item qualifies for 和書/洋書.
+
+The language-specific home feeds now request the official NDL SRU API
+(`recordSchema=dcndl`, `recordPacking=xml`, `onlyBib=true`) through
+same-origin `/api/ndl-sru`. The response must carry an explicit
+`dcterms:language` value together with a typed ISBN; strict jpn/ja and
+eng-only rules remain unchanged. Other book search and new arrivals continue
+to use OpenSearch. This does not infer language from provider/title.
+
+Before any production release:
+- On staging check `/api/ndl-sru?dpid=iss-ndl-opac-national&title=日本&idx=1&cnt=27` and `/api/ndl-sru?dpid=iss-ndl-opac&title=Tokyo&idx=1&cnt=27` for actual SRU `recordData`, typed ISBN, `dcterms:language`, latency and 502/504 fallback.
+- Verify the home 和書 and 洋書 carousels actually render, paginate without ISBN
+  duplicates and show only valid single-language records; unknown/mixed
+  language records must still be excluded.
+- Check missing openBD covers still yield title placeholders, not empty cards.
+- Verify the OpenSearch search page, 新着, posts, user shelves and timelines
+  continue unchanged.
+- SRU may itself be slow or return records with no languages; neither nine
+  cards nor first-time requests can be guaranteed until real staging checks
+  show eligible records. Do not promote to main on CI success alone.

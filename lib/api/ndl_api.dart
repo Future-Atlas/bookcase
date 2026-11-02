@@ -57,6 +57,55 @@ class NdlApi {
     if (until != null && until.isNotEmpty) 'until': until,
   });
 
+  /// NDL OpenSearch RSS omits language on real records. The official SRU
+  /// DC-NDL representation exposes dcterms:language and typed ISBNs.
+  static Uri sruSearchUri({
+    required String provider,
+    required String title,
+    String? from,
+    int start = 1,
+    int count = 27,
+  }) => Uri(path: '/api/ndl-sru', queryParameters: {
+    'dpid': provider,
+    'title': title,
+    'idx': start.toString(),
+    'cnt': count.toString(),
+    if (from != null && from.isNotEmpty) 'from': from,
+  });
+
+  static Future<NdlSearchBatch> searchSruPage({
+    required String provider,
+    required String title,
+    String? from,
+    int start = 1,
+    int count = 27,
+    String genre = '',
+  }) async {
+    if (start < 1 || count < 1 || count > 50 || start + count > 501) {
+      return const NdlSearchBatch(books: [], rawCount: 0, hasMore: false);
+    }
+    try {
+      final response = await http.get(sruSearchUri(
+        provider: provider, title: title, from: from,
+        start: start, count: count,
+      )).timeout(const Duration(seconds: 22));
+      if (response.statusCode != 200) {
+        return NdlSearchBatch(
+          books: const [], rawCount: 0, hasMore: false,
+          temporarilyUnavailable: response.statusCode == 429 ||
+              response.statusCode >= 500,
+        );
+      }
+      return parseSruPage(utf8.decode(response.bodyBytes),
+          start: start, count: count, genre: genre);
+    } catch (_) {
+      return const NdlSearchBatch(
+        books: [], rawCount: 0, hasMore: false,
+        temporarilyUnavailable: true,
+      );
+    }
+  }
+
   static Future<NdlSearchBatch> searchPage({
     String? any,
     String? title,
@@ -250,6 +299,66 @@ class NdlApi {
       books: result,
       rawCount: items.length,
       hasMore: hasMore && start + items.length <= 500,
+    );
+  }
+
+  static String? _sruValue(XmlElement data, String localName) {
+    for (final element in data.descendants.whereType<XmlElement>()) {
+      if (element.name.local != localName) continue;
+      final value = element.innerText.trim();
+      if (value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  /// Parse one SRU recordData as one book. Do not infer language from titles,
+  /// geographic terms or data providers; only explicit book metadata counts.
+  static NdlSearchBatch parseSruPage(String xml, {
+    int start = 1,
+    int count = 27,
+    String genre = '',
+  }) {
+    final document = XmlDocument.parse(xml);
+    final records = document.descendants.whereType<XmlElement>()
+        .where((element) => element.name.local == 'recordData')
+        .toList(growable: false);
+    final books = <Book>[];
+    final seen = <String>{};
+    for (final data in records) {
+      final isbn = _isbn(data);
+      final title = _sruValue(data, 'title') ?? '';
+      if (isbn.isEmpty || title.isEmpty || !seen.add(isbn)) continue;
+      books.add(Book(
+        id: isbn,
+        isbn: isbn,
+        title: title,
+        author: _sruValue(data, 'creator') ?? '',
+        publisher: _sruValue(data, 'publisher') ?? '',
+        pubDate: _sruValue(data, 'issued') ??
+            _sruValue(data, 'date') ?? '',
+        coverUrl: '',
+        genre: genre,
+        description: _sruValue(data, 'description') ?? '',
+        languageCode: _languages(data),
+        ndcCode: _ndc(data),
+        catalogSource: 'ndl',
+        catalogFetchedAt: DateTime.now().toUtc(),
+      ));
+    }
+    int? total;
+    for (final element in document.descendants.whereType<XmlElement>()) {
+      if (element.name.local == 'numberOfRecords') {
+        total = int.tryParse(element.innerText.trim());
+        break;
+      }
+    }
+    final hasMore = total != null
+        ? start + records.length - 1 < total && records.isNotEmpty
+        : records.length == count;
+    return NdlSearchBatch(
+      books: books,
+      rawCount: records.length,
+      hasMore: hasMore && start + records.length <= 500,
     );
   }
 

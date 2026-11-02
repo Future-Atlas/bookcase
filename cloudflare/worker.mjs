@@ -1,5 +1,6 @@
 import adEntitlement from "../api/ad-entitlement.js";
 import ndl from "../api/ndl.js";
+import ndlSru from "../api/ndl-sru.js";
 import openbd from "../api/openbd.js";
 import bookCovers from "../api/book-covers.js";
 import homeAdEligibility from "../api/home-ad-eligibility.js";
@@ -257,6 +258,11 @@ async function routeRequest(request, env, context) {
     return invoke(sitemap, request);
   }
   if (path === "/api/ndl") return serveNdl(request, context);
+  if (path === "/api/ndl-sru") {
+    return serveNdl(request, context, {
+      requestHandler: () => invoke(ndlSru, request),
+    });
+  }
   if (path === "/api/openbd") return invoke(openbd, request);
   if (path === "/api/book-covers") return invoke(bookCovers, request);
   if (path === "/api/rakuten") return new Response(JSON.stringify({error:"catalog_migrated"}), {status:410,headers:{"Content-Type":"application/json"}});
