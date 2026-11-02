@@ -1,24 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../models/book.dart';
+import '../api/official_publisher_covers.dart';
 
-/// Only show cover art with a documented right to use it for book
-/// introduction/promotion. openBD permits this use by companies, subject
-/// to its terms: https://openbd.jp/terms/
-///
-/// Google Books, Open Library and legacy retailer URLs are intentionally not
-/// automatic image sources. A URL reachable on the internet is not a license.
+/// Render book-introduction covers from openBD or verified publisher sites.
+/// Publisher images are selected by exact publisher-owned ISBN prefixes and
+/// must be shown in full. No arbitrary third-party/retailer image fallbacks.
+/// A URL being reachable on the internet does not establish usage rights.
 class BookCoverImage extends StatelessWidget {
   const BookCoverImage({
     super.key,
     required this.book,
-    this.fit = BoxFit.cover,
     this.width,
     this.height,
   });
 
   final Book book;
-  final BoxFit fit;
   final double? width;
   final double? height;
 
@@ -31,27 +28,31 @@ class BookCoverImage extends StatelessWidget {
         !parsed.hasPort;
   }
 
-  /// The source tag is assigned only by OpenBdApi.enrichRecord. For old
-  /// persisted post data without a source tag, allow just the official
-  /// openBD image host; never infer rights for arbitrary publisher/CDN URLs.
-  static bool isApprovedCover(Book book) {
-    if (!isSafeRemoteCover(book.coverUrl)) return false;
-    if (book.coverSource.isNotEmpty && book.coverSource != 'openbd') {
-      return false;
+  /// Prefer a provenance-verified openBD image. If missing or unapproved,
+  /// use only the publisher's own deterministic ISBN-specific cover URL.
+  /// Historical Google/Rakuten/Open Library URLs are never requested.
+  static String? approvedCoverUrl(Book book) {
+    final candidate = book.coverUrl.trim();
+    if (isSafeRemoteCover(candidate) &&
+        (book.coverSource.isEmpty || book.coverSource == 'openbd')) {
+      final host = Uri.parse(candidate).host.toLowerCase();
+      const excluded = {
+        'books.google.com',
+        'books.googleusercontent.com',
+        'covers.openlibrary.org',
+        'images.weserv.nl',
+        'thumbnail.image.rakuten.co.jp',
+        'image.rakuten.co.jp',
+      };
+      if (!excluded.contains(host) &&
+          (book.coverSource == 'openbd' || host == 'cover.openbd.jp')) {
+        return candidate;
+      }
     }
-    final host = Uri.parse(book.coverUrl.trim()).host.toLowerCase();
-    const excluded = {
-      'books.google.com',
-      'books.googleusercontent.com',
-      'covers.openlibrary.org',
-      'images.weserv.nl',
-      'thumbnail.image.rakuten.co.jp',
-      'image.rakuten.co.jp',
-    };
-    if (excluded.contains(host)) return false;
-    if (book.coverSource == 'openbd') return true;
-    return host == 'cover.openbd.jp';
+    return OfficialPublisherCovers.coverUrlForIsbn(book.isbn.trim());
   }
+
+  static bool isApprovedCover(Book book) => approvedCoverUrl(book) != null;
 
   /// Covers returned by openBD may reside on publishers' own HTTPS hosts.
   /// HTML-first rendering avoids speculative CORS-blocked XHRs in Flutter Web.
@@ -103,10 +104,13 @@ class BookCoverImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!isApprovedCover(book)) return _placeholder(context);
+    final approvedUrl = approvedCoverUrl(book);
+    if (approvedUrl == null) return _placeholder(context);
     return Image.network(
-      book.coverUrl.trim(),
-      fit: fit,
+      approvedUrl,
+      // Neither publisher permits arbitrarily cropping its original artwork.
+      // Keep the entire jacket visible, regardless of surrounding card shape.
+      fit: BoxFit.contain,
       width: width,
       height: height,
       semanticLabel: '${book.title}の表紙',
