@@ -18,6 +18,7 @@ typedef NdlFieldFetcher = Future<NdlSearchBatch> Function(
 typedef NdlHomeFetcher = Future<NdlSearchBatch> Function({
   required String provider,
   String? any,
+  String? title,
   String? from,
   required int start,
   required int count,
@@ -246,7 +247,7 @@ class BookRepository {
         final chosen = ranked.skip(start).take(9).toList(growable: false);
         return _filterForViewer(await OpenBdApi.enrich(chosen));
       }
-      if (_isNewArrivalsGenre(genre) || _isForeignGenre(genre)) {
+      if (_isHomeGenre(genre)) {
         return await _fetchHomeSection(genre, page: page);
       }
       final incoming = await NdlApi.searchBySelectedGenre(
@@ -262,22 +263,32 @@ class BookRepository {
 
   static bool _isNewArrivalsGenre(String genre) => genre.contains('新着');
 
+  static bool _isJapaneseGenre(String genre) => genre == '和書';
+
   static bool _isForeignGenre(String genre) =>
       genre.contains('English') || genre.contains('洋書');
 
-  String _homeKey(String genre) =>
-      _isNewArrivalsGenre(genre) ? 'new-arrivals' : 'foreign-language';
+  static bool _isHomeGenre(String genre) =>
+      _isNewArrivalsGenre(genre) ||
+      _isJapaneseGenre(genre) ||
+      _isForeignGenre(genre);
+
+  String _homeKey(String genre) {
+    if (_isNewArrivalsGenre(genre)) return 'new-arrivals';
+    if (_isJapaneseGenre(genre)) return 'japanese-language';
+    return 'foreign-language';
+  }
 
   /// Explicit user retry starts again at the first, complete-bibliography
   /// source, without invalidating the currently displayed page until fetched.
   void resetHomeBooks(String genre) {
-    if (_isNewArrivalsGenre(genre) || _isForeignGenre(genre)) {
+    if (_isHomeGenre(genre)) {
       _homeCatalogCursors.remove(_homeKey(genre));
     }
   }
 
   bool hasMoreHomeBooks(String genre) {
-    if (!_isNewArrivalsGenre(genre) && !_isForeignGenre(genre)) return true;
+    if (!_isHomeGenre(genre)) return true;
     final cursor = _homeCatalogCursors[_homeKey(genre)];
     if (cursor == null) return true;
     return cursor.ready.isNotEmpty || cursor.sourceIndex < cursor.sources.length;
@@ -302,30 +313,40 @@ class BookRepository {
         _HomeCatalogSource(provider: NdlApi.national, from: from),
       ]);
     }
+    if (_isJapaneseGenre(genre)) {
+      // National bibliography remains the authoritative metadata source.
+      // Narrow by title, then accept only explicit Japanese-language records.
+      // These are discovery samples, not a complete listing of Japanese books.
+      return _HomeCatalogCursor([
+        _HomeCatalogSource(provider: NdlApi.national, title: '日本'),
+        _HomeCatalogSource(provider: NdlApi.national, title: '物語'),
+        _HomeCatalogSource(provider: NdlApi.national, title: '文学'),
+      ]);
+    }
     return _HomeCatalogCursor([
-      // NDL Japan-related foreign-language bibliography: some records may
-      // have an explicit "eng" language tag. Others must be excluded.
-      _HomeCatalogSource(provider: NdlApi.foreignBibliography),
-      // Enlarge coverage using holdings; post-filter to exact "eng".
-      _HomeCatalogSource(provider: NdlApi.holdings, any: 'English'),
-      _HomeCatalogSource(provider: NdlApi.holdings, any: 'novel'),
-      _HomeCatalogSource(provider: NdlApi.holdings, any: 'Japan'),
+      // A provider-only ndl-boj scan timed out after 18 seconds. Every
+      // OpenSearch request must include a real query term. Exact eng filtering
+      // is performed after NDL returns the results, never inferred from
+      // the source or an English keyword alone.
+      _HomeCatalogSource(provider: NdlApi.foreignBibliography, title: 'Japan'),
+      _HomeCatalogSource(provider: NdlApi.foreignBibliography, title: 'Tokyo'),
+      _HomeCatalogSource(provider: NdlApi.holdings, title: 'Japan'),
+      _HomeCatalogSource(provider: NdlApi.holdings, title: 'Tokyo'),
     ]);
   }
 
   Future<NdlSearchBatch> _fetchHomeWindow(
-    _HomeCatalogSource source, int count, {required bool newArrivals}
+    _HomeCatalogSource source, int count, {required String genre}
   ) {
     if (homeFetcher != null) {
       return homeFetcher!(
-        provider: source.provider, any: source.any, from: source.from,
-        start: source.offset, count: count,
+        provider: source.provider, any: source.any, title: source.title,
+        from: source.from, start: source.offset, count: count,
       );
     }
     return NdlApi.searchPage(
-      provider: source.provider, any: source.any, from: source.from,
-      start: source.offset, count: count,
-      genre: newArrivals ? '新着' : 'English',
+      provider: source.provider, any: source.any, title: source.title,
+      from: source.from, start: source.offset, count: count, genre: genre,
     );
   }
 
@@ -341,8 +362,7 @@ class BookRepository {
           cursor.sourceIndex >= cursor.sources.length) {
         return const <Book>[];
       }
-      final next = await _nextHomePage(cursor,
-          newArrivals: _isNewArrivalsGenre(genre));
+      final next = await _nextHomePage(cursor, genre: genre);
       if (next.isEmpty) return const <Book>[];
       cursor.pages.add(next);
     }
@@ -350,9 +370,11 @@ class BookRepository {
   }
 
   Future<List<Book>> _nextHomePage(
-    _HomeCatalogCursor cursor, {required bool newArrivals}
+    _HomeCatalogCursor cursor, {required String genre}
   ) async {
     final page = <Book>[];
+    final newArrivals = _isNewArrivalsGenre(genre);
+    final japanese = _isJapaneseGenre(genre);
     var requests = 0;
     // Network is bounded to avoid hammering NDL or blocking the home screen
     // indefinitely. Already-retrieved eligible books are never discarded.
@@ -375,7 +397,7 @@ class BookRepository {
       }
       final count = min(legacyCandidateWindow, 501 - source.offset);
       final response = await _fetchHomeWindow(
-        source, count, newArrivals: newArrivals,
+        source, count, genre: genre,
       );
       requests++;
       if (response.temporarilyUnavailable) {
@@ -392,12 +414,11 @@ class BookRepository {
 
       final candidates = <Book>[];
       for (final book in response.books) {
-        // The "洋書" section shows only books explicitly tagged "eng".
-        // Reject Chinese, Korean, other languages, bilingual records and
-        // missing language tags, including items from NDL's ndl-boj catalog.
-        if (!newArrivals && !NdlApi.isEnglishLanguage(book)) {
-          continue;
-        }
+        // Keep home language sections strict and independent. Do not filter
+        // the shared 新着 or ordinary search by language.
+        if (japanese && !NdlApi.isJapaneseLanguage(book)) continue;
+        if (!newArrivals && !japanese &&
+            !NdlApi.isEnglishLanguage(book)) continue;
         if (cursor.seenIsbns.add(book.id)) candidates.add(book);
       }
       final enriched = await OpenBdApi.enrich(candidates);
@@ -642,9 +663,12 @@ class _NdlFieldCursor {
 
 
 class _HomeCatalogSource {
-  _HomeCatalogSource({required this.provider, this.any, this.from});
+  _HomeCatalogSource({
+    required this.provider, this.any, this.title, this.from,
+  });
   final String provider;
   final String? any;
+  final String? title;
   final String? from;
   int offset = 1;
   int emptyWindows = 0;

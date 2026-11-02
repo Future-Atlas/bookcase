@@ -190,6 +190,14 @@ class NdlApi {
   static bool isEnglishLanguage(Book book) =>
       book.languageCode.trim().toLowerCase() == 'eng';
 
+  /// The home "和書" section accepts only an explicit Japanese language
+  /// code. Do not infer Japanese from kanji in titles or from an NDL
+  /// provider, and never include bilingual or language-unknown records.
+  static bool isJapaneseLanguage(Book book) {
+    final language = book.languageCode.trim().toLowerCase();
+    return language == 'jpn' || language == 'ja';
+  }
+
   static String _ndc(XmlElement item) {
     for (final element in item.descendants.whereType<XmlElement>()) {
       if (element.name.local != 'subject' || !_type(element).contains('ndc')) continue;

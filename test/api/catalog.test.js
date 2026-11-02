@@ -36,20 +36,26 @@ test('NDL proxy allows NDL-owned foreign-book catalog records',async()=>{
   assert.equal(res.statusCode,200);
 });
 
-test('NDL proxy accepts the bounded Japan-related foreign bibliography without a keyword',async()=>{
+test('NDL proxy requires a search term even for Japan-related foreign bibliography',async()=>{
   let upstream='';
   const handler=ndl.createHandler({request:async url=>{
     upstream=url;
     return {ok:true,text:async()=>'<rss><channel></channel></rss>'};
   }});
+  const missing=recorder();
+  await handler({method:'GET',query:{dpid:'ndl-boj',mediatype:'books',cnt:'27',idx:'1'}},missing);
+  assert.equal(missing.statusCode,400);
+  assert.equal(missing.body.error,'missing_catalog_search');
+  assert.equal(upstream,'', 'blank query must not reach NDL');
+
   const res=recorder();
-  await handler({method:'GET',query:{dpid:'ndl-boj',mediatype:'books',cnt:'27',idx:'1'}},res);
+  await handler({method:'GET',query:{dpid:'ndl-boj',mediatype:'books',title:'Japan',cnt:'27',idx:'1'}},res);
   assert.equal(res.statusCode,200);
   const url=new URL(upstream);
   assert.equal(url.searchParams.get('dpid'),'ndl-boj');
   assert.equal(url.searchParams.get('mediatype'),'books');
   assert.equal(url.searchParams.get('cnt'),'27');
-  assert.equal(url.searchParams.get('any'),null);
+  assert.equal(url.searchParams.get('title'),'Japan');
 });
 
 test('NDL proxy rejects provider injection and missing search fields',async()=>{

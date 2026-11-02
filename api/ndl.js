@@ -53,10 +53,10 @@ function createHandler({ request = (...args) => fetch(...args) } = {}) {
       }
       query.set(key, value);
     }
-    // NDL's Japan-related foreign-language bibliography can be searched by
-    // provider plus the already-enforced mediatype=books constraint.
-    // Never allow unrestricted blank searches against larger providers.
-    if (!SEARCH_KEYS.some(key => query.has(key)) && provider !== "ndl-boj") {
+    // Every provider requires a real search term or bounded publication date.
+    // A bare dpid=ndl-boj + mediatype=books was permitted here previously;
+    // that unbounded request exhausted the 18s upstream time limit.
+    if (!SEARCH_KEYS.some(key => query.has(key))) {
       return res.status(400).json({ error: "missing_catalog_search" });
     }
     try {
