@@ -12,7 +12,7 @@ void main() {
     expect(japanese.queryParameters['topic'], '日本');
     expect(japanese.queryParameters['page'], '1');
     final next = HomeCatalogApi.searchUri(
-      language: 'eng', topic: 'Japan', start: 61,
+      language: 'eng', topic: 'Japan', start: 28,
     );
     expect(next.queryParameters['page'], '2');
   });
@@ -20,7 +20,7 @@ void main() {
   test('home decoder requires exact edition language, ISBN and distinct id', () {
     final batch = HomeCatalogApi.parseDecoded({
       'catalogSource': 'openlibrary',
-      'rawCount': 60,
+      'rawCount': 27,
       'hasMore': true,
       'books': [
         {
@@ -56,7 +56,7 @@ void main() {
     expect(batch.books.single.catalogSource, 'openlibrary');
     expect(batch.books.single.coverUrl, isEmpty,
         reason: 'Do not use Open Library images or unlicensed fallback');
-    expect(batch.rawCount, 60);
+    expect(batch.rawCount, 27);
     expect(batch.hasMore, isTrue);
   });
 
