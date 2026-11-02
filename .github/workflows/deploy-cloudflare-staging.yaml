@@ -122,6 +122,14 @@ jobs:
           SMOKE_DIAGNOSTIC_FILE: ${{ runner.temp }}/cloudflare-staging-smoke-diagnostic.json
         run: node scripts/cloudflare-smoke.mjs
 
+      # Read-only diagnostics: metadata provider is optional on an outage.
+      # This probes only the two fixed home page queries, once per deployment.
+      - name: Sample language-verified home books (non-blocking)
+        continue-on-error: true
+        env:
+          HOME_CATALOG_STAGE_BASE: ${{ steps.deploy.outputs.deployment-url }}
+        run: node scripts/home-catalog-stage-probe.mjs
+
       # Read-only sampling: an absent book jacket or transient upstream outage
       # is recorded, not confused with a broken Cloudflare API route.
       - name: Probe book cover provider availability (staging only)
