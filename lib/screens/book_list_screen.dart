@@ -11,8 +11,7 @@ import '../config/feature_flags.dart';
 import '../widgets/book_search_results.dart';
 import '../widgets/catalog_credit.dart';
 import '../models/profile_page_color.dart';
-import '../api/ndl_api.dart';
-import '../api/openbd_api.dart';
+import '../api/book_catalog_lookup.dart';
 import '../widgets/post_card.dart';
 import '../widgets/timeline_ad_slot.dart';
 import '../widgets/timeline_ad_policy.dart';
@@ -79,11 +78,9 @@ class _BookListScreenState extends State<BookListScreen> {
     final initialBookId = widget.initialBookId?.trim() ?? '';
     if (initialBookId.isEmpty || _openingBookId == initialBookId) return;
     _openingBookId = initialBookId;
-    final found = await NdlApi.fetchBookById(initialBookId);
-    final enriched = await OpenBdApi.enrich(
-      found == null ? <Book>[] : <Book>[found],
+    final book = await const BookCatalogLookup().fetchById(
+      initialBookId, enrichNdl: true,
     );
-    final book = enriched.isEmpty ? null : enriched.first;
     if (!mounted) return;
     if (book != null) {
       await _showBookDetailDialog(book, openedFromDirectUrl: true);
@@ -137,7 +134,7 @@ class _BookListScreenState extends State<BookListScreen> {
   }
 
   Future<void> _openBookFromPost(Post post) async {
-    final resolvedBook = await NdlApi.fetchBookById(post.bookId);
+    final resolvedBook = await const BookCatalogLookup().fetchById(post.bookId);
     if (!mounted) return;
     final book =
         resolvedBook ??
