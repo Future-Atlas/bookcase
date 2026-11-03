@@ -7,9 +7,14 @@
   existing NDL/Open Library/openBD acquisition flows.
 - Book discovery sections (`新着`, `和書`, `洋書`, `ベストセラー`) and
   search switch to the Rakuten Books Book/ForeignBook Search APIs through
-  same-origin `/api/rakuten`. The original app sections, individual book
-  details, social activity, featured posts, Supabase schema and user data
-  are **not** changed.
+  same-origin `/api/rakuten`. The original app sections, social activity,
+  Supabase schema and user data are **not** changed.
+- The staging book-detail, post-book, user-shelf, and featured-book metadata
+  lookup paths also use the production-style Rakuten ISBN resolver, via
+  `BookCatalogLookup`. Non-staging builds keep their old NDL/openBD resolver.
+  A Rakuten error does **not** silently fall back to NDL in staging.
+  Only exact ISBN matches can enrich stored book records; unapproved retailer
+  image URLs are discarded before rendering or replacing a stored cover.
 - The Worker allows `/api/rakuten` only with `APP_ENV=staging`. It remains
   HTTP 410 on production or any unnamed environment.
 - `RAKUTEN_APP_ID` and `RAKUTEN_ACCESS_KEY` stay only in the staging
@@ -38,7 +43,8 @@
 
 ## Provider app registration prerequisite
 
-At 2026-11-03 08:12 JST the deployed stage probes returned HTTP 502 from
+At 2026-11-03 08:12 JST, and again after the hostname fix at 12:24 JST,
+the deployed stage probes returned HTTP 502 from
 Sharemarium, with **upstream HTTP 403 from Rakuten** for both book and foreign
 book search. These are not Cloudflare 429s. The actual origin/referer in this
 Worker is now `https://sharemarium-staging.sharemarium.workers.dev/` (not
