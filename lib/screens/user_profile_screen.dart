@@ -3,8 +3,7 @@ import '../services/avatar_url_policy.dart';
 import 'package:provider/provider.dart';
 import '../config/feature_flags.dart';
 import '../services/supabase_service.dart';
-import '../api/ndl_api.dart';
-import '../api/openbd_api.dart';
+import '../api/book_catalog_lookup.dart';
 import '../models/book.dart';
 import '../widgets/book_cover_image.dart';
 import '../models/user_profile.dart';
@@ -1445,9 +1444,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _openBookFromPost(Post post) async {
-    final matches = await NdlApi.search(isbn: post.bookId, count: 1);
-    final enriched = await OpenBdApi.enrich(matches);
-    final resolvedBook = enriched.isEmpty ? null : enriched.first;
+    final resolvedBook = await const BookCatalogLookup().fetchById(
+      post.bookId, enrichNdl: true,
+    );
     if (!mounted) return;
     final book =
         resolvedBook ??
