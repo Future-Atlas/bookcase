@@ -47,7 +47,7 @@
       "vars": {
         "APP_ENV": "staging",
         "VERCEL_ENV": "preview",
-        "RAKUTEN_REFERER": "https://staging.sharemarium.com/",
+        "RAKUTEN_REFERER": "https://sharemarium-staging.sharemarium.workers.dev/",
         "SEO_ENABLE_NDL_FALLBACK": "false"
       },
       "durable_objects": {

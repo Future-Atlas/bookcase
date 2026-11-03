@@ -97,7 +97,7 @@ function createHandler({ request, env = {} } = {}) {
     }
     try {
       const upstream = await request(ENDPOINTS[endpoint] + "?" + query, {
-        origin: env.RAKUTEN_REFERER || "https://staging.sharemarium.com/",
+        origin: env.RAKUTEN_REFERER || "https://sharemarium-staging.sharemarium.workers.dev/",
       });
       if (!upstream.ok) {
         // The coordinator and Rakuten provider have distinct failure modes.
