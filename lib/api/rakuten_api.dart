@@ -275,11 +275,9 @@ class RakutenApi {
         ? rawItemPrice.toInt()
         : int.tryParse(rawItemPrice?.toString() ?? '') ?? 0;
 
-    String coverUrl = bookData['largeImageUrl'] as String? ?? '';
-    if (coverUrl.isNotEmpty) {
-      coverUrl =
-          'https://images.weserv.nl/?url=${Uri.encodeComponent(coverUrl)}';
-    }
+    // Rakuten metadata is supported, but retailer image rights are not
+    // established for this app. Do not persist/forward third-party image
+    // proxies or re-enable unapproved thumbnails in staging.
 
     return Book(
       id: isbn.isNotEmpty ? isbn : (itemUrl.isNotEmpty ? itemUrl : fallbackId),
@@ -288,7 +286,7 @@ class RakutenApi {
       publisher: publisher,
       pubDate: pubDate,
       isbn: isbn,
-      coverUrl: coverUrl,
+      coverUrl: '',
       ratingAvg: parsedReviewAverage,
       reviewCount: parsedReviewCount,
       genre: genre,

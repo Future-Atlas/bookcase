@@ -2,8 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../models/book.dart';
-import '../api/ndl_api.dart';
-import '../api/openbd_api.dart';
+import '../api/book_catalog_lookup.dart';
 import '../repositories/book_repository.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
@@ -277,11 +276,9 @@ class BookListController extends ChangeNotifier {
       }
       Book? fresh;
       try {
-        final found = await NdlApi.fetchBookById(normalizedId);
-        final enhanced = found == null
-            ? const <Book>[]
-            : await OpenBdApi.enrich(<Book>[found]);
-        fresh = enhanced.isEmpty ? null : enhanced.first;
+        fresh = await const BookCatalogLookup().fetchById(
+          normalizedId, enrichNdl: true,
+        );
       } catch (_) {
         continue;
       }

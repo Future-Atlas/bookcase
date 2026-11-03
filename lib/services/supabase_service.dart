@@ -5,7 +5,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../api/ndl_api.dart';
+import '../api/book_catalog_lookup.dart';
 import '../models/book.dart';
 import 'legal_document_versions.dart';
 import '../models/user_profile.dart';
@@ -1630,8 +1630,7 @@ class SupabaseService extends ChangeNotifier {
             bookId.isNotEmpty) {
           bookTitle = bookCache[bookId];
           if (bookTitle == null) {
-            final candidates = await NdlApi.search(isbn: bookId, count: 1);
-            final book = candidates.isEmpty ? null : candidates.first;
+            final book = await const BookCatalogLookup().fetchById(bookId);
             bookTitle = book?.title ?? bookId;
             bookCache[bookId] = bookTitle;
           }
@@ -2276,7 +2275,7 @@ class SupabaseService extends ChangeNotifier {
       final resolved = await Future.wait(
         rows.map((row) async {
           final id = row['book_id']?.toString() ?? '';
-          final apiBook = await NdlApi.fetchBookById(id);
+          final apiBook = await const BookCatalogLookup().fetchById(id);
           if (apiBook != null) return apiBook;
           return Book(
             id: id,
@@ -2359,7 +2358,7 @@ class SupabaseService extends ChangeNotifier {
 
     Future<Book?> getBook(String bookId) async {
       if (cache.containsKey(bookId)) return cache[bookId];
-      final found = await NdlApi.fetchBookById(bookId);
+      final found = await const BookCatalogLookup().fetchById(bookId);
       cache[bookId] = found;
       return found;
     }
@@ -2559,7 +2558,7 @@ class SupabaseService extends ChangeNotifier {
     if (bookIds.isEmpty) return [];
 
     final results = await Future.wait(
-      bookIds.map((id) => NdlApi.fetchBookById(id)),
+      bookIds.map((id) => const BookCatalogLookup().fetchById(id)),
     );
 
     final books = <Book>[];
