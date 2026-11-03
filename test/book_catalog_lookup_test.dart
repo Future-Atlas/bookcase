@@ -31,6 +31,14 @@ void main() {
     expect(calls, ['rakuten:9784000000001']);
   });
 
+  test('staging rejects a mismatched ISBN response', () async {
+    final lookup = BookCatalogLookup(
+      useRakuten: true,
+      rakutenFetcher: (_) async => sample('9784000000002'),
+    );
+    expect(await lookup.fetchById('9784000000001'), isNull);
+  });
+
   test('staging does not fall back to NDL on provider failure', () async {
     final lookup = BookCatalogLookup(
       useRakuten: true,
