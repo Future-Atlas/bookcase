@@ -30,6 +30,27 @@ class BookCatalogLookup {
       // Fail closed: a provider 403/5xx must not silently switch to NDL.
       final book = await (rakutenFetcher ?? RakutenApi.fetchBookById)(bookId);
       if (book == null) return null;
+      // Never attach a different edition's Rakuten metadata to a saved ISBN.
+      final requestedIsbn = bookId.replaceAll('-', '').toUpperCase();
+      if (RegExp(r'^(?:\d{13}|\d{9}[\dX]) are not independently licensed for display.
+      // Publisher-verified covers are selected by the existing BookCoverImage.
+      return book.copyWith(
+        coverUrl: book.coverSource == 'openbd' ? book.coverUrl : '',
+        coverAttributionUrl: book.coverSource == 'openbd'
+            ? book.coverAttributionUrl : '',
+      );
+    }
+
+    final book = await (ndlFetcher ?? NdlApi.fetchBookById)(bookId);
+    if (book == null || !enrichNdl) return book;
+    final enriched = await (openBdEnricher ?? OpenBdApi.enrich)([book]);
+    return enriched.isEmpty ? book : enriched.first;
+  }
+}
+).hasMatch(requestedIsbn) &&
+          book.isbn.replaceAll('-', '').toUpperCase() != requestedIsbn) {
+        return null;
+      }
       // Retailer thumbnails are not independently licensed for display.
       // Publisher-verified covers are selected by the existing BookCoverImage.
       return book.copyWith(
