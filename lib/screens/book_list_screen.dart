@@ -2173,6 +2173,8 @@ class _PagedBookScroller extends StatefulWidget {
 class _PagedBookScrollerState extends State<_PagedBookScroller> {
   final ScrollController _scrollController = ScrollController();
   late final BookCarouselAutoAdvance _autoAdvance;
+  final Object _hoverInteraction = Object();
+  final Object _pointerInteraction = Object();
   bool _pageChangePending = false;
   bool _landAtEndAfterChange = false;
   bool _isRepositioningAfterPageChange = false;
@@ -2194,6 +2196,17 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
     if (_isAutoScrolling && _scrollController.hasClients) {
       _scrollController.jumpTo(_scrollController.offset);
     }
+  }
+
+  void _beginInteractionHold(Object source) {
+    _autoAdvance.beginInteractionHold(source);
+    if (_isAutoScrolling && _scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.offset);
+    }
+  }
+
+  void _endInteractionHold(Object source) {
+    _autoAdvance.endInteractionHold(source);
   }
 
   void pauseForBookDetail() => _autoAdvance.pauseForBookDetail();
@@ -2441,9 +2454,22 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
               Positioned.fill(
                 child: AbsorbPointer(
                   absorbing: widget.isLoadingMore && !_appending,
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: _handleScrollNotification,
-                    child: list,
+                  child: MouseRegion(
+                    onEnter: (_) => _beginInteractionHold(_hoverInteraction),
+                    onExit: (_) => _endInteractionHold(_hoverInteraction),
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (_) =>
+                          _beginInteractionHold(_pointerInteraction),
+                      onPointerUp: (_) =>
+                          _endInteractionHold(_pointerInteraction),
+                      onPointerCancel: (_) =>
+                          _endInteractionHold(_pointerInteraction),
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: _handleScrollNotification,
+                        child: list,
+                      ),
+                    ),
                   ),
                 ),
               ),
