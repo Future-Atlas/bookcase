@@ -482,6 +482,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     if (profile == null || relationship == null || relationship.isOwnProfile) {
       return;
     }
+    if (!await _ensureAuthenticated() || !mounted) return;
 
     final wasFollowing =
         relationship.followStatus != FollowRelationshipStatus.none;
@@ -588,6 +589,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final profile = _profile;
     final relationship = _relationship;
     if (profile == null || relationship == null) return;
+    if (!await _ensureAuthenticated() || !mounted) return;
     if (relationship.blockedEitherDirection) return;
     if (!relationship.isOwnProfile && profile.isPrivate) {
       ScaffoldMessenger.of(
@@ -1857,6 +1859,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<bool> _ensureBookDetailAuthenticated() async {
+    return _ensureAuthenticated();
+  }
+
+  Future<bool> _ensureAuthenticated() async {
     final service = Provider.of<SupabaseService>(context, listen: false);
     if (service.canWrite) return true;
     final result = await Navigator.of(context).pushNamed('/login');
@@ -2002,6 +2008,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                   onPressed: isRead || checking
                                       ? null
                                       : () async {
+                                          if (!await _ensureAuthenticated() ||
+                                              !mounted) {
+                                            return;
+                                          }
                                           Navigator.of(dialogContext).pop();
                                           final posted =
                                               await showPostComposerDialog(
