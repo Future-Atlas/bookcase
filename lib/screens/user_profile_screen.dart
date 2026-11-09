@@ -482,6 +482,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     if (profile == null || relationship == null || relationship.isOwnProfile) {
       return;
     }
+    if (!await _ensureAuthenticated() || !mounted) return;
 
     final wasFollowing =
         relationship.followStatus != FollowRelationshipStatus.none;
@@ -588,6 +589,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final profile = _profile;
     final relationship = _relationship;
     if (profile == null || relationship == null) return;
+    if (!await _ensureAuthenticated() || !mounted) return;
     if (relationship.blockedEitherDirection) return;
     if (!relationship.isOwnProfile && profile.isPrivate) {
       ScaffoldMessenger.of(
@@ -1445,7 +1447,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   Future<void> _openBookFromPost(Post post) async {
     final resolvedBook = await const BookCatalogLookup().fetchById(
-      post.bookId, enrichNdl: true,
+      post.bookId,
+      enrichNdl: true,
     );
     if (!mounted) return;
     final book =
@@ -1847,14 +1850,21 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
+  Future<bool> _ensureAuthenticated() async {
+    final service = Provider.of<SupabaseService>(context, listen: false);
+    if (service.canWrite) return true;
+    final result = await Navigator.of(context).pushNamed('/login');
+    return mounted && (result == true || service.canWrite);
+  }
+
   Future<void> _showSearchedBookDetailDialog(Book book) async {
     final service = Provider.of<SupabaseService>(context, listen: false);
     if (ContentSafetyService.isAdultBook(book) &&
         !await service.canViewAdultContent()) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('この書籍は18歳未満の利用者には表示できません。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('この書籍は18歳未満の利用者には表示できません。')));
       return;
     }
     if (!mounted) return;
@@ -1931,6 +1941,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                   onPressed: isRead || checking
                                       ? null
                                       : () async {
+                                          if (!await _ensureAuthenticated() ||
+                                              !mounted) {
+                                            return;
+                                          }
                                           Navigator.of(dialogContext).pop();
                                           final posted =
                                               await showPostComposerDialog(

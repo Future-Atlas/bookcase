@@ -79,7 +79,8 @@ class _BookListScreenState extends State<BookListScreen> {
     if (initialBookId.isEmpty || _openingBookId == initialBookId) return;
     _openingBookId = initialBookId;
     final book = await const BookCatalogLookup().fetchById(
-      initialBookId, enrichNdl: true,
+      initialBookId,
+      enrichNdl: true,
     );
     if (!mounted) return;
     if (book != null) {
@@ -510,7 +511,10 @@ class _BookListScreenState extends State<BookListScreen> {
                                           onPressed: isRead || isChecking
                                               ? null
                                               : () async {
-                                                  if (!mounted) return;
+                                                  if (!await _ensureAuthenticated() ||
+                                                      !mounted) {
+                                                    return;
+                                                  }
                                                   Navigator.of(
                                                     this.context,
                                                   ).pop();
@@ -930,9 +934,8 @@ class _BookListScreenState extends State<BookListScreen> {
                                 hasMore: _controller.hasMoreRecommended,
                                 isLoadingInitial:
                                     _controller.isLoadingRecommended,
-                                onRetry: () => unawaited(
-                                  _controller.retryRecommended(),
-                                ),
+                                onRetry: () =>
+                                    unawaited(_controller.retryRecommended()),
                               ),
                             if (kIsWeb &&
                                 timelineAdDisplayReady &&
@@ -955,12 +958,12 @@ class _BookListScreenState extends State<BookListScreen> {
                                     _controller.loadPreviousJapanese,
                                 canLoadPrevious:
                                     _controller.canLoadPreviousJapanese,
-                                isLoadingMore: _controller.isLoadingMoreJapanese,
+                                isLoadingMore:
+                                    _controller.isLoadingMoreJapanese,
                                 hasMore: _controller.hasMoreJapanese,
                                 isLoadingInitial: _controller.isLoadingJapanese,
-                                onRetry: () => unawaited(
-                                  _controller.retryJapanese(),
-                                ),
+                                onRetry: () =>
+                                    unawaited(_controller.retryJapanese()),
                               ),
                             if (widget.initialGenre == null ||
                                 widget.initialGenre == 'western')
@@ -976,9 +979,8 @@ class _BookListScreenState extends State<BookListScreen> {
                                 isLoadingMore: _controller.isLoadingMoreWestern,
                                 hasMore: _controller.hasMoreWestern,
                                 isLoadingInitial: _controller.isLoadingWestern,
-                                onRetry: () => unawaited(
-                                  _controller.retryWestern(),
-                                ),
+                                onRetry: () =>
+                                    unawaited(_controller.retryWestern()),
                               ),
                             if (widget.initialGenre == null) ...[
                               Align(
@@ -2173,6 +2175,8 @@ class _PagedBookScroller extends StatefulWidget {
 class _PagedBookScrollerState extends State<_PagedBookScroller> {
   final ScrollController _scrollController = ScrollController();
   late final BookCarouselAutoAdvance _autoAdvance;
+  final Object _hoverInteraction = Object();
+  final Object _pointerInteraction = Object();
   bool _pageChangePending = false;
   bool _landAtEndAfterChange = false;
   bool _isRepositioningAfterPageChange = false;
@@ -2194,6 +2198,17 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
     if (_isAutoScrolling && _scrollController.hasClients) {
       _scrollController.jumpTo(_scrollController.offset);
     }
+  }
+
+  void _beginInteractionHold(Object source) {
+    _autoAdvance.beginInteractionHold(source);
+    if (_isAutoScrolling && _scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.offset);
+    }
+  }
+
+  void _endInteractionHold(Object source) {
+    _autoAdvance.endInteractionHold(source);
   }
 
   void pauseForBookDetail() => _autoAdvance.pauseForBookDetail();
@@ -2441,9 +2456,22 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
               Positioned.fill(
                 child: AbsorbPointer(
                   absorbing: widget.isLoadingMore && !_appending,
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: _handleScrollNotification,
-                    child: list,
+                  child: MouseRegion(
+                    onEnter: (_) => _beginInteractionHold(_hoverInteraction),
+                    onExit: (_) => _endInteractionHold(_hoverInteraction),
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (_) =>
+                          _beginInteractionHold(_pointerInteraction),
+                      onPointerUp: (_) =>
+                          _endInteractionHold(_pointerInteraction),
+                      onPointerCancel: (_) =>
+                          _endInteractionHold(_pointerInteraction),
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: _handleScrollNotification,
+                        child: list,
+                      ),
+                    ),
                   ),
                 ),
               ),
