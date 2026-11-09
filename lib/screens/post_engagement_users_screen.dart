@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/social_models.dart';
 import '../models/user_profile.dart';
 import '../services/supabase_service.dart';
+import '../widgets/profile_color_border.dart';
 
 class PostEngagementUsersScreen extends StatefulWidget {
   const PostEngagementUsersScreen({
@@ -144,25 +145,29 @@ class _PostEngagementUsersScreenState extends State<PostEngagementUsersScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 itemCount: _profiles.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
+                separatorBuilder: (_, _) => const SizedBox(height: 6),
                 itemBuilder: (context, index) {
                   final profile = _profiles[index];
-                  return ListTile(
-                    onTap: () => widget.onProfileTap(profile),
-                    leading: CircleAvatar(
-                      backgroundImage: profile.avatarUrl.isEmpty
-                          ? null
-                          : AvatarUrlPolicy.image(profile.avatarUrl),
-                      child: profile.avatarUrl.isEmpty
-                          ? const Icon(Icons.person)
-                          : null,
+                  return ProfileColorBorder(
+                    pageColorKey: profile.pageColorKey,
+                    child: ListTile(
+                      onTap: () => widget.onProfileTap(profile),
+                      leading: CircleAvatar(
+                        backgroundImage: profile.avatarUrl.isEmpty
+                            ? null
+                            : AvatarUrlPolicy.image(profile.avatarUrl),
+                        child: profile.avatarUrl.isEmpty
+                            ? const Icon(Icons.person)
+                            : null,
+                      ),
+                      title: Text(profile.username),
+                      subtitle: Text(
+                        profile.userId.isEmpty ? '' : '@${profile.userId}',
+                      ),
+                      trailing: _trailing(profile),
                     ),
-                    title: Text(profile.username),
-                    subtitle: Text(
-                      profile.userId.isEmpty ? '' : '@${profile.userId}',
-                    ),
-                    trailing: _trailing(profile),
                   );
                 },
               ),
