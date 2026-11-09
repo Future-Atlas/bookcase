@@ -542,7 +542,10 @@ class _BookListScreenState extends State<BookListScreen> {
                                             onPressed: isRead || isChecking
                                                 ? null
                                                 : () async {
-                                                    if (!mounted) return;
+                                                    if (!await _ensureAuthenticated() ||
+                                                        !mounted) {
+                                                      return;
+                                                    }
                                                     Navigator.of(
                                                       this.context,
                                                     ).pop();

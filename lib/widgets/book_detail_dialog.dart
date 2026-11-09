@@ -222,6 +222,11 @@ class _BookDetailDialogState extends State<BookDetailDialog> {
                                     onPressed: isRead || checking
                                         ? null
                                         : () async {
+                                            if (!await widget
+                                                    .ensureAuthenticated() ||
+                                                !mounted) {
+                                              return;
+                                            }
                                             Navigator.of(context).pop();
                                             await widget.onRead();
                                           },
