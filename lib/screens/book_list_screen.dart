@@ -79,7 +79,8 @@ class _BookListScreenState extends State<BookListScreen> {
     if (initialBookId.isEmpty || _openingBookId == initialBookId) return;
     _openingBookId = initialBookId;
     final book = await const BookCatalogLookup().fetchById(
-      initialBookId, enrichNdl: true,
+      initialBookId,
+      enrichNdl: true,
     );
     if (!mounted) return;
     if (book != null) {
@@ -510,7 +511,10 @@ class _BookListScreenState extends State<BookListScreen> {
                                           onPressed: isRead || isChecking
                                               ? null
                                               : () async {
-                                                  if (!mounted) return;
+                                                  if (!await _ensureAuthenticated() ||
+                                                      !mounted) {
+                                                    return;
+                                                  }
                                                   Navigator.of(
                                                     this.context,
                                                   ).pop();
@@ -930,9 +934,8 @@ class _BookListScreenState extends State<BookListScreen> {
                                 hasMore: _controller.hasMoreRecommended,
                                 isLoadingInitial:
                                     _controller.isLoadingRecommended,
-                                onRetry: () => unawaited(
-                                  _controller.retryRecommended(),
-                                ),
+                                onRetry: () =>
+                                    unawaited(_controller.retryRecommended()),
                               ),
                             if (kIsWeb &&
                                 timelineAdDisplayReady &&
@@ -955,12 +958,12 @@ class _BookListScreenState extends State<BookListScreen> {
                                     _controller.loadPreviousJapanese,
                                 canLoadPrevious:
                                     _controller.canLoadPreviousJapanese,
-                                isLoadingMore: _controller.isLoadingMoreJapanese,
+                                isLoadingMore:
+                                    _controller.isLoadingMoreJapanese,
                                 hasMore: _controller.hasMoreJapanese,
                                 isLoadingInitial: _controller.isLoadingJapanese,
-                                onRetry: () => unawaited(
-                                  _controller.retryJapanese(),
-                                ),
+                                onRetry: () =>
+                                    unawaited(_controller.retryJapanese()),
                               ),
                             if (widget.initialGenre == null ||
                                 widget.initialGenre == 'western')
@@ -976,9 +979,8 @@ class _BookListScreenState extends State<BookListScreen> {
                                 isLoadingMore: _controller.isLoadingMoreWestern,
                                 hasMore: _controller.hasMoreWestern,
                                 isLoadingInitial: _controller.isLoadingWestern,
-                                onRetry: () => unawaited(
-                                  _controller.retryWestern(),
-                                ),
+                                onRetry: () =>
+                                    unawaited(_controller.retryWestern()),
                               ),
                             if (widget.initialGenre == null) ...[
                               Align(
