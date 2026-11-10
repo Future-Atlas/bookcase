@@ -281,8 +281,8 @@ test("two home book-genre separators and repeated timeline slots have unique ind
     assert.ok(indexes[i - 1] < indexes[i], "genre ad follows preceding section");
   }
 
-  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.popularBooks\.isNotEmpty &&\s+_controller\.recommendedBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-popular-new'\),\s+slotIndex: 0,/);
-  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.recommendedBooks\.isNotEmpty &&\s+_controller\.japaneseBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\('home-ad-between-new-japanese'\),\s+slotIndex: 1,/);
+  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.popularBooks\.isNotEmpty &&\s+_controller\.recommendedBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\(\s*'home-ad-between-popular-new',?\s*\),\s+slotIndex: 0,/);
+  assert.match(home, /if \(kIsWeb &&\s+timelineAdDisplayReady &&\s+widget\.initialGenre == null &&\s+_controller\.recommendedBooks\.isNotEmpty &&\s+_controller\.japaneseBooks\.isNotEmpty\)\s+const TimelineAdSlot\(\s+key: ValueKey\(\s*'home-ad-between-new-japanese',?\s*\),\s+slotIndex: 1,/);
   assert.match(home, /if \(_controller\.searchQuery\.isNotEmpty\)\s+_buildSearchResults\(\)\s+else/);
   assert.match(policy, /homeGenreAdSlotCount = 2/);
   assert.match(policy, /homeTimelineAdSlotStart = homeGenreAdSlotCount/);
