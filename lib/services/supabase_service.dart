@@ -19,6 +19,7 @@ import 'content_safety_service.dart';
 import 'input_security_service.dart';
 import 'timeline_ranking_service.dart';
 import '../utils/dev_logger.dart';
+import '../utils/avatar_image_format.dart';
 import '../utils/public_user_id.dart';
 
 // Kept for local troubleshooting. `debugLog` is silent outside debug builds.
@@ -1058,23 +1059,14 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
-  Future<String?> uploadProfileAvatar({
-    required Uint8List bytes,
-    required String mimeType,
-  }) async {
+  Future<String?> uploadProfileAvatar({required Uint8List bytes}) async {
     final profileId = activeProfileId;
     if (!_isInitialized || _client == null || profileId.isEmpty) return null;
     if (bytes.isEmpty || bytes.lengthInBytes > 5 * 1024 * 1024) return null;
 
-    const allowedTypes = {'image/jpeg', 'image/png', 'image/webp'};
-    final normalizedType = mimeType.toLowerCase();
-    if (!allowedTypes.contains(normalizedType)) return null;
-    final extension = switch (normalizedType) {
-      'image/png' => 'png',
-      'image/webp' => 'webp',
-      _ => 'jpg',
-    };
-    final path = '$profileId/avatar.$extension';
+    final format = AvatarImageFormat.detect(bytes);
+    if (format == null) return null;
+    final path = '$profileId/avatar.${format.extension}';
 
     try {
       final bucket = _client!.storage.from('avatars');
@@ -1083,7 +1075,7 @@ class SupabaseService extends ChangeNotifier {
         bytes,
         fileOptions: FileOptions(
           upsert: true,
-          contentType: normalizedType,
+          contentType: format.mimeType,
           cacheControl: '3600',
         ),
       );

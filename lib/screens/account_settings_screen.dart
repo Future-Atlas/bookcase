@@ -12,6 +12,7 @@ import '../models/user_profile.dart';
 import '../models/profile_page_color.dart';
 import '../services/supabase_service.dart';
 import '../services/theme_service.dart';
+import '../utils/avatar_image_format.dart';
 import 'community_guidelines_screen.dart';
 import 'contact_screen.dart';
 import 'external_transmission_screen.dart';
@@ -188,7 +189,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                   ListTile(
                     leading: const Icon(Icons.manage_accounts_outlined),
                     title: const Text('アカウント設定'),
-                    subtitle: const Text('ユーザー名・ユーザーID（変更不可）・鍵アカウント'),
+                    subtitle: const Text(
+                      'プロフィール画像・ユーザー名・ユーザーID（変更不可）・鍵アカウント',
+                    ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _push(const _PublicAccountSettingsScreen()),
                   ),
@@ -488,14 +491,32 @@ class _PublicAccountSettingsScreenState
   }
 
   Future<void> _chooseAvatar() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 85,
-    );
+    XFile? picked;
+    try {
+      picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('端末から画像を選択できませんでした。もう一度お試しください。')),
+      );
+      return;
+    }
     if (picked == null || !mounted) return;
-    final bytes = await picked.readAsBytes();
+    Uint8List bytes;
+    try {
+      bytes = await picked.readAsBytes();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('選択した画像を読み込めませんでした。')));
+      return;
+    }
     if (!mounted) return;
     if (bytes.lengthInBytes > 5 * 1024 * 1024) {
       ScaffoldMessenger.of(
@@ -516,13 +537,18 @@ class _PublicAccountSettingsScreenState
       ).showSnackBar(const SnackBar(content: Text('編集後の画像は5MB以下にしてください。')));
       return;
     }
+    if (AvatarImageFormat.detect(croppedBytes) == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('JPEG・PNG・WebP形式の画像を選択してください。')),
+      );
+      return;
+    }
 
-    final mimeType = picked.mimeType ?? _mimeTypeFromName(picked.name);
     setState(() => _updatingAvatar = true);
     final url = await Provider.of<SupabaseService>(
       context,
       listen: false,
-    ).uploadProfileAvatar(bytes: croppedBytes, mimeType: mimeType);
+    ).uploadProfileAvatar(bytes: croppedBytes);
     if (!mounted) return;
     setState(() {
       _updatingAvatar = false;
@@ -533,13 +559,6 @@ class _PublicAccountSettingsScreenState
         content: Text(url == null ? '画像を保存できませんでした。' : 'プロフィール画像を更新しました。'),
       ),
     );
-  }
-
-  String _mimeTypeFromName(String name) {
-    final lower = name.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    return 'image/jpeg';
   }
 
   Future<void> _unlockPageColor(
