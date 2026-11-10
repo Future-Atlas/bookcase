@@ -399,3 +399,22 @@ test("home metadata JSON edge-cache reuses 200 pages but not 503 failures", asyn
   assert.equal(entries.size,1);
   assert.deepEqual(await third.json(),{books:[{isbn:"9780140328721"}]});
 });
+
+test("avatar cropping permits blob URLs without broadening network CSP", async () => {
+  const config = JSON.parse(readFileSync(new URL("../../vercel.json", import.meta.url), "utf8"));
+  const fallback = config.headers[0].headers.find(
+    ({ key }) => key === "Content-Security-Policy",
+  )?.value;
+  const { env } = environment({ appEnv: "production" });
+  const response = await worker.fetch(
+    new Request("https://www.sharemarium.com/"), env,
+  );
+  const cloudflare = response.headers.get("content-security-policy");
+  for (const csp of [cloudflare, fallback]) {
+    assert.ok(csp);
+    const directive = csp.split("; ").find((part) => part.startsWith("connect-src "));
+    assert.equal(directive, "connect-src 'self' blob: https: wss:");
+    assert.match(csp, /object-src 'none'/);
+    assert.match(csp, /script-src-attr 'none'/);
+  }
+});
