@@ -17,6 +17,7 @@ import '../widgets/post_composer_dialog.dart';
 import '../widgets/post_reply_dialog.dart';
 import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
+import '../widgets/book_detail_dialog_frame.dart';
 import '../widgets/rakuten_book_link.dart';
 import '../widgets/book_detail_dialog.dart';
 import 'profile_book_search_screen.dart';
@@ -1942,12 +1943,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       context: context,
       builder: (dialogContext) {
         final narrow = MediaQuery.sizeOf(dialogContext).width < 600;
-        return Dialog(
-          backgroundColor: const Color(0xFFE6E6E6),
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 24,
-          ),
+        return BookDetailDialogFrame(
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: 920,
