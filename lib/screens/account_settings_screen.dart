@@ -553,18 +553,18 @@ class _PublicAccountSettingsScreenState
     }
 
     setState(() => _updatingAvatar = true);
-    final url = await Provider.of<SupabaseService>(
+    final result = await Provider.of<SupabaseService>(
       context,
       listen: false,
     ).uploadProfileAvatar(bytes: croppedBytes);
     if (!mounted) return;
     setState(() {
       _updatingAvatar = false;
-      if (url != null) _avatarUrl = url;
+      if (result.url != null) _avatarUrl = result.url!;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(url == null ? '画像を保存できませんでした。' : 'プロフィール画像を更新しました。'),
+        content: Text(result.error ?? 'プロフィール画像を更新しました。'),
       ),
     );
   }
