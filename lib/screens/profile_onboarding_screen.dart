@@ -736,6 +736,26 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
     );
   }
 
+  InputDecoration _editableDecoration(String label, TextEditingController controller) {
+    return _decoration(label).copyWith(
+      suffixIcon: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: '$labelをコピー',
+            onPressed: () => Clipboard.setData(ClipboardData(text: controller.text)),
+            icon: const Icon(Icons.copy_outlined, color: Colors.white70),
+          ),
+          IconButton(
+            tooltip: '$labelに貼り付け',
+            onPressed: () => _pasteRegistrationText(controller),
+            icon: const Icon(Icons.content_paste_outlined, color: Colors.white70),
+          ),
+        ],
+      ),
+    );
+  }
+
   InputDecoration _decoration(String label) => InputDecoration(
     labelText: label,
     labelStyle: const TextStyle(color: Colors.white70),
@@ -764,26 +784,6 @@ String? validatePrivacyPassword(String? value) {
     return '大文字・小文字・数字をすべて含めてください。';
   }
   return null;
-}
-
-InputDecoration _editableDecoration(String label, TextEditingController controller) {
-  return _decoration(label).copyWith(
-    suffixIcon: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          tooltip: '$labelをコピー',
-          onPressed: () => Clipboard.setData(ClipboardData(text: controller.text)),
-          icon: const Icon(Icons.copy_outlined, color: Colors.white70),
-        ),
-        IconButton(
-          tooltip: '$labelに貼り付け',
-          onPressed: () => _pasteRegistrationText(controller),
-          icon: const Icon(Icons.content_paste_outlined, color: Colors.white70),
-        ),
-      ],
-    ),
-  );
 }
 
 Future<void> _pasteRegistrationText(TextEditingController controller) async {
