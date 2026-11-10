@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:crop_your_image/crop_your_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../services/avatar_url_policy.dart';
 import 'package:image_picker/image_picker.dart';
@@ -497,9 +498,14 @@ class _PublicAccountSettingsScreenState
     try {
       picked = await ImagePicker().pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
+        // The web plugin resizes through a temporary browser canvas. That
+        // conversion can fail in embedded/mobile browsers after a valid file
+        // has already been selected. The crop dialog below performs the
+        // actual edit, so keep the original bytes on web and only request the
+        // picker-side optimization on native platforms.
+        maxWidth: kIsWeb ? null : 1024,
+        maxHeight: kIsWeb ? null : 1024,
+        imageQuality: kIsWeb ? null : 85,
       );
     } catch (_) {
       if (!mounted) return;

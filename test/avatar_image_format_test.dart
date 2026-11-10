@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -42,5 +43,15 @@ void main() {
       AvatarImageFormat.detect(Uint8List.fromList([0x47, 0x49, 0x46, 0x38])),
       isNull,
     );
+  });
+
+  test('web avatar selection skips picker-side canvas conversion', () {
+    final source = File(
+      'lib/screens/account_settings_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('maxWidth: kIsWeb ? null : 1024'));
+    expect(source, contains('maxHeight: kIsWeb ? null : 1024'));
+    expect(source, contains('imageQuality: kIsWeb ? null : 85'));
   });
 }
