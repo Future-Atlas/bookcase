@@ -558,7 +558,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 50,
-            decoration: _decoration('姓（Family name）'),
+            decoration: _editableDecoration('姓（Family name）', _familyNameController),
             validator: (value) =>
                 (value?.trim().isEmpty ?? true) ? '姓を入力してください。' : null,
           ),
@@ -568,7 +568,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 50,
-            decoration: _decoration('名（Given name）'),
+            decoration: _editableDecoration('名（Given name）', _givenNameController),
             validator: (value) =>
                 (value?.trim().isEmpty ?? true) ? '名を入力してください。' : null,
           ),
@@ -623,7 +623,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             keyboardType: TextInputType.phone,
-            decoration: _decoration('電話番号'),
+            decoration: _editableDecoration('電話番号', _phoneController),
             validator: (value) {
               final normalized = (value ?? '').replaceAll(
                 RegExp(r'[^0-9+]'),
@@ -697,7 +697,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 30,
-            decoration: _decoration('ユーザー名'),
+            decoration: _editableDecoration('ユーザー名', _usernameController),
             validator: (value) =>
                 (value?.trim().isEmpty ?? true) ? 'ユーザー名を入力してください。' : null,
           ),
@@ -715,9 +715,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             onChanged: (_) {
               if (_userIdError != null) setState(() => _userIdError = null);
             },
-            decoration: _decoration(
-              'ユーザーID',
-            ).copyWith(prefixText: '@', errorText: _userIdError),
+            decoration: _editableDecoration('ユーザーID', _userIdController).copyWith(prefixText: '@', errorText: _userIdError),
             validator: validatePublicUserId,
           ),
           const SizedBox(height: 24),
@@ -748,6 +746,26 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _editableDecoration(String label, TextEditingController controller) {
+    return _decoration(label).copyWith(
+      suffixIcon: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: '$labelをコピー',
+            onPressed: () => copyFieldText(controller),
+            icon: const Icon(Icons.copy_outlined, color: Colors.white70),
+          ),
+          IconButton(
+            tooltip: '$labelに貼り付け',
+            onPressed: () => pasteClipboardInto(controller),
+            icon: const Icon(Icons.content_paste_outlined, color: Colors.white70),
           ),
         ],
       ),
