@@ -542,7 +542,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 50,
-            decoration: _decoration('姓（Family name）'),
+            decoration: _editableDecoration('姓（Family name）', _familyNameController),
             validator: (value) =>
                 (value?.trim().isEmpty ?? true) ? '姓を入力してください。' : null,
           ),
@@ -552,7 +552,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 50,
-            decoration: _decoration('名（Given name）'),
+            decoration: _editableDecoration('名（Given name）', _givenNameController),
             validator: (value) =>
                 (value?.trim().isEmpty ?? true) ? '名を入力してください。' : null,
           ),
@@ -607,7 +607,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             keyboardType: TextInputType.phone,
-            decoration: _decoration('電話番号'),
+            decoration: _editableDecoration('電話番号', _phoneController),
             validator: (value) {
               final normalized = (value ?? '').replaceAll(
                 RegExp(r'[^0-9+]'),
@@ -681,7 +681,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 30,
-            decoration: _decoration('ユーザー名'),
+            decoration: _editableDecoration('ユーザー名', _usernameController),
             validator: (value) =>
                 (value?.trim().isEmpty ?? true) ? 'ユーザー名を入力してください。' : null,
           ),
@@ -699,9 +699,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             onChanged: (_) {
               if (_userIdError != null) setState(() => _userIdError = null);
             },
-            decoration: _decoration(
-              'ユーザーID',
-            ).copyWith(prefixText: '@', errorText: _userIdError),
+            decoration: _editableDecoration('ユーザーID', _userIdController).copyWith(prefixText: '@', errorText: _userIdError),
             validator: validatePublicUserId,
           ),
           const SizedBox(height: 24),
@@ -738,6 +736,26 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
     );
   }
 
+  InputDecoration _editableDecoration(String label, TextEditingController controller) {
+    return _decoration(label).copyWith(
+      suffixIcon: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: '$labelをコピー',
+            onPressed: () => Clipboard.setData(ClipboardData(text: controller.text)),
+            icon: const Icon(Icons.copy_outlined, color: Colors.white70),
+          ),
+          IconButton(
+            tooltip: '$labelに貼り付け',
+            onPressed: () => _pasteRegistrationText(controller),
+            icon: const Icon(Icons.content_paste_outlined, color: Colors.white70),
+          ),
+        ],
+      ),
+    );
+  }
+
   InputDecoration _decoration(String label) => InputDecoration(
     labelText: label,
     labelStyle: const TextStyle(color: Colors.white70),
@@ -766,6 +784,21 @@ String? validatePrivacyPassword(String? value) {
     return '大文字・小文字・数字をすべて含めてください。';
   }
   return null;
+}
+
+Future<void> _pasteRegistrationText(TextEditingController controller) async {
+  final clipboard = await Clipboard.getData('text/plain');
+  final pasted = clipboard?.text;
+  if (pasted == null) return;
+  final old = controller.value;
+  final selection = old.selection;
+  final start = selection.isValid ? selection.start : old.text.length;
+  final end = selection.isValid ? selection.end : old.text.length;
+  final next = old.text.replaceRange(start, end, pasted);
+  controller.value = TextEditingValue(
+    text: next,
+    selection: TextSelection.collapsed(offset: start + pasted.length),
+  );
 }
 
 class _PasswordField extends StatelessWidget {
@@ -807,6 +840,11 @@ class _PasswordField extends StatelessWidget {
         suffixIcon: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              tooltip: 'パスワードを貼り付け',
+              onPressed: () => _pasteRegistrationText(controller),
+              icon: const Icon(Icons.content_paste_outlined, color: Colors.white70),
+            ),
             IconButton(
               tooltip: 'パスワードをコピー',
               onPressed: () async {
