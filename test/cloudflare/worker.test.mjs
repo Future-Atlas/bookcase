@@ -129,6 +129,19 @@ test("Vercel fallback and Cloudflare share a Flutter-compatible CSP", async () =
   );
   const workerCsp = response.headers.get("content-security-policy");
   assert.equal(fallbackCsp, workerCsp);
+  // crop_your_image reads a browser-created blob URL while processing a
+  // selected avatar. The policy must allow only that local URL scheme, without
+  // relaxing network origins or granting all sources.
+  const connectSrc = workerCsp.split("; ").find(
+    (directive) => directive.startsWith("connect-src "),
+  );
+  assert.equal(connectSrc, "connect-src 'self' blob: https: wss:");
+  assert.equal(
+    fallbackCsp.split("; ").find(
+      (directive) => directive.startsWith("connect-src "),
+    ),
+    connectSrc,
+  );
   assert.match(fallbackCsp, /script-src[^;]*https:\/\/www\.gstatic\.com\/flutter-canvaskit\//);
   assert.doesNotMatch(fallbackCsp, /script-src[^;]*'unsafe-eval'/);
 });
