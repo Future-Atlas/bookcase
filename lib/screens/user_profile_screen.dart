@@ -22,6 +22,9 @@ import '../widgets/book_detail_dialog_frame.dart';
 import '../widgets/rakuten_book_link.dart';
 import '../widgets/book_detail_dialog.dart';
 import 'profile_book_search_screen.dart';
+import 'reading_calendar_tab.dart';
+import 'reading_timer_screen.dart';
+import '../models/reading_session.dart';
 import 'report_post_dialog.dart';
 import 'follow_list_screen.dart';
 import 'post_engagement_users_screen.dart';
@@ -289,6 +292,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   ProfileRelationship? _relationship;
   bool _isSocialActionInProgress = false;
   final Set<String> _pendingReactionPostIds = <String>{};
+  int _calendarVersion = 0;
 
   bool get _isOwnProfile => _relationship?.isOwnProfile ?? false;
 
@@ -307,7 +311,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     super.initState();
     _tabController = TabController(
       length:
-          2 +
+          3 +
           (FeatureFlags.favoritesUiEnabled ? 1 : 0) +
           (FeatureFlags.wantToReadUiEnabled ? 1 : 0),
       vsync: this,
@@ -922,6 +926,41 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
+  Future<void> _openCalendarBookSearch() async {
+    if (!_isOwnProfile) return;
+    final book = await Navigator.of(context).push<Book>(
+      MaterialPageRoute(
+        builder: (_) => const ProfileBookSearchScreen(calendarSelection: true),
+      ),
+    );
+    if (book == null || !mounted) return;
+    final recorded = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ReadingTimerScreen(
+          book: book,
+          accentColor: ProfilePageColors.colorFor(_profile?.pageColorKey),
+        ),
+      ),
+    );
+    if (recorded == true && mounted) {
+      setState(() => _calendarVersion++);
+    }
+  }
+
+  Future<void> _resumeCalendarTimer(ReadingSession session) async {
+    final recorded = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ReadingTimerScreen(
+          resuming: session,
+          accentColor: ProfilePageColors.colorFor(_profile?.pageColorKey),
+        ),
+      ),
+    );
+    if (recorded == true && mounted) {
+      setState(() => _calendarVersion++);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -971,19 +1010,33 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               centerTitle: true,
             )
           : null,
-      floatingActionButton: _profile == null || !_isOwnProfile
-          ? null
-          : FloatingActionButton(
-              heroTag: 'addReadBookFromProfile',
-              onPressed: _openBookSearch,
-              backgroundColor: Colors.black,
-              foregroundColor: Colors.white,
-              shape: const CircleBorder(
-                side: BorderSide(color: Colors.white24),
+      floatingActionButton: AnimatedBuilder(
+        animation: _tabController,
+        builder: (context, _) {
+          if (_profile == null || !_isOwnProfile) return const SizedBox.shrink();
+          final calendarSelected = _tabController.index == 2;
+          return FloatingActionButton(
+            heroTag: calendarSelected ? 'addCalendarReading' : 'addReadBookFromProfile',
+            onPressed: calendarSelected ? _openCalendarBookSearch : _openBookSearch,
+            backgroundColor: calendarSelected
+                ? (isDarkMode ? Colors.black : Colors.white)
+                : Colors.black,
+            foregroundColor: calendarSelected ? profileHeaderColor : Colors.white,
+            shape: CircleBorder(
+              side: BorderSide(
+                color: calendarSelected ? profileHeaderColor : Colors.white24,
+                width: 2,
               ),
-              tooltip: '読了した本を投稿',
-              child: const Icon(Icons.add, size: 32),
             ),
+            tooltip: calendarSelected ? 'カレンダーに追加' : '読了した本を投稿',
+            child: Icon(
+              Icons.add,
+              size: 32,
+              color: calendarSelected ? profileHeaderColor : Colors.white,
+            ),
+          );
+        },
+      ),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFFD00303)),
@@ -1014,6 +1067,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                         children: [
                           _buildPostsTab(),
                           _buildReadBooksTab(),
+                          if (_isOwnProfile)
+                            ReadingCalendarTab(
+                              key: ValueKey(_calendarVersion),
+                              accentColor: profileHeaderColor,
+                              onResume: _resumeCalendarTimer,
+                            )
+                          else
+                            const Center(child: Text('読書カレンダーは本人のみ閲覧できます。')),
                           if (FeatureFlags.favoritesUiEnabled)
                             _buildFavoritesTab(),
                           if (FeatureFlags.wantToReadUiEnabled)
@@ -1333,6 +1394,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         tabs: [
           const Tab(text: '投稿'),
           const Tab(text: 'My 本棚'),
+          const Tab(text: 'カレンダー'),
           if (FeatureFlags.favoritesUiEnabled) const Tab(text: 'お気に入り'),
           if (FeatureFlags.wantToReadUiEnabled) const Tab(text: '読みたい！'),
         ],
