@@ -283,7 +283,7 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
               label: Text(_error!),
             )
           else ...[
-            const Row(
+            Row(
               children: [
                 for (final label in ['月', '火', '水', '木', '金', '土', '日'])
                   Expanded(child: Center(child: Text(label))),
