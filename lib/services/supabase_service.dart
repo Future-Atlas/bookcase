@@ -1357,17 +1357,24 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
-  Future<String?> uploadProfileAvatar({required Uint8List bytes}) async {
+  Future<({String? url, String? error})> uploadProfileAvatar({required Uint8List bytes}) async {
     final profileId = activeProfileId;
-    if (!_isInitialized || _client == null || profileId.isEmpty) return null;
-    if (bytes.isEmpty || bytes.lengthInBytes > 5 * 1024 * 1024) return null;
+    if (!_isInitialized || _client == null || profileId.isEmpty ||
+        !isAuthenticated) {
+      return (url: null, error: 'ログイン状態を確認できません。再ログインしてください。');
+    }
+    if (bytes.isEmpty || bytes.lengthInBytes > 5 * 1024 * 1024) {
+      return (url: null, error: '画像の容量が5MB以下であることを確認してください。');
+    }
 
     final format = AvatarImageFormat.detect(bytes);
-    if (format == null) return null;
+    if (format == null) {
+      return (url: null, error: 'JPEG・PNG・WebP形式の画像を選択してください。');
+    }
     final path = '$profileId/avatar.${format.extension}';
 
+    final bucket = _client!.storage.from('avatars');
     try {
-      final bucket = _client!.storage.from('avatars');
       await bucket.uploadBinary(
         path,
         bytes,
@@ -1377,18 +1384,57 @@ class SupabaseService extends ChangeNotifier {
           cacheControl: '3600',
         ),
       );
-      final publicUrl = bucket.getPublicUrl(path);
-      final versionedUrl =
-          '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
-      await _client!
+    } on StorageException catch (e) {
+      debugPrint('Avatar storage upload failed: $e');
+      final reason = e.message.toLowerCase();
+      if (reason.contains('bucket not found') || reason.contains('not found')) {
+        return (url: null, error: '画像の保存先が利用できません。運営者にお問い合わせください。');
+      }
+      if (reason.contains('row-level security') ||
+          reason.contains('permission') ||
+          e.statusCode.toString() == '401' ||
+          e.statusCode.toString() == '403') {
+        return (url: null, error: '画像のアップロード権限を確認できません。再ログインしても直らない場合は運営者にお問い合わせください。');
+      }
+      if (e.statusCode.toString() == '413') {
+        return (url: null, error: '画像の容量が保存先の上限を超えています。');
+      }
+      return (url: null, error: '画像のアップロードに失敗しました。通信環境を確認して再度お試しください。');
+    } catch (e) {
+      debugPrint('Avatar storage upload failed: $e');
+      return (url: null, error: '画像のアップロードに失敗しました。通信環境を確認して再度お試しください。');
+    }
+
+    final publicUrl = bucket.getPublicUrl(path);
+    final versionedUrl =
+        '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+    try {
+      // Returning the row also detects RLS-blocked or missing profile updates;
+      // a bare UPDATE can return no rows without throwing.
+      final updated = await _client!
           .from('profiles')
           .update({'avatar_url': versionedUrl})
-          .eq('id', profileId);
+          .eq('id', profileId)
+          .select('avatar_url')
+          .maybeSingle();
+      if (updated?['avatar_url'] != versionedUrl) {
+        return (url: null, error: '画像は送信されましたが、プロフィールへの反映に失敗しました。ログイン状態を確認してください。');
+      }
       notifyListeners();
-      return versionedUrl;
+      return (url: versionedUrl, error: null);
+    } on PostgrestException catch (e) {
+      debugPrint('Avatar profile update failed: $e');
+      if (e.code == '42501' || e.code == '403' ||
+          e.message.toLowerCase().contains('permission')) {
+        return (url: null, error: '画像は送信されましたが、プロフィールの更新権限がありません。運営者にお問い合わせください。');
+      }
+      if (e.code == '23514' || e.message.contains('avatar_url_source_not_allowed')) {
+        return (url: null, error: '画像URLが保存先のセキュリティ設定で拒否されました。運営者にお問い合わせください。');
+      }
+      return (url: null, error: '画像は送信されましたが、プロフィールの更新に失敗しました。');
     } catch (e) {
-      debugPrint('Error uploading profile avatar: $e');
-      return null;
+      debugPrint('Avatar profile update failed: $e');
+      return (url: null, error: '画像は送信されましたが、プロフィールの更新に失敗しました。');
     }
   }
 
