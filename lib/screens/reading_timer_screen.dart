@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/book.dart';
 import '../models/reading_session.dart';
 import '../services/reading_session_service.dart';
+import '../widgets/book_cover_image.dart';
 
 class ReadingTimerScreen extends StatefulWidget {
   const ReadingTimerScreen({
@@ -105,7 +106,16 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
   Widget build(BuildContext context) {
     final session = _active ?? widget.resuming;
     final title = session?.bookTitle ?? widget.book?.title ?? '';
-    final coverUrl = session?.bookCoverUrl ?? widget.book?.coverUrl ?? '';
+    final book = widget.book ?? Book(
+      id: session!.bookId,
+      title: session.bookTitle,
+      author: '',
+      publisher: '',
+      pubDate: '',
+      isbn: session.bookIsbn,
+      coverUrl: session.bookCoverUrl,
+      coverSource: session.bookCoverSource,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('読書タイマー')),
@@ -119,17 +129,13 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
                 child: ClipOval(
                   child: SizedBox.square(
                     dimension: 112,
-                    child: coverUrl.isEmpty
-                        ? const ColoredBox(
-                            color: Colors.black12,
-                            child: Icon(Icons.menu_book, size: 48),
-                          )
-                        : Image.network(
-                            coverUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                const Icon(Icons.menu_book, size: 48),
-                          ),
+                    child: ColoredBox(
+                      color: Colors.black12,
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: BookCoverImage(book: book),
+                      ),
+                    ),
                   ),
                 ),
               ),

@@ -32,6 +32,8 @@ class ReadingSessionService {
         'p_book_id': book.id,
         'p_book_title': book.title,
         'p_book_cover_url': book.coverUrl,
+        'p_book_isbn': book.isbn,
+        'p_book_cover_source': book.coverSource,
       },
     );
     final row = await _client

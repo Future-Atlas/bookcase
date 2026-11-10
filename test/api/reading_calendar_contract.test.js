@@ -21,7 +21,7 @@ test("reading timer timestamps and cap are enforced in authenticated RPCs", () =
   assert.match(migration, /RETURNS uuid[\s\S]*SECURITY DEFINER SET search_path = ''/i);
   assert.match(migration, /least\(clock_timestamp\(\), started_at \+ interval '24 hours'\)/i);
   assert.match(migration, /REVOKE ALL ON FUNCTION public\.finish_reading_session/);
-  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.start_reading_session\(text,text,text\)/);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.start_reading_session\(text,text,text,text,text\)/);
 });
 
 test("registration clipboard and calendar stay separate from normal posting", () => {

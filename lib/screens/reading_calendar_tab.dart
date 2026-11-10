@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/reading_session.dart';
+import '../models/book.dart';
+import '../widgets/book_cover_image.dart';
 import '../services/reading_session_service.dart';
 import '../widgets/book_detail_dialog_frame.dart';
 
@@ -82,23 +84,29 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
     );
   }
 
-  Widget _roundCover(String coverUrl, {double size = 52}) {
+  Widget _roundCover(ReadingSession session, {double size = 52}) {
+    final book = Book(
+      id: session.bookId,
+      title: session.bookTitle,
+      author: '',
+      publisher: '',
+      pubDate: '',
+      isbn: session.bookIsbn,
+      coverUrl: session.bookCoverUrl,
+      coverSource: session.bookCoverSource,
+    );
+    // BookCoverImage applies verified source rules and preserves the entire
+    // jacket. Inset the rectangle inside the circle instead of cropping art.
     return ClipOval(
       child: SizedBox.square(
         dimension: size,
-        child: coverUrl.trim().isEmpty
-            ? const ColoredBox(
-                color: Colors.black12,
-                child: Icon(Icons.menu_book),
-              )
-            : Image.network(
-                coverUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const ColoredBox(
-                  color: Colors.black12,
-                  child: Icon(Icons.menu_book),
-                ),
-              ),
+        child: ColoredBox(
+          color: Colors.black12,
+          child: Padding(
+            padding: EdgeInsets.all(size * 0.15),
+            child: BookCoverImage(book: book),
+          ),
+        ),
       ),
     );
   }
@@ -149,7 +157,7 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
                                   width: 90,
                                   child: Column(
                                     children: [
-                                      _roundCover(session.bookCoverUrl, size: 66),
+                                      _roundCover(session, size: 66),
                                       const SizedBox(height: 4),
                                       Text(
                                         session.bookTitle,
@@ -336,7 +344,7 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
                                   width: 74,
                                   child: Column(
                                     children: [
-                                      _roundCover(session.bookCoverUrl),
+                                      _roundCover(session),
                                       const SizedBox(height: 3),
                                       Text(
                                         session.bookTitle,

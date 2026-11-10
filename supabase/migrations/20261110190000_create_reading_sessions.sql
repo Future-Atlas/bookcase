@@ -6,6 +6,8 @@ CREATE TABLE public.reading_sessions (
   profile_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   book_id text NOT NULL CHECK (char_length(book_id) BETWEEN 1 AND 256),
   book_title text NOT NULL CHECK (char_length(book_title) BETWEEN 1 AND 300),
+  book_isbn text NOT NULL DEFAULT '' CHECK (char_length(book_isbn) <= 32),
+  book_cover_source text NOT NULL DEFAULT '' CHECK (char_length(book_cover_source) <= 48),
   book_cover_url text NOT NULL DEFAULT '' CHECK (char_length(book_cover_url) <= 2048),
   started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ended_at timestamptz,
@@ -32,7 +34,8 @@ CREATE POLICY "Readers can see only their own reading sessions"
 -- Serialized by locking the authenticated user's profile row, so concurrent
 -- requests cannot create multiple active timers for the same user.
 CREATE OR REPLACE FUNCTION public.start_reading_session(
-  p_book_id text, p_book_title text, p_book_cover_url text DEFAULT ''
+  p_book_id text, p_book_title text, p_book_cover_url text DEFAULT '',
+  p_book_isbn text DEFAULT '', p_book_cover_source text DEFAULT ''
 )
 RETURNS uuid
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
@@ -55,7 +58,9 @@ BEGIN
   IF p_book_id IS NULL OR char_length(btrim(p_book_id)) NOT BETWEEN 1 AND 256
      OR p_book_title IS NULL
      OR char_length(btrim(p_book_title)) NOT BETWEEN 1 AND 300
-     OR char_length(coalesce(p_book_cover_url, '')) > 2048 THEN
+     OR char_length(coalesce(p_book_cover_url, '')) > 2048
+     OR char_length(coalesce(p_book_isbn, '')) > 32
+     OR char_length(coalesce(p_book_cover_source, '')) > 48 THEN
     RAISE EXCEPTION 'Invalid book data' USING ERRCODE = '23514';
   END IF;
 
@@ -74,10 +79,12 @@ BEGIN
   END IF;
 
   INSERT INTO public.reading_sessions
-      (profile_id, book_id, book_title, book_cover_url)
+      (profile_id, book_id, book_title, book_cover_url,
+       book_isbn, book_cover_source)
   VALUES
       (requester, btrim(p_book_id), btrim(p_book_title),
-       coalesce(p_book_cover_url, ''))
+       coalesce(p_book_cover_url, ''),
+       coalesce(p_book_isbn, ''), coalesce(p_book_cover_source, ''))
   RETURNING id INTO new_id;
 
   RETURN new_id;
@@ -112,9 +119,9 @@ BEGIN
 END;
 $body$;
 
-REVOKE ALL ON FUNCTION public.start_reading_session(text,text,text)
+REVOKE ALL ON FUNCTION public.start_reading_session(text,text,text,text,text)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.start_reading_session(text,text,text)
+GRANT EXECUTE ON FUNCTION public.start_reading_session(text,text,text,text,text)
   TO authenticated;
 REVOKE ALL ON FUNCTION public.finish_reading_session(uuid)
   FROM PUBLIC, anon, authenticated;

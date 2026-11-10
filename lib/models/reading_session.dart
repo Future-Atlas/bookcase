@@ -5,6 +5,8 @@ class ReadingSession {
     required this.bookId,
     required this.bookTitle,
     required this.bookCoverUrl,
+    this.bookIsbn = '',
+    this.bookCoverSource = '',
     required this.startedAt,
     this.endedAt,
   });
@@ -14,6 +16,8 @@ class ReadingSession {
   final String bookId;
   final String bookTitle;
   final String bookCoverUrl;
+  final String bookIsbn;
+  final String bookCoverSource;
   final DateTime startedAt;
   final DateTime? endedAt;
 
@@ -26,6 +30,8 @@ class ReadingSession {
       bookId: data['book_id'].toString(),
       bookTitle: data['book_title'].toString(),
       bookCoverUrl: data['book_cover_url']?.toString() ?? '',
+      bookIsbn: data['book_isbn']?.toString() ?? '',
+      bookCoverSource: data['book_cover_source']?.toString() ?? '',
       startedAt: DateTime.parse(data['started_at'].toString()).toLocal(),
       endedAt: data['ended_at'] == null
           ? null
