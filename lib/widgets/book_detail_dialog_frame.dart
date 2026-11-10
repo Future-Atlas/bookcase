@@ -35,7 +35,7 @@ class BookDetailDialogFrame extends StatelessWidget {
             child: Material(
               color: Theme.of(context).scaffoldBackgroundColor,
               shape: CircleBorder(
-                side: BorderSide(color: closeColor, width: 2),
+                side: const BorderSide(color: Color(0xFFD00303), width: 2),
               ),
               child: IconButton(
                 key: const ValueKey('book-detail-close-button'),
