@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../services/supabase_service.dart';
 import '../utils/public_user_id.dart';
+import '../utils/text_field_clipboard.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_screen.dart';
 import 'totp_authentication_screen.dart';
@@ -822,6 +823,11 @@ class _PasswordField extends StatelessWidget {
         suffixIcon: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              tooltip: 'パスワードを貼り付け',
+              onPressed: () => pasteClipboardInto(controller),
+              icon: const Icon(Icons.content_paste_outlined, color: Colors.white70),
+            ),
             IconButton(
               tooltip: 'パスワードをコピー',
               onPressed: () async {
