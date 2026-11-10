@@ -953,102 +953,114 @@ class _BookListScreenState extends State<BookListScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                          if (widget.initialGenre == null &&
-                              _controller.searchQuery.isEmpty)
-                            _buildServiceIntroduction(),
-                          if (_controller.searchQuery.isNotEmpty)
-                            _buildSearchResults()
-                          else ...[
-                            if ((widget.initialGenre == null &&
-                                    (_controller.isLoadingFeatured ||
-                                        _controller
-                                            .featuredBooks
-                                            .isNotEmpty)) ||
-                                widget.initialGenre == 'featured')
-                              _buildFeaturedBooksSection(),
-                            if (widget.initialGenre == null ||
-                                widget.initialGenre == 'popular')
-                              _buildGenreSection(
-                                title: '人気作品',
-                                scrollerKey: _popularScrollerKey,
-                                bookList: _controller.popularBooks,
-                                pageNumber: _controller.popularPage,
-                                onLoadMore: _controller.loadMorePopular,
-                                onLoadPrevious: _controller.loadPreviousPopular,
-                                canLoadPrevious:
-                                    _controller.canLoadPreviousPopular,
-                                isLoadingMore: _controller.isLoadingMorePopular,
-                                hasMore: _controller.hasMorePopular,
-                                isLoadingInitial: _controller.isLoadingPopular,
-                              ),
-                            // Only place the genre ad between real book rows.
-                            if (kIsWeb &&
-                                timelineAdDisplayReady &&
-                                widget.initialGenre == null &&
-                                _controller.popularBooks.isNotEmpty &&
-                                _controller.recommendedBooks.isNotEmpty)
-                              const TimelineAdSlot(
-                                key: ValueKey('home-ad-between-popular-new'),
-                                slotIndex: 0,
-                              ),
-                            if (widget.initialGenre == null ||
-                                widget.initialGenre == 'recommended')
-                              _buildGenreSection(
-                                title: '新着',
-                                scrollerKey: _newArrivalsScrollerKey,
-                                bookList: _controller.recommendedBooks,
-                                pageNumber: _controller.recommendedPage,
-                                onLoadMore: _controller.loadMoreRecommended,
-                                onLoadPrevious:
-                                    _controller.loadPreviousRecommended,
-                                canLoadPrevious:
-                                    _controller.canLoadPreviousRecommended,
-                                isLoadingMore:
-                                    _controller.isLoadingMoreRecommended,
-                                hasMore: _controller.hasMoreRecommended,
-                                isLoadingInitial:
-                                    _controller.isLoadingRecommended,
-                              ),
-                            if (kIsWeb &&
-                                timelineAdDisplayReady &&
-                                widget.initialGenre == null &&
-                                _controller.recommendedBooks.isNotEmpty &&
-                                _controller.westernBooks.isNotEmpty)
-                              const TimelineAdSlot(
-                                key: ValueKey('home-ad-between-new-western'),
-                                slotIndex: 1,
-                              ),
-                            if (widget.initialGenre == null ||
-                                widget.initialGenre == 'western')
-                              _buildGenreSection(
-                                title: '洋書',
-                                scrollerKey: _westernScrollerKey,
-                                bookList: _controller.westernBooks,
-                                pageNumber: _controller.westernPage,
-                                onLoadMore: _controller.loadMoreWestern,
-                                onLoadPrevious: _controller.loadPreviousWestern,
-                                canLoadPrevious:
-                                    _controller.canLoadPreviousWestern,
-                                isLoadingMore: _controller.isLoadingMoreWestern,
-                                hasMore: _controller.hasMoreWestern,
-                                isLoadingInitial: _controller.isLoadingWestern,
-                              ),
-                            if (widget.initialGenre == null) ...[
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: PublicPostsLink(
-                                  sectionHeading: true,
-                                  foregroundColor: ProfilePageColors.colorFor(
-                                    context
-                                        .watch<SupabaseService>()
-                                        .activePageColorKey,
-                                  ),
-                                ),
-                              ),
-                              _buildTimeline(),
-                            ],
-                          ],
-                          _buildFooter(),
+                                if (widget.initialGenre == null &&
+                                    _controller.searchQuery.isEmpty)
+                                  _buildServiceIntroduction(),
+                                if (_controller.searchQuery.isNotEmpty)
+                                  _buildSearchResults()
+                                else ...[
+                                  if ((widget.initialGenre == null &&
+                                          (_controller.isLoadingFeatured ||
+                                              _controller
+                                                  .featuredBooks
+                                                  .isNotEmpty)) ||
+                                      widget.initialGenre == 'featured')
+                                    _buildFeaturedBooksSection(),
+                                  if (widget.initialGenre == null ||
+                                      widget.initialGenre == 'popular')
+                                    _buildGenreSection(
+                                      title: '人気作品',
+                                      scrollerKey: _popularScrollerKey,
+                                      bookList: _controller.popularBooks,
+                                      pageNumber: _controller.popularPage,
+                                      onLoadMore: _controller.loadMorePopular,
+                                      onLoadPrevious:
+                                          _controller.loadPreviousPopular,
+                                      canLoadPrevious:
+                                          _controller.canLoadPreviousPopular,
+                                      isLoadingMore:
+                                          _controller.isLoadingMorePopular,
+                                      hasMore: _controller.hasMorePopular,
+                                      isLoadingInitial:
+                                          _controller.isLoadingPopular,
+                                    ),
+                                  // Only place the genre ad between real book rows.
+                                  if (kIsWeb &&
+                                      timelineAdDisplayReady &&
+                                      widget.initialGenre == null &&
+                                      _controller.popularBooks.isNotEmpty &&
+                                      _controller.recommendedBooks.isNotEmpty)
+                                    const TimelineAdSlot(
+                                      key: ValueKey(
+                                        'home-ad-between-popular-new',
+                                      ),
+                                      slotIndex: 0,
+                                    ),
+                                  if (widget.initialGenre == null ||
+                                      widget.initialGenre == 'recommended')
+                                    _buildGenreSection(
+                                      title: '新着',
+                                      scrollerKey: _newArrivalsScrollerKey,
+                                      bookList: _controller.recommendedBooks,
+                                      pageNumber: _controller.recommendedPage,
+                                      onLoadMore:
+                                          _controller.loadMoreRecommended,
+                                      onLoadPrevious:
+                                          _controller.loadPreviousRecommended,
+                                      canLoadPrevious: _controller
+                                          .canLoadPreviousRecommended,
+                                      isLoadingMore:
+                                          _controller.isLoadingMoreRecommended,
+                                      hasMore: _controller.hasMoreRecommended,
+                                      isLoadingInitial:
+                                          _controller.isLoadingRecommended,
+                                    ),
+                                  if (kIsWeb &&
+                                      timelineAdDisplayReady &&
+                                      widget.initialGenre == null &&
+                                      _controller.recommendedBooks.isNotEmpty &&
+                                      _controller.westernBooks.isNotEmpty)
+                                    const TimelineAdSlot(
+                                      key: ValueKey(
+                                        'home-ad-between-new-western',
+                                      ),
+                                      slotIndex: 1,
+                                    ),
+                                  if (widget.initialGenre == null ||
+                                      widget.initialGenre == 'western')
+                                    _buildGenreSection(
+                                      title: '洋書',
+                                      scrollerKey: _westernScrollerKey,
+                                      bookList: _controller.westernBooks,
+                                      pageNumber: _controller.westernPage,
+                                      onLoadMore: _controller.loadMoreWestern,
+                                      onLoadPrevious:
+                                          _controller.loadPreviousWestern,
+                                      canLoadPrevious:
+                                          _controller.canLoadPreviousWestern,
+                                      isLoadingMore:
+                                          _controller.isLoadingMoreWestern,
+                                      hasMore: _controller.hasMoreWestern,
+                                      isLoadingInitial:
+                                          _controller.isLoadingWestern,
+                                    ),
+                                  if (widget.initialGenre == null) ...[
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: PublicPostsLink(
+                                        sectionHeading: true,
+                                        foregroundColor:
+                                            ProfilePageColors.colorFor(
+                                              context
+                                                  .watch<SupabaseService>()
+                                                  .activePageColorKey,
+                                            ),
+                                      ),
+                                    ),
+                                    _buildTimeline(),
+                                  ],
+                                ],
+                                _buildFooter(),
                               ],
                             ),
                           ),

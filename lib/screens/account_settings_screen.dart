@@ -116,11 +116,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     final error = await service.beginPrivacyPasswordRecovery();
     if (!mounted) return;
     setState(() => _startingPrivacyRecovery = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(error ?? 'GoogleまたはXで本人確認してください。'),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error ?? 'GoogleまたはXで本人確認してください。')));
   }
 
   Future<void> _deleteAccount() async {
@@ -195,9 +193,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                   ListTile(
                     leading: const Icon(Icons.manage_accounts_outlined),
                     title: const Text('アカウント設定'),
-                    subtitle: const Text(
-                      'プロフィール画像・ユーザー名・ユーザーID（変更不可）・鍵アカウント',
-                    ),
+                    subtitle: const Text('プロフィール画像・ユーザー名・ユーザーID（変更不可）・鍵アカウント'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _push(const _PublicAccountSettingsScreen()),
                   ),

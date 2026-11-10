@@ -829,9 +829,7 @@ class _PasswordField extends StatelessWidget {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text(
-                      'パスワードをコピーしました。共有端末ではクリップボードの取り扱いにご注意ください。',
-                    ),
+                    content: Text('パスワードをコピーしました。共有端末ではクリップボードの取り扱いにご注意ください。'),
                   ),
                 );
               },
