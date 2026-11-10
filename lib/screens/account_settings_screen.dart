@@ -14,6 +14,7 @@ import '../models/profile_page_color.dart';
 import '../services/supabase_service.dart';
 import '../services/theme_service.dart';
 import '../utils/avatar_image_format.dart';
+import '../utils/text_field_clipboard.dart';
 import 'community_guidelines_screen.dart';
 import 'contact_screen.dart';
 import 'external_transmission_screen.dart';
@@ -1287,16 +1288,27 @@ class _PrivacyPasswordDialogState extends State<_PrivacyPasswordDialog> {
         controller: _controller,
         autofocus: true,
         obscureText: _obscure,
+        enableInteractiveSelection: true,
         onSubmitted: (value) {
           if (value.isNotEmpty) Navigator.of(context).pop(value);
         },
         decoration: InputDecoration(
           labelText: '個人情報変更用パスワード',
           border: const OutlineInputBorder(),
-          suffixIcon: IconButton(
-            tooltip: _obscure ? 'パスワードを表示' : 'パスワードを隠す',
-            onPressed: () => setState(() => _obscure = !_obscure),
-            icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'パスワードを貼り付け',
+                onPressed: () => pasteClipboardInto(_controller),
+                icon: const Icon(Icons.content_paste_outlined),
+              ),
+              IconButton(
+                tooltip: _obscure ? 'パスワードを表示' : 'パスワードを隠す',
+                onPressed: () => setState(() => _obscure = !_obscure),
+                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+              ),
+            ],
           ),
         ),
       ),
@@ -1380,14 +1392,29 @@ class _ChangePrivacyPasswordScreenState
             TextFormField(
               controller: _passwordController,
               obscureText: _obscure,
+              enableInteractiveSelection: true,
               decoration: InputDecoration(
                 labelText: '新しいパスワード',
                 border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                  icon: Icon(
-                    _obscure ? Icons.visibility : Icons.visibility_off,
-                  ),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: '新しいパスワードを貼り付け',
+                      onPressed: () => pasteClipboardInto(_passwordController),
+                      icon: const Icon(Icons.content_paste_outlined),
+                    ),
+                    IconButton(
+                      tooltip: '新しいパスワードをコピー',
+                      onPressed: () => copyFieldText(_passwordController),
+                      icon: const Icon(Icons.copy_outlined),
+                    ),
+                    IconButton(
+                      tooltip: _obscure ? 'パスワードを表示' : 'パスワードを隠す',
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                      icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                    ),
+                  ],
                 ),
               ),
               validator: validatePrivacyPassword,
@@ -1396,9 +1423,25 @@ class _ChangePrivacyPasswordScreenState
             TextFormField(
               controller: _confirmationController,
               obscureText: _obscure,
-              decoration: const InputDecoration(
+              enableInteractiveSelection: true,
+              decoration: InputDecoration(
                 labelText: '新しいパスワード（確認）',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: '確認用パスワードを貼り付け',
+                      onPressed: () => pasteClipboardInto(_confirmationController),
+                      icon: const Icon(Icons.content_paste_outlined),
+                    ),
+                    IconButton(
+                      tooltip: '確認用パスワードをコピー',
+                      onPressed: () => copyFieldText(_confirmationController),
+                      icon: const Icon(Icons.copy_outlined),
+                    ),
+                  ],
+                ),
               ),
               validator: (value) =>
                   value != _passwordController.text ? 'パスワードが一致しません。' : null,

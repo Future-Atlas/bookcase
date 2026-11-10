@@ -11,6 +11,7 @@ import '../models/post.dart';
 import '../models/post_reply.dart';
 import '../models/social_models.dart';
 import '../models/profile_page_color.dart';
+import '../utils/mobile_bookshelf_geometry.dart';
 import '../services/content_safety_service.dart';
 import '../widgets/post_card.dart';
 import '../widgets/book_card.dart';
@@ -1540,22 +1541,26 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Keep three books per row, but size each card approximately like a
-        // four-column grid so the bookshelf has comfortable side whitespace.
+        // Smartphone shelf: 2:8:1:8:1:8:2, including the entire
+        // visible card (not just its internal book cover).
+        final mobile = compactThreeColumn && constraints.maxWidth < 600;
+        final geometry = MobileBookshelfGeometry(constraints.maxWidth);
         final compactPadding = constraints.maxWidth * 0.125;
-        final horizontalPadding = compactThreeColumn
-            ? (compactPadding < 16 ? 16.0 : compactPadding)
-            : 16.0;
+        final horizontalPadding = mobile
+            ? geometry.outerPadding
+            : compactThreeColumn
+                ? (compactPadding < 16 ? 16.0 : compactPadding)
+                : 16.0;
         return GridView.builder(
           padding: EdgeInsets.symmetric(
             horizontal: horizontalPadding,
-            vertical: 16,
+            vertical: mobile ? geometry.verticalPadding : 16,
           ),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
-            childAspectRatio: 0.62,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
+            childAspectRatio: mobile ? geometry.childAspectRatio : 0.62,
+            crossAxisSpacing: mobile ? geometry.interBookGap : 12,
+            mainAxisSpacing: mobile ? geometry.rowGap : 12,
           ),
           itemCount: booksList.length,
           itemBuilder: (context, index) {
@@ -1564,7 +1569,11 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               book: book,
               width: double.infinity,
               height: 140,
-              coverHeightRatio: showDescription ? (2 / 3) : (1 / 3),
+              coverHeightRatio: mobile
+                  ? geometry.coverHeightRatio
+                  : showDescription ? (2 / 3) : (1 / 3),
+              marginRight: mobile ? 0 : 16,
+              marginBottom: mobile ? 0 : 12,
               showDescription: showDescription,
               descriptionMaxLines: 3,
               onTap: () => _showSearchedBookDetailDialog(book),
