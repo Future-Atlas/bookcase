@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../services/supabase_service.dart';
@@ -553,6 +554,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
           const SizedBox(height: 22),
           TextFormField(
             controller: _familyNameController,
+            enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 50,
             decoration: _decoration('姓（Family name）'),
@@ -562,6 +564,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
           const SizedBox(height: 10),
           TextFormField(
             controller: _givenNameController,
+            enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 50,
             decoration: _decoration('名（Given name）'),
@@ -616,6 +619,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
           ],
           TextFormField(
             controller: _phoneController,
+            enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             keyboardType: TextInputType.phone,
             decoration: _decoration('電話番号'),
@@ -689,6 +693,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
           const SizedBox(height: 22),
           TextFormField(
             controller: _usernameController,
+            enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 30,
             decoration: _decoration('ユーザー名'),
@@ -698,6 +703,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
           const SizedBox(height: 10),
           TextFormField(
             controller: _userIdController,
+            enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 20,
             keyboardType: TextInputType.visiblePassword,
@@ -797,6 +803,7 @@ class _PasswordField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
+      enableInteractiveSelection: true,
       enableSuggestions: false,
       autocorrect: false,
       style: const TextStyle(color: Colors.white),
@@ -812,15 +819,35 @@ class _PasswordField extends StatelessWidget {
         errorBorder: const OutlineInputBorder(
           borderSide: BorderSide(color: Colors.redAccent),
         ),
-        suffixIcon: IconButton(
-          tooltip: obscureText ? 'パスワードを表示' : 'パスワードを隠す',
-          onPressed: onToggleVisibility,
-          icon: Icon(
-            obscureText
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined,
-            color: Colors.white70,
-          ),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'パスワードをコピー',
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: controller.text));
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'パスワードをコピーしました。共有端末ではクリップボードの取り扱いにご注意ください。',
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.copy_outlined, color: Colors.white70),
+            ),
+            IconButton(
+              tooltip: obscureText ? 'パスワードを表示' : 'パスワードを隠す',
+              onPressed: onToggleVisibility,
+              icon: Icon(
+                obscureText
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                color: Colors.white70,
+              ),
+            ),
+          ],
         ),
       ),
       validator: validator,

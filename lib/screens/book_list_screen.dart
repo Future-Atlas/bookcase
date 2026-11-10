@@ -26,6 +26,7 @@ import '../widgets/post_reply_dialog.dart';
 import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
 import '../widgets/book_detail_dialog.dart';
+import '../widgets/book_detail_dialog_frame.dart';
 import '../widgets/rakuten_book_link.dart';
 import '../widgets/public_posts_link.dart';
 import '../utils/book_carousel_auto_advance.dart';
@@ -455,12 +456,7 @@ class _BookListScreenState extends State<BookListScreen> {
                 ? service.isBookWantedByCurrentUser(book.id)
                 : Future<bool>.value(false);
 
-            return Dialog(
-              backgroundColor: const Color(0xFFE6E6E6),
-              insetPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 24,
-              ),
+            return BookDetailDialogFrame(
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxWidth: 920,
@@ -934,22 +930,29 @@ class _BookListScreenState extends State<BookListScreen> {
         return Container(
           width: double.infinity,
           color: Theme.of(context).scaffoldBackgroundColor,
-          child: RefreshIndicator(
-            onRefresh: () => _controller.loadData(context),
-            color: const Color(0xFFD00303),
-            child: Listener(
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildTopHeroImage(),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: [
+              Padding(
+                key: const ValueKey('home-sticky-search'),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _buildSearchBar(),
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () => _controller.loadData(context),
+                  color: const Color(0xFFD00303),
+                  child: Listener(
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSearchBar(),
+                          _buildTopHeroImage(),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                           if (widget.initialGenre == null &&
                               _controller.searchQuery.isEmpty)
                             _buildServiceIntroduction(),
@@ -1046,13 +1049,16 @@ class _BookListScreenState extends State<BookListScreen> {
                             ],
                           ],
                           _buildFooter(),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         );
       },
@@ -1101,7 +1107,7 @@ class _BookListScreenState extends State<BookListScreen> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       height: 96,
-      margin: const EdgeInsets.only(bottom: 24),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
