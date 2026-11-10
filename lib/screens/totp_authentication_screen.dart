@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../services/supabase_service.dart';
 import '../utils/japanese_datetime.dart';
+import '../utils/text_field_clipboard.dart';
 import 'contact_screen.dart';
 
 class TotpEnrollmentScreen extends StatefulWidget {
@@ -143,14 +144,22 @@ class _TotpEnrollmentScreenState extends State<TotpEnrollmentScreen> {
                           controller: _codeController,
                           keyboardType: TextInputType.number,
                           maxLength: 6,
+                          enableInteractiveSelection: true,
                           autofillHints: const [AutofillHints.oneTimeCode],
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 22,
                           ),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: '認証アプリの6桁コード',
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              tooltip: '認証コードを貼り付け',
+                              onPressed: _verifying
+                                  ? null
+                                  : () => pasteClipboardInto(_codeController),
+                              icon: const Icon(Icons.content_paste_outlined),
+                            ),
                           ),
                           onSubmitted: (_) => _verify(),
                         ),
@@ -358,11 +367,19 @@ class _TotpChallengeScreenState extends State<TotpChallengeScreen> {
                       enabled: !locked && _factorId != null,
                       keyboardType: TextInputType.number,
                       maxLength: 6,
+                      enableInteractiveSelection: true,
                       autofillHints: const [AutofillHints.oneTimeCode],
                       style: const TextStyle(color: Colors.white, fontSize: 24),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: '6桁コード',
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          tooltip: '認証コードを貼り付け',
+                          onPressed: locked || _verifying || _factorId == null
+                              ? null
+                              : () => pasteClipboardInto(_codeController),
+                          icon: const Icon(Icons.content_paste_outlined),
+                        ),
                       ),
                       onSubmitted: (_) => _verify(),
                     ),
@@ -553,12 +570,24 @@ class _TotpRecoveryPasswordDialogState
           TextField(
             controller: _controller,
             obscureText: _obscure,
+            enableInteractiveSelection: true,
             decoration: InputDecoration(
               labelText: '個人情報変更用パスワード',
               border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
-                onPressed: () => setState(() => _obscure = !_obscure),
-                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'パスワードを貼り付け',
+                    onPressed: () => pasteClipboardInto(_controller),
+                    icon: const Icon(Icons.content_paste_outlined),
+                  ),
+                  IconButton(
+                    tooltip: _obscure ? 'パスワードを表示' : 'パスワードを隠す',
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                    icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                  ),
+                ],
               ),
             ),
           ),
