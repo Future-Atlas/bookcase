@@ -6,7 +6,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../api/rakuten_api.dart';
+import '../api/book_catalog_lookup.dart';
 import '../models/book.dart';
 import 'legal_document_versions.dart';
 import '../models/user_profile.dart';
@@ -517,6 +517,9 @@ class SupabaseService extends ChangeNotifier {
     _sessionGuardTimer = null;
   }
 
+  /// Verify a signed-in JWT still belongs to a live Supabase Auth session.
+  /// An IP change alone is not proof of account takeover (mobile networks
+  /// legitimately change IPs, and caller-provided forwarding headers may lie).
   Future<bool> _enforceSessionIpGuard() async {
     if (!_isInitialized || _client == null || !isAuthenticated) return true;
     final checkedToken = _client!.auth.currentSession?.accessToken;
@@ -1357,9 +1360,13 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
-  Future<({String? url, String? error})> uploadProfileAvatar({required Uint8List bytes}) async {
+  Future<({String? url, String? error})> uploadProfileAvatar({
+    required Uint8List bytes,
+  }) async {
     final profileId = activeProfileId;
-    if (!_isInitialized || _client == null || profileId.isEmpty ||
+    if (!_isInitialized ||
+        _client == null ||
+        profileId.isEmpty ||
         !isAuthenticated) {
       return (url: null, error: 'ログイン状態を確認できません。再ログインしてください。');
     }
@@ -1394,7 +1401,10 @@ class SupabaseService extends ChangeNotifier {
           reason.contains('permission') ||
           e.statusCode.toString() == '401' ||
           e.statusCode.toString() == '403') {
-        return (url: null, error: '画像のアップロード権限を確認できません。再ログインしても直らない場合は運営者にお問い合わせください。');
+        return (
+          url: null,
+          error: '画像のアップロード権限を確認できません。再ログインしても直らない場合は運営者にお問い合わせください。',
+        );
       }
       if (e.statusCode.toString() == '413') {
         return (url: null, error: '画像の容量が保存先の上限を超えています。');
@@ -1418,17 +1428,25 @@ class SupabaseService extends ChangeNotifier {
           .select('avatar_url')
           .maybeSingle();
       if (updated?['avatar_url'] != versionedUrl) {
-        return (url: null, error: '画像は送信されましたが、プロフィールへの反映に失敗しました。ログイン状態を確認してください。');
+        return (
+          url: null,
+          error: '画像は送信されましたが、プロフィールへの反映に失敗しました。ログイン状態を確認してください。',
+        );
       }
       notifyListeners();
       return (url: versionedUrl, error: null);
     } on PostgrestException catch (e) {
       debugPrint('Avatar profile update failed: $e');
-      if (e.code == '42501' || e.code == '403' ||
+      if (e.code == '42501' ||
+          e.code == '403' ||
           e.message.toLowerCase().contains('permission')) {
-        return (url: null, error: '画像は送信されましたが、プロフィールの更新権限がありません。運営者にお問い合わせください。');
+        return (
+          url: null,
+          error: '画像は送信されましたが、プロフィールの更新権限がありません。運営者にお問い合わせください。',
+        );
       }
-      if (e.code == '23514' || e.message.contains('avatar_url_source_not_allowed')) {
+      if (e.code == '23514' ||
+          e.message.contains('avatar_url_source_not_allowed')) {
         return (url: null, error: '画像URLが保存先のセキュリティ設定で拒否されました。運営者にお問い合わせください。');
       }
       return (url: null, error: '画像は送信されましたが、プロフィールの更新に失敗しました。');
@@ -1972,9 +1990,10 @@ class SupabaseService extends ChangeNotifier {
       return await _client!
           .from('notifications')
           .select(
-            'id, type, actor_id, post_id, reply_id, read_at, created_at, '
+            'id, type, actor_id, post_id, reply_id, reading_session_id, read_at, created_at, '
             'actor:profiles!notifications_actor_id_fkey(username, user_id, avatar_url), '
-            'post:posts!notifications_post_id_fkey(book_id, book_title)',
+            'post:posts!notifications_post_id_fkey(book_id, book_title), '
+            'reading:reading_sessions!notifications_reading_session_id_fkey(book_title)',
           )
           .eq('recipient_id', profileId)
           .order('created_at', ascending: false)
@@ -2021,14 +2040,15 @@ class SupabaseService extends ChangeNotifier {
         final actorId = row['actor_id']?.toString() ?? '';
         final bookId = post?['book_id']?.toString();
         String? bookTitle;
-        bookTitle = post?['book_title']?.toString() ??
+        bookTitle =
+            post?['book_title']?.toString() ??
             reading?['book_title']?.toString();
         if ((bookTitle == null || bookTitle.isEmpty) &&
             bookId != null &&
             bookId.isNotEmpty) {
           bookTitle = bookCache[bookId];
           if (bookTitle == null) {
-            final book = await RakutenApi.fetchBookById(bookId);
+            final book = await const BookCatalogLookup().fetchById(bookId);
             bookTitle = book?.title ?? bookId;
             bookCache[bookId] = bookTitle;
           }
@@ -2266,6 +2286,75 @@ class SupabaseService extends ChangeNotifier {
   Future<List<Book>> fetchBooksByGenre(String genre) async {
     // No direct books table; return empty list.
     return [];
+  }
+
+  /// Public Sharemarium activity, not a store bestseller list.
+  /// Do not count private, suspended or age-restricted profiles/posts.
+  Future<List<Book>> fetchPopularBooks({int limit = 100}) async {
+    if (!_isInitialized || _client == null) return const <Book>[];
+    try {
+      final rows = await _client!
+          .from('posts')
+          .select(
+            'book_id,book_title,book_author,rating,'
+            'profiles:profiles!posts_profile_id_fkey!inner(is_private,is_suspended)',
+          )
+          .eq('is_age_restricted', false)
+          .eq('profiles.is_private', false)
+          .eq('profiles.is_suspended', false)
+          .order('created_at', ascending: false)
+          .limit(300);
+      final counts = <String, int>{};
+      final scores = <String, double>{};
+      final firstSeen = <String, int>{};
+      final titles = <String, String>{};
+      final authors = <String, String>{};
+      for (final row in rows as List<dynamic>) {
+        if (row is! Map) continue;
+        final isbn = (row['book_id']?.toString() ?? '').trim();
+        if (!RegExp(r'^(?:[0-9]{13}|[0-9]{9}[0-9Xx])$').hasMatch(isbn))
+          continue;
+        counts[isbn] = (counts[isbn] ?? 0) + 1;
+        final rating = row['rating'];
+        scores[isbn] =
+            (scores[isbn] ?? 0) + (rating is num ? rating.toDouble() : 0);
+        firstSeen.putIfAbsent(isbn, () => firstSeen.length);
+        final title = (row['book_title']?.toString() ?? '').trim();
+        if (title.isNotEmpty) titles.putIfAbsent(isbn, () => title);
+        final author = (row['book_author']?.toString() ?? '').trim();
+        if (author.isNotEmpty) authors.putIfAbsent(isbn, () => author);
+      }
+      final sorted = counts.keys.toList()
+        ..sort((a, b) {
+          final popularity = (counts[b] ?? 0).compareTo(counts[a] ?? 0);
+          return popularity != 0
+              ? popularity
+              : (firstSeen[a] ?? 99999).compareTo(firstSeen[b] ?? 99999);
+        });
+      return sorted
+          .take(limit)
+          .map(
+            (isbn) => Book(
+              id: isbn,
+              isbn: isbn,
+              title: titles[isbn] ?? 'ISBN $isbn',
+              author: authors[isbn] ?? '',
+              publisher: '',
+              pubDate: '',
+              coverUrl: '',
+              reviewCount: counts[isbn] ?? 0,
+              ratingAvg: counts[isbn] == null
+                  ? 0
+                  : (scores[isbn] ?? 0) / counts[isbn]!,
+              genre: '人気作品',
+              catalogSource: 'user_post',
+            ),
+          )
+          .toList(growable: false);
+    } catch (e) {
+      debugPrint('Unable to rank public books by Sharemarium activity: $e');
+      return const <Book>[];
+    }
   }
 
   Future<List<Post>> fetchTimelinePosts() async {
@@ -2610,7 +2699,7 @@ class SupabaseService extends ChangeNotifier {
       final resolved = await Future.wait(
         rows.map((row) async {
           final id = row['book_id']?.toString() ?? '';
-          final apiBook = await RakutenApi.fetchBookById(id);
+          final apiBook = await const BookCatalogLookup().fetchById(id);
           if (apiBook != null) return apiBook;
           return Book(
             id: id,
@@ -2693,7 +2782,7 @@ class SupabaseService extends ChangeNotifier {
 
     Future<Book?> getBook(String bookId) async {
       if (cache.containsKey(bookId)) return cache[bookId];
-      final found = await RakutenApi.fetchBookById(bookId);
+      final found = await const BookCatalogLookup().fetchById(bookId);
       cache[bookId] = found;
       return found;
     }
@@ -2893,7 +2982,7 @@ class SupabaseService extends ChangeNotifier {
     if (bookIds.isEmpty) return [];
 
     final results = await Future.wait(
-      bookIds.map((id) => RakutenApi.fetchBookById(id)),
+      bookIds.map((id) => const BookCatalogLookup().fetchById(id)),
     );
 
     final books = <Book>[];
@@ -3332,8 +3421,15 @@ class SupabaseService extends ChangeNotifier {
         'book_title': book.title.trim(),
         'book_author': book.author.trim(),
         'book_publisher': book.publisher.trim(),
-        'book_cover_url': book.coverUrl.trim(),
-        'book_description': book.description.trim(),
+        // Keep curated book identity and editorial choices, not the
+        // third-party Rakuten cover/description as permanent database copies.
+        // Fresh catalog images and descriptions are resolved on demand.
+        'book_cover_url': '',
+        'book_description': '',
+        'book_metadata_source': book.catalogSource,
+        'book_metadata_observed_at': book.catalogFetchedAt
+            ?.toUtc()
+            .toIso8601String(),
         'related_screen_titles': relatedScreenTitles
             .map((value) => value.trim())
             .where((value) => value.isNotEmpty)
@@ -3706,7 +3802,14 @@ class SupabaseService extends ChangeNotifier {
           'book_title': book.title,
           'book_author': book.author,
           'book_publisher': book.publisher,
-          'book_description': book.description,
+          // Product descriptions can be Rakuten-owned API data. Do not create
+          // new permanent copies in public posts; the user-authored comment
+          // and book ISBN/title/author remain intact.
+          'book_description': '',
+          'book_metadata_source': book.catalogSource,
+          'book_metadata_observed_at': book.catalogFetchedAt
+              ?.toUtc()
+              .toIso8601String(),
           'is_age_restricted': isAgeRestricted,
           'rating': rating,
           'comment': normalizedComment,

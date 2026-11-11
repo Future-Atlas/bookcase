@@ -84,7 +84,8 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
       if (existing != null) {
         setState(() {
           _active = existing;
-          _error = 'すでに「${existing!.bookTitle}」を計測中です。'
+          _error =
+              'すでに「${existing!.bookTitle}」を計測中です。'
               'こちらのタイマーを終了すると記録できます。';
         });
         _startTicking();
@@ -132,15 +133,17 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
   Widget build(BuildContext context) {
     final session = _active ?? widget.resuming;
     final title = session?.bookTitle ?? widget.book?.title ?? '';
-    final book = widget.book ?? Book(
-      id: session!.bookId,
-      title: session.bookTitle,
-      author: '',
-      publisher: '',
-      pubDate: '',
-      isbn: session.bookIsbn,
-      coverUrl: session.bookCoverUrl,
-    );
+    final book =
+        widget.book ??
+        Book(
+          id: session!.bookId,
+          title: session.bookTitle,
+          author: '',
+          publisher: '',
+          pubDate: '',
+          isbn: session.bookIsbn,
+          coverUrl: session.bookCoverUrl,
+        );
 
     return Scaffold(
       appBar: AppBar(
@@ -148,10 +151,7 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
         automaticallyImplyLeading: widget.onDefer == null,
         actions: [
           if (widget.onDefer != null)
-            TextButton(
-              onPressed: widget.onDefer,
-              child: const Text('あとで終了する'),
-            ),
+            TextButton(onPressed: widget.onDefer, child: const Text('あとで終了する')),
         ],
       ),
       body: Center(
@@ -194,7 +194,9 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
               const SizedBox(height: 20),
               Center(
                 child: FilledButton.icon(
-                  onPressed: _busy ? null : (_active == null ? _start : _finish),
+                  onPressed: _busy
+                      ? null
+                      : (_active == null ? _start : _finish),
                   style: FilledButton.styleFrom(
                     backgroundColor: widget.accentColor,
                     foregroundColor: Colors.black,

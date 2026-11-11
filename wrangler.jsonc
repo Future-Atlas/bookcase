@@ -47,9 +47,25 @@
       "vars": {
         "APP_ENV": "staging",
         "VERCEL_ENV": "preview",
-        "RAKUTEN_REFERER": "https://staging.sharemarium.com/",
+        "RAKUTEN_REFERER": "https://sharemarium-staging.sharemarium.workers.dev/",
         "SEO_ENABLE_NDL_FALLBACK": "false"
       },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "RAKUTEN_QUOTA",
+            "class_name": "RakutenCoordinator"
+          }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "rakuten-app-quota-v1",
+          "new_sqlite_classes": [
+            "RakutenCoordinator"
+          ]
+        }
+      ],
       "ratelimits": [
         {
           "name": "API_RATE_LIMIT",
@@ -78,6 +94,22 @@
         "RAKUTEN_REFERER": "https://www.sharemarium.com/",
         "SEO_ENABLE_NDL_FALLBACK": "false"
       },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "RAKUTEN_QUOTA",
+            "class_name": "RakutenCoordinator"
+          }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "rakuten-app-quota-v1",
+          "new_sqlite_classes": [
+            "RakutenCoordinator"
+          ]
+        }
+      ],
       "ratelimits": [
         {
           "name": "API_RATE_LIMIT",
@@ -98,6 +130,22 @@
       ]
     }
   },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RAKUTEN_QUOTA",
+        "class_name": "RakutenCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "rakuten-app-quota-v1",
+      "new_sqlite_classes": [
+        "RakutenCoordinator"
+      ]
+    }
+  ],
   "ratelimits": [
     {
       "name": "API_RATE_LIMIT",

@@ -8,6 +8,10 @@ class Book {
   final String pubDate;
   final String isbn;
   final String coverUrl;
+  /// Book-cover provenance (e.g. openbd or google_books), not catalog data.
+  final String coverSource;
+  /// Required source credit link for Google Books thumbnails.
+  final String coverAttributionUrl;
   final double ratingAvg;
   final int reviewCount;
   final String genre;
@@ -17,6 +21,14 @@ class Book {
   final String description;
   final String rakutenAffiliateUrl;
   final int itemPrice;
+  // Provenance of catalog values: rakuten, ndl, or unverified. This is
+  // separate from permanent user-authored review data and ISBN identity.
+  final bool adultContentFlag;
+  final String ageRatingSource;
+  final String languageCode;
+  final String ndcCode;
+  final String catalogSource;
+  final DateTime? catalogFetchedAt;
 
   const Book({
     required this.id,
@@ -26,6 +38,8 @@ class Book {
     required this.pubDate,
     required this.isbn,
     required this.coverUrl,
+    this.coverSource = '',
+    this.coverAttributionUrl = '',
     this.ratingAvg = 0.0,
     this.reviewCount = 0,
     this.genre = '',
@@ -33,6 +47,12 @@ class Book {
     this.description = '',
     this.rakutenAffiliateUrl = '',
     this.itemPrice = 0,
+    this.adultContentFlag = false,
+    this.ageRatingSource = 'unknown',
+    this.languageCode = '',
+    this.ndcCode = '',
+    this.catalogSource = 'unverified',
+    this.catalogFetchedAt,
   });
 
   /// Parse the Rakuten Books `booksGenreId` field without losing leading zeros.
@@ -81,6 +101,8 @@ class Book {
       coverUrl: '',
       genre: '',
       description: '',
+      catalogSource: 'ndl',
+      catalogFetchedAt: DateTime.now().toUtc(),
     );
   }
 
@@ -123,6 +145,8 @@ class Book {
       rakutenGenreIds: parseRakutenGenreIds(json['booksGenreId']),
       description: '',
       itemPrice: itemPrice,
+      catalogSource: 'rakuten',
+      catalogFetchedAt: DateTime.now().toUtc(),
     );
   }
 
@@ -134,6 +158,8 @@ class Book {
     String? pubDate,
     String? isbn,
     String? coverUrl,
+    String? coverSource,
+    String? coverAttributionUrl,
     double? ratingAvg,
     int? reviewCount,
     String? genre,
@@ -141,6 +167,12 @@ class Book {
     String? description,
     String? rakutenAffiliateUrl,
     int? itemPrice,
+    bool? adultContentFlag,
+    String? ageRatingSource,
+    String? languageCode,
+    String? ndcCode,
+    String? catalogSource,
+    DateTime? catalogFetchedAt,
   }) {
     return Book(
       id: id ?? this.id,
@@ -150,6 +182,8 @@ class Book {
       pubDate: pubDate ?? this.pubDate,
       isbn: isbn ?? this.isbn,
       coverUrl: coverUrl ?? this.coverUrl,
+      coverSource: coverSource ?? this.coverSource,
+      coverAttributionUrl: coverAttributionUrl ?? this.coverAttributionUrl,
       ratingAvg: ratingAvg ?? this.ratingAvg,
       reviewCount: reviewCount ?? this.reviewCount,
       genre: genre ?? this.genre,
@@ -157,6 +191,12 @@ class Book {
       description: description ?? this.description,
       rakutenAffiliateUrl: rakutenAffiliateUrl ?? this.rakutenAffiliateUrl,
       itemPrice: itemPrice ?? this.itemPrice,
+      adultContentFlag: adultContentFlag ?? this.adultContentFlag,
+      ageRatingSource: ageRatingSource ?? this.ageRatingSource,
+      languageCode: languageCode ?? this.languageCode,
+      ndcCode: ndcCode ?? this.ndcCode,
+      catalogSource: catalogSource ?? this.catalogSource,
+      catalogFetchedAt: catalogFetchedAt ?? this.catalogFetchedAt,
     );
   }
 }

@@ -8,10 +8,10 @@
     "model:revenue": "node scripts/monetization-scenario.mjs"
   },
   "devDependencies": {
-    "supabase": "2.120.0",
-    "wrangler": "4.154.0"
+    "supabase": "3.0.0",
+    "wrangler": "4.158.0"
   },
   "dependencies": {
-    "@vercel/speed-insights": "^2.0.0"
+    "@vercel/speed-insights": "^2.1.0"
   }
 }

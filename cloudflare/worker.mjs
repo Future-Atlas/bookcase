@@ -1,10 +1,15 @@
 import adEntitlement from "../api/ad-entitlement.js";
 import { guardRequest } from "./request-guard.mjs";
+import ndl from "../api/ndl.js";
+import homeCatalog from "../api/home-catalog.js";
+import openbd from "../api/openbd.js";
+import bookCovers from "../api/book-covers.js";
 import homeAdEligibility from "../api/home-ad-eligibility.js";
 import legalSeo from "../api/legal-seo.js";
 import postSeo from "../api/post-seo.js";
 import postsSeo from "../api/posts-seo.js";
 import rakuten from "../api/rakuten.js";
+import stagingRakuten from "../api/staging-rakuten.js";
 import seo from "../api/seo.js";
 import seoHome from "../api/seo-home.js";
 import seoRouter from "../api/seo-router.js";
@@ -26,19 +31,17 @@ const LEGACY_BOOK_REDIRECTS = new Map([
 // those two allowances remain explicit instead of silently permitting every
 // third-party script origin. Tightening them further requires moving the
 // inline bootstrap/ad code to hashed or nonce-bearing scripts first.
-// The Flutter engine loads CanvasKit JavaScript from Google's versioned CDN;
-// blocking that trusted path causes a blank page before runApp executes.
 const CSP_ENFORCED = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.gstatic.com/flutter-canvaskit/ https://adm.shinobi.jp https://*.shinobi.jp https://admax.cnobi.jp https://*.cnobi.jp",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://adm.shinobi.jp https://*.shinobi.jp https://admax.cnobi.jp https://*.cnobi.jp",
   "script-src-attr 'none'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
-  "font-src 'self' data: https://fonts.gstatic.com",
+  "font-src 'self' data:",
   "connect-src 'self' blob: https: wss:",
   "frame-src https:",
   "worker-src 'self' blob:",
@@ -85,7 +88,8 @@ class VercelResponseAdapter {
 }
 
 function queryFromUrl(url) {
-  const query = {};
+  // Avoid inherited '__proto__' and 'constructor' keys from untrusted URLs.
+  const query = Object.create(null);
   for (const [key, value] of url.searchParams) {
     if (query[key] == null) {
       query[key] = value;
@@ -106,6 +110,8 @@ function requestHeaders(request) {
     ]),
   );
   const connectingIp = request.headers.get("cf-connecting-ip");
+  // Do not forward spoofable browser-supplied X-Forwarded-For/X-Real-IP.
+  // The Cloudflare edge supplies the connecting IP for its own requests.
   if (connectingIp) {
     headers["x-real-ip"] = connectingIp;
     headers["x-forwarded-for"] = connectingIp;
@@ -116,13 +122,37 @@ function requestHeaders(request) {
   return headers;
 }
 
-async function invoke(handler, request, extraQuery = {}) {
+function coordinatedRakutenRequest(env) {
+  // Fail closed rather than bypassing the per-application-ID global limit.
+  if (!env?.RAKUTEN_QUOTA) {
+    return async () => new Response('{"error":"rakuten_quota_unavailable"}', {
+      status: 503,
+      headers: { "Content-Type": "application/json", "Retry-After": "5" },
+    });
+  }
+  return async (url, options = {}) => {
+    const appId = new URL(url).searchParams.get("applicationId");
+    if (!appId) return new Response('{"error":"invalid_app_id"}', { status: 400 });
+    const stub = env.RAKUTEN_QUOTA.get(env.RAKUTEN_QUOTA.idFromName(appId));
+    return stub.fetch("https://rakuten-quota.internal/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        origin: options.origin,
+      }),
+    });
+  };
+}
+
+async function invoke(handler, request, extraQuery = {}, env = null) {
   const url = new URL(request.url);
   const req = {
     method: request.method,
     headers: requestHeaders(request),
     query: { ...queryFromUrl(url), ...extraQuery },
     url: `${url.pathname}${url.search}`,
+    ...(env ? { rakutenRequest: coordinatedRakutenRequest(env) } : {}),
   };
   const res = new VercelResponseAdapter();
   await handler(req, res);
@@ -162,7 +192,56 @@ function withEnvironmentHeaders(response, env, request) {
   });
 }
 
-async function routeRequest(request, env) {
+// The public NDL proxy must not repeat the same slow upstream search on
+// each visit. Cloudflare Cache API is per data center; in-flight coalescing
+// prevents concurrent requests in one isolate from amplifying a timeout.
+// Only successful public RSS is cacheable (api/ndl.js sets the 10m TTL).
+const ndlInFlight = new Map();
+
+async function serveNdl(request, context, { cache, requestHandler, cacheJson = false } = {}) {
+  if (request.method !== "GET") {
+    return requestHandler ? requestHandler() : invoke(ndl, request);
+  }
+  const edgeCache = cache === undefined ? globalThis.caches?.default : cache;
+  const key = new Request(request.url, { method: "GET" });
+  const pending = ndlInFlight.get(key.url);
+  if (pending) return (await pending).clone();
+
+  const loading = (async () => {
+    if (edgeCache) {
+      try {
+        const hit = await edgeCache.match(key);
+        if (hit) return hit;
+      } catch {
+        // A cache failure must not break catalog search.
+      }
+    }
+    const response = await (requestHandler
+      ? requestHandler()
+      : invoke(ndl, request));
+    // Never cache 400/429/5xx or JSON errors as empty book results.
+    const contentType = response.headers.get("Content-Type") || "";
+    if (edgeCache && response.status === 200 &&
+        (/^application\/xml\b/i.test(contentType) ||
+        (cacheJson && /^application\/json\b/i.test(contentType)))) {
+      const store = Promise.resolve()
+        .then(() => edgeCache.put(key, response.clone()))
+        .catch(() => {});
+      if (context?.waitUntil) context.waitUntil(store);
+      else await store;
+    }
+    return response;
+  })();
+
+  ndlInFlight.set(key.url, loading);
+  try {
+    return (await loading).clone();
+  } finally {
+    if (ndlInFlight.get(key.url) === loading) ndlInFlight.delete(key.url);
+  }
+}
+
+async function routeRequest(request, env, context) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/{2,}/g, "/");
 
@@ -190,7 +269,30 @@ async function routeRequest(request, env) {
   if (path === "/sitemap.xml" || path === "/api/sitemap") {
     return invoke(sitemap, request);
   }
-  if (path === "/api/rakuten") return invoke(rakuten, request);
+  if (path === "/api/ndl") return serveNdl(request, context);
+  if (path === "/api/home-catalog") {
+    return serveNdl(request, context, {
+      requestHandler: () => invoke(homeCatalog, request),
+      cacheJson: true,
+    });
+  }
+  if (path === "/api/openbd") return invoke(openbd, request);
+  if (path === "/api/book-covers") return invoke(bookCovers, request);
+  if (path === "/api/rakuten") {
+    // Production and default environments retain the retired 410 route.
+    // Staging alone uses the server-owned credentials and existing global
+    // per-app quota Durable Object; never call Rakuten directly per card.
+    if (env.APP_ENV !== "staging") {
+      return new Response(JSON.stringify({ error: "catalog_migrated" }), {
+        status: 410,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      });
+    }
+    return invoke(stagingRakuten.createHandler({
+      env,
+      request: coordinatedRakutenRequest(env),
+    }), request);
+  }
   if (path === "/api/ad-entitlement") {
     return invoke(adEntitlement, request);
   }
@@ -200,9 +302,9 @@ async function routeRequest(request, env) {
   if (path === "/api/posts-seo") return invoke(postsSeo, request);
   if (path === "/api/post-seo") return invoke(postSeo, request);
   if (path === "/api/legal-seo") return invoke(legalSeo, request);
-  if (path === "/api/seo-home") return invoke(seoHome, request);
-  if (path === "/api/seo") return invoke(seo, request);
-  if (path === "/api/seo-router") return invoke(seoRouter, request);
+  if (path === "/api/seo-home") return invoke(seoHome, request, {}, env);
+  if (path === "/api/seo") return invoke(seo, request, {}, env);
+  if (path === "/api/seo-router") return invoke(seoRouter, request, {}, env);
 
   const userAgent = request.headers.get("user-agent") || "";
   const isCrawler = BOT_PATTERN.test(userAgent);
@@ -217,20 +319,20 @@ async function routeRequest(request, env) {
   }
 
   if (url.searchParams.get("seo_preview") === "1") {
-    return invoke(seoRouter, request, { path });
+    return invoke(seoRouter, request, { path }, env);
   }
   if (isCrawler && (path === "/" || SEO_PATH_PATTERN.test(path))) {
     if (LEGAL_PATH_PATTERN.test(path)) {
       return invoke(legalSeo, request, { path: path.slice(1) });
     }
-    return invoke(seoRouter, request, { path });
+    return invoke(seoRouter, request, { path }, env);
   }
 
   return env.ASSETS.fetch(request);
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, context) {
     try {
       const url = new URL(request.url);
       if (url.protocol === "http:") {
@@ -243,7 +345,7 @@ export default {
       });
       if (block) return withEnvironmentHeaders(block, env, request);
       return withEnvironmentHeaders(
-        await routeRequest(request, env),
+        await routeRequest(request, env, context),
         env,
         request,
       );
@@ -264,4 +366,8 @@ export const _test = {
   VercelResponseAdapter,
   queryFromUrl,
   routeRequest,
+  serveNdl,
 };
+
+// Wrangler Durable Object binding targets the entrypoint's named export.
+export { RakutenCoordinator } from "./rakuten-coordinator.mjs";

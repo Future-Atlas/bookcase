@@ -3,6 +3,8 @@ import '../services/avatar_url_policy.dart';
 import 'package:flutter/rendering.dart';
 import '../config/feature_flags.dart';
 import '../models/post.dart';
+import '../models/book.dart';
+import 'book_cover_image.dart';
 import '../models/post_reply.dart';
 import '../models/social_models.dart';
 import '../models/profile_page_color.dart';
@@ -73,6 +75,23 @@ class _PostCardState extends State<PostCard> {
   final Set<String> _revealedReplySpoilerIds = <String>{};
 
   Post get post => widget.post;
+  // User-saved cover URLs have no reliable provider license metadata.
+  // Only images from openBD's official CDN can be inferred as approved;
+  // never render arbitrary persisted Google/Open Library/retailer URLs.
+  Widget _postBookCover(double width, double height) => BookCoverImage(
+        book: Book(
+          id: post.bookId,
+          isbn: post.bookId,
+          title: post.bookTitle,
+          author: post.bookAuthor,
+          publisher: '',
+          pubDate: '',
+          coverUrl: post.bookCoverUrl,
+        ),
+        width: width,
+        height: height,
+      );
+
   bool get showUserInfo => widget.showUserInfo;
   VoidCallback? get onUserTap => widget.onUserTap;
   Future<void> Function(PostReactionType reaction)? get onReaction =>
@@ -272,18 +291,7 @@ class _PostCardState extends State<PostCard> {
                   borderRadius: BorderRadius.circular(8),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      post.bookCoverUrl,
-                      width: 70,
-                      height: 100,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        width: 70,
-                        height: 100,
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.book, color: Colors.grey),
-                      ),
-                    ),
+                    child: _postBookCover(70, 100),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -670,18 +678,7 @@ class _PostCardState extends State<PostCard> {
                   borderRadius: BorderRadius.circular(8),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      post.bookCoverUrl,
-                      width: 76,
-                      height: 108,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        width: 76,
-                        height: 108,
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.book, color: Colors.grey),
-                      ),
-                    ),
+                    child: _postBookCover(76, 108),
                   ),
                 ),
                 const SizedBox(width: 14),

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 
-import worker from "../../cloudflare/worker.mjs";
+import worker, { _test } from "../../cloudflare/worker.mjs";
 
 function environment({ appEnv = "staging", assetStatus = 200 } = {}) {
   const requests = [];
@@ -101,12 +101,10 @@ test("production custom domain adds browser security headers", async () => {
     response.headers.get("content-security-policy") || "",
     /script-src-attr 'none'/,
   );
-  // A CSP that blocks Flutter's CanvasKit CDN prevents the app from rendering.
+  // Release builds self-host CanvasKit, so CSP must not reopen Google's script
+  // CDN. The deployment smoke test separately verifies the local JS/Wasm files.
   const csp = response.headers.get("content-security-policy") || "";
-  assert.match(csp, /script-src[^;]*https:\/\/www\.gstatic\.com\/flutter-canvaskit\//);
-  assert.match(csp, /font-src[^;]*https:\/\/fonts\.gstatic\.com/);
-  assert.match(csp, /style-src[^;]*https:\/\/fonts\.googleapis\.com/);
-  assert.doesNotMatch(csp, /script-src[^;]*https:\/\/www\.gstatic\.com\s/);
+  assert.doesNotMatch(csp, /script-src[^;]*https:\/\/www\.gstatic\.com/);
   assert.doesNotMatch(csp, /'unsafe-eval'/);
 
   assert.equal(
@@ -142,7 +140,7 @@ test("Vercel fallback and Cloudflare share a Flutter-compatible CSP", async () =
     ),
     connectSrc,
   );
-  assert.match(fallbackCsp, /script-src[^;]*https:\/\/www\.gstatic\.com\/flutter-canvaskit\//);
+  assert.doesNotMatch(fallbackCsp, /script-src[^;]*https:\/\/www\.gstatic\.com/);
   assert.doesNotMatch(fallbackCsp, /script-src[^;]*'unsafe-eval'/);
 });
 
@@ -206,15 +204,63 @@ test("crawler legal requests use server-rendered HTML", async () => {
   assert.equal(requests.length, 0);
 });
 
-test("API routes do not fall through to Flutter assets", async () => {
+test("staging-only Rakuten proxy uses the existing quota object, not Flutter assets", async () => {
   const { env, requests } = environment();
+  const called = [];
+  env.RAKUTEN_APP_ID = "staging-id";
+  env.RAKUTEN_ACCESS_KEY = "staging-access-key";
+  env.RAKUTEN_QUOTA = {
+    idFromName(name) {
+      assert.equal(name, "staging-id");
+      return "global-app-quota";
+    },
+    get(id) {
+      assert.equal(id, "global-app-quota");
+      return {
+        async fetch(_url, options) {
+          const data = JSON.parse(options.body);
+          called.push(data.url);
+          return Response.json({ Items: [{ Item: { title: "Book" } }] });
+        },
+      };
+    },
+  };
   const response = await worker.fetch(
-    new Request("https://staging.example.test/api/rakuten?title=test"),
+    new Request(
+      "https://staging.example.test/api/rakuten?endpoint=book&booksGenreId=001&hits=3",
+    ),
     env,
   );
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).Items.length, 1);
+  assert.equal(requests.length, 0);
+  assert.equal(called.length, 1);
+  const url = new URL(called[0]);
+  assert.equal(url.hostname, "openapi.rakuten.co.jp");
+  assert.equal(url.searchParams.get("accessKey"), "staging-access-key");
+});
 
-  assert.equal(response.status, 500);
-  assert.equal((await response.json()).error, "rakuten_credentials_missing");
+test("production keeps the removed Rakuten endpoint disabled", async () => {
+  const { env, requests } = environment({ appEnv: "production" });
+  const response = await worker.fetch(
+    new Request("https://www.sharemarium.com/api/rakuten?booksGenreId=001"),
+    env,
+  );
+  assert.equal(response.status, 410);
+  assert.equal((await response.json()).error, "catalog_migrated");
+  assert.equal(requests.length, 0);
+});
+
+test("staging Rakuten fails closed without quota or secrets", async () => {
+  const { env, requests } = environment();
+  env.RAKUTEN_APP_ID = "staging-id";
+  env.RAKUTEN_ACCESS_KEY = "staging-access-key";
+  const response = await worker.fetch(
+    new Request("https://staging.example.test/api/rakuten?booksGenreId=001"),
+    env,
+  );
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "rakuten_busy");
   assert.equal(requests.length, 0);
 });
 
@@ -273,4 +319,139 @@ test("Cloudflare staging smoke diagnostics disclose only classification codes", 
   assert.match(workflow, /cloudflare-staging-smoke-diagnostic\.json/);
   assert.match(workflow, /name: cloudflare-staging-smoke-diagnostic/);
   assert.match(workflow, /retention-days: 1/);
+});
+
+test("NDL edge cache reuses successful RSS without an extra upstream fetch", async () => {
+  const entries = new Map();
+  const cache = {
+    async match(key) { return entries.get(key.url)?.clone(); },
+    async put(key, response) { entries.set(key.url, response.clone()); },
+  };
+  const request = new Request("https://staging.example.test/api/ndl?dpid=ndl-boj&title=Japan&idx=1&cnt=27");
+  let upstreamCalls = 0;
+  const requestHandler = async () => {
+    upstreamCalls++;
+    return new Response("<rss><channel /></rss>", {
+      status: 200,
+      headers: {
+        "Content-Type": "application/xml; charset=utf-8",
+        "Cache-Control": "public, max-age=0, s-maxage=600",
+      },
+    });
+  };
+  const first = await _test.serveNdl(request, undefined, { cache, requestHandler });
+  const second = await _test.serveNdl(request, undefined, { cache, requestHandler });
+  assert.equal(first.status, 200);
+  assert.equal(await first.text(), await second.text());
+  assert.equal(upstreamCalls, 1);
+  assert.equal(entries.size, 1);
+});
+
+test("NDL cache collapses simultaneous identical requests", async () => {
+  const cache = { async match() { return undefined; }, async put() {} };
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  let calls = 0;
+  const request = new Request("https://staging.example.test/api/ndl?dpid=ndl-boj&title=Tokyo&cnt=27");
+  const requestHandler = async () => {
+    calls++;
+    await gate;
+    return new Response("<rss/>", {
+      status: 200,
+      headers: { "Content-Type": "application/xml" },
+    });
+  };
+  const first = _test.serveNdl(request, undefined, { cache, requestHandler });
+  const second = _test.serveNdl(request, undefined, { cache, requestHandler });
+  release();
+  const [a, b] = await Promise.all([first, second]);
+  assert.equal(calls, 1);
+  assert.equal(await a.text(), "<rss/>");
+  assert.equal(await b.text(), "<rss/>");
+});
+
+test("NDL 504 responses are never cached and a later retry can succeed", async () => {
+  const entries = new Map();
+  const cache = {
+    async match(key) { return entries.get(key.url)?.clone(); },
+    async put(key, response) { entries.set(key.url, response.clone()); },
+  };
+  let attempts = 0;
+  const request = new Request("https://staging.example.test/api/ndl?dpid=ndl-boj&title=Japan&cnt=27&idx=28");
+  const requestHandler = async () => {
+    attempts++;
+    if (attempts === 1) {
+      return Response.json({ error: "ndl_timeout" }, { status: 504 });
+    }
+    return new Response("<rss/>", {
+      status: 200,
+      headers: { "Content-Type": "application/xml" },
+    });
+  };
+  assert.equal((await _test.serveNdl(request, undefined, { cache, requestHandler })).status, 504);
+  assert.equal(entries.size, 0);
+  assert.equal((await _test.serveNdl(request, undefined, { cache, requestHandler })).status, 200);
+  assert.equal(attempts, 2);
+  assert.equal(entries.size, 1);
+});
+
+
+test("home language metadata API rejects bad query without reaching Flutter SPA", async () => {
+  const { env, requests } = environment();
+  const r = await worker.fetch(new Request(
+    "https://staging.example.test/api/home-catalog?lang=invalid&topic=Japan&page=1"
+  ), env);
+  assert.equal(r.status, 400);
+  assert.equal((await r.json()).error, "invalid_home_catalog_query");
+  assert.equal(requests.length, 0);
+});
+
+test("home metadata JSON edge-cache reuses 200 pages but not 503 failures", async () => {
+  const entries = new Map();
+  const cache = {
+    async match(key) { return entries.get(key.url)?.clone(); },
+    async put(key, response) { entries.set(key.url, response.clone()); },
+  };
+  let calls=0;
+  const req = new Request(
+    "https://staging.example.test/api/home-catalog?lang=eng&topic=Japan&page=1"
+  );
+  const requestHandler=async()=>{
+    calls++;
+    if(calls===1)return Response.json({error:"catalog_source_busy"},{
+      status:503,headers:{"Cache-Control":"no-store"}
+    });
+    return Response.json({books:[{isbn:"9780140328721"}]},{
+      status:200,headers:{"Cache-Control":"public, max-age=0, s-maxage=600"}
+    });
+  };
+  const first=await _test.serveNdl(req,undefined,{cache,cacheJson:true,requestHandler});
+  assert.equal(first.status,503);
+  assert.equal(entries.size,0);
+  const second=await _test.serveNdl(req,undefined,{cache,cacheJson:true,requestHandler});
+  const third=await _test.serveNdl(req,undefined,{cache,cacheJson:true,requestHandler});
+  assert.equal(second.status,200);
+  assert.equal(third.status,200);
+  assert.equal(calls,2);
+  assert.equal(entries.size,1);
+  assert.deepEqual(await third.json(),{books:[{isbn:"9780140328721"}]});
+});
+
+test("avatar cropping permits blob URLs without broadening network CSP", async () => {
+  const config = JSON.parse(readFileSync(new URL("../../vercel.json", import.meta.url), "utf8"));
+  const fallback = config.headers[0].headers.find(
+    ({ key }) => key === "Content-Security-Policy",
+  )?.value;
+  const { env } = environment({ appEnv: "production" });
+  const response = await worker.fetch(
+    new Request("https://www.sharemarium.com/"), env,
+  );
+  const cloudflare = response.headers.get("content-security-policy");
+  for (const csp of [cloudflare, fallback]) {
+    assert.ok(csp);
+    const directive = csp.split("; ").find((part) => part.startsWith("connect-src "));
+    assert.equal(directive, "connect-src 'self' blob: https: wss:");
+    assert.match(csp, /object-src 'none'/);
+    assert.match(csp, /script-src-attr 'none'/);
+  }
 });

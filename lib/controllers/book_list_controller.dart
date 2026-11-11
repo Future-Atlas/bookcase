@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../models/book.dart';
+import '../api/book_catalog_lookup.dart';
 import '../repositories/book_repository.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
@@ -16,6 +17,7 @@ class BookListController extends ChangeNotifier {
   Timer? _searchDebounce;
   bool isLoading = true;
   bool isLoadingRecommended = true;
+  bool isLoadingJapanese = true;
   bool isLoadingWestern = true;
   bool isLoadingPopular = true;
   bool isLoadingTimeline = true;
@@ -41,6 +43,14 @@ class BookListController extends ChangeNotifier {
   bool _recommendedReachedEnd = false;
   bool get canLoadPreviousRecommended => recommendedPage > 1;
 
+  List<Book> japaneseBooks = [];
+  int japanesePage = 1;
+  bool hasMoreJapanese = true;
+  bool isLoadingMoreJapanese = false;
+  final Map<int, List<Book>> _japanesePageCache = {};
+  bool _japaneseReachedEnd = false;
+  bool get canLoadPreviousJapanese => japanesePage > 1;
+
   List<Book> westernBooks = [];
   int westernPage = 1;
   bool hasMoreWestern = true;
@@ -59,14 +69,16 @@ class BookListController extends ChangeNotifier {
 
   List<Book> featuredBooks = [];
   bool isLoadingFeatured = true;
+  int _featuredLookupGeneration = 0;
 
   // タイムライン用
   List<Post> timelinePosts = [];
   Map<String, List<PostReply>> timelineReplies = {};
   bool _allowAdultContent = false;
 
-  BookRepository get _repository =>
-      BookRepository(allowAdultContent: _allowAdultContent);
+  BookRepository _catalogRepository = BookRepository();
+
+  BookRepository get _repository => _catalogRepository;
 
   Post? toggleTimelineReactionOptimistically(
     String postId,
@@ -115,6 +127,7 @@ class BookListController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _featuredLookupGeneration++;
     searchController.removeListener(_onSearchChanged);
     _searchDebounce?.cancel();
     searchController.dispose();
@@ -216,7 +229,7 @@ class BookListController extends ChangeNotifier {
 
     try {
       final requestedPage = searchPage;
-      final batch = await _repository.searchBooks(
+      final batch = await _repository.searchBooksPage(
         query,
         page: requestedPage,
         count: 20,
@@ -225,14 +238,14 @@ class BookListController extends ChangeNotifier {
       // 入力中に別の検索が始まった場合は、古い結果を画面へ反映しない。
       if (userSearchMode || query != searchQuery.trim()) return;
 
-      for (final book in batch) {
+      for (final book in batch.books) {
         if (_searchResultIds.add(book.id)) {
           searchResults.add(book);
         }
       }
 
       searchPage = requestedPage + 1;
-      hasMoreSearch = batch.length >= 20;
+      hasMoreSearch = batch.hasMore;
     } finally {
       if (!userSearchMode && query == searchQuery.trim()) {
         isSearching = false;
@@ -247,6 +260,52 @@ class BookListController extends ChangeNotifier {
     await _searchBooks(reset: false);
   }
 
+  // Curated ISBN, title and order are durable; provider artwork and synopsis
+  // are short-lived. Resolve them only in memory for the current screen.
+  // On API failure the existing curated book entry remains available.
+  Future<void> _hydrateFeaturedBooks(int generation) async {
+    final snapshot = List<Book>.of(featuredBooks);
+    for (final original in snapshot) {
+      if (generation != _featuredLookupGeneration) return;
+      final normalizedId = (original.isbn.isNotEmpty
+              ? original.isbn
+              : original.id)
+          .replaceAll('-', '');
+      if (!RegExp(r'^(?:\d{13}|\d{9}[\dXx])$').hasMatch(normalizedId)) {
+        continue;
+      }
+      Book? fresh;
+      try {
+        fresh = await const BookCatalogLookup().fetchById(
+          normalizedId, enrichNdl: true,
+        );
+      } catch (_) {
+        continue;
+      }
+      if (generation != _featuredLookupGeneration) return;
+      if (fresh == null || fresh.isbn.replaceAll('-', '') != normalizedId) {
+        continue;
+      }
+      final index = featuredBooks.indexWhere((book) => book.id == original.id);
+      if (index < 0) continue;
+      final hydrated = original.copyWith(
+        coverUrl: fresh.coverUrl,
+        coverSource: fresh.coverSource,
+        coverAttributionUrl: fresh.coverAttributionUrl,
+        description: fresh.description,
+        rakutenAffiliateUrl: fresh.rakutenAffiliateUrl,
+        catalogSource: fresh.catalogSource,
+        catalogFetchedAt: fresh.catalogFetchedAt,
+      );
+      if (!_allowAdultContent && ContentSafetyService.isAdultBook(hydrated)) {
+        featuredBooks = List<Book>.of(featuredBooks)..removeAt(index);
+      } else {
+        featuredBooks = List<Book>.of(featuredBooks)..[index] = hydrated;
+      }
+      notifyListeners();
+    }
+  }
+
   Future<void> _loadData(BuildContext context) async {
     if (_timelineOnly) {
       isLoadingTimeline = true;
@@ -256,6 +315,7 @@ class BookListController extends ChangeNotifier {
     }
     isLoading = true;
     isLoadingRecommended = true;
+    isLoadingJapanese = true;
     isLoadingWestern = true;
     isLoadingPopular = true;
     isLoadingFeatured = true;
@@ -263,24 +323,31 @@ class BookListController extends ChangeNotifier {
     notifyListeners();
 
     _allowAdultContent = await SupabaseService().canViewAdultContent();
+    _catalogRepository = BookRepository(allowAdultContent: _allowAdultContent);
     final repository = _repository;
 
     recommendedPage = 1;
+    japanesePage = 1;
     westernPage = 1;
     popularPage = 1;
     hasMoreRecommended = true;
+    hasMoreJapanese = true;
     hasMoreWestern = true;
     hasMorePopular = true;
     _recommendedPageCache.clear();
+    _japanesePageCache.clear();
     _westernPageCache.clear();
     _popularPageCache.clear();
     _recommendedReachedEnd = false;
+    _japaneseReachedEnd = false;
     _westernReachedEnd = false;
     _popularReachedEnd = false;
     recommendedBooks = [];
+    japaneseBooks = [];
     westernBooks = [];
     popularBooks = [];
     featuredBooks = [];
+    final featuredGeneration = ++_featuredLookupGeneration;
     timelinePosts = [];
     timelineReplies = {};
     notifyListeners();
@@ -300,56 +367,98 @@ class BookListController extends ChangeNotifier {
       isLoadingFeatured = false;
       notifyListeners();
     }
-
-    try {
-      recommendedBooks = await repository.fetchBooksByGenre(
-        '新着',
-        page: recommendedPage,
-      );
-      _recommendedPageCache[recommendedPage] = recommendedBooks;
-      _recommendedReachedEnd = recommendedBooks.isEmpty;
-      hasMoreRecommended = !_recommendedReachedEnd;
-    } catch (_) {
-      recommendedBooks = [];
-      hasMoreRecommended = false;
-    } finally {
-      isLoadingRecommended = false;
-      notifyListeners();
+    if (featuredBooks.isNotEmpty) {
+      unawaited(_hydrateFeaturedBooks(featuredGeneration));
     }
 
-    try {
-      westernBooks = await repository.fetchBooksByGenre(
-        'English',
-        page: westernPage,
-      );
-      _westernPageCache[westernPage] = westernBooks;
-      _westernReachedEnd = westernBooks.isEmpty;
-      hasMoreWestern = !_westernReachedEnd;
-    } catch (_) {
-      westernBooks = [];
-      hasMoreWestern = false;
-    } finally {
-      isLoadingWestern = false;
-      notifyListeners();
+    Future<void> loadRecommended() async {
+      try {
+        recommendedBooks = await repository.fetchBooksByGenre(
+          '新着',
+          page: recommendedPage,
+        );
+        _recommendedPageCache[recommendedPage] = recommendedBooks;
+        _recommendedReachedEnd = recommendedBooks.isEmpty ||
+            !repository.hasMoreHomeBooks('新着');
+        hasMoreRecommended = !_recommendedReachedEnd;
+      } catch (_) {
+        recommendedBooks = [];
+        hasMoreRecommended = false;
+      } finally {
+        isLoadingRecommended = false;
+        notifyListeners();
+      }
     }
 
-    try {
-      popularBooks = await repository.fetchBooksByGenre(
-        'ベストセラー',
-        page: popularPage,
-      );
-      _popularPageCache[popularPage] = popularBooks;
-      _popularReachedEnd = popularBooks.isEmpty;
-      hasMorePopular = !_popularReachedEnd;
-    } catch (_) {
-      popularBooks = [];
-      hasMorePopular = false;
-    } finally {
-      isLoadingPopular = false;
-      notifyListeners();
+    Future<void> loadJapanese() async {
+      try {
+        japaneseBooks = await repository.fetchBooksByGenre(
+          '和書',
+          page: japanesePage,
+        );
+        _japanesePageCache[japanesePage] = japaneseBooks;
+        _japaneseReachedEnd = japaneseBooks.isEmpty ||
+            !repository.hasMoreHomeBooks('和書');
+        hasMoreJapanese = !_japaneseReachedEnd;
+      } catch (_) {
+        japaneseBooks = [];
+        hasMoreJapanese = false;
+      } finally {
+        isLoadingJapanese = false;
+        notifyListeners();
+      }
     }
 
-    await _loadTimeline();
+    Future<void> loadWestern() async {
+      try {
+        westernBooks = await repository.fetchBooksByGenre(
+          'English',
+          page: westernPage,
+        );
+        _westernPageCache[westernPage] = westernBooks;
+        _westernReachedEnd = westernBooks.isEmpty ||
+            !repository.hasMoreHomeBooks('English');
+        hasMoreWestern = !_westernReachedEnd;
+      } catch (_) {
+        westernBooks = [];
+        hasMoreWestern = false;
+      } finally {
+        isLoadingWestern = false;
+        notifyListeners();
+      }
+    }
+
+    Future<void> loadPopular() async {
+      try {
+        popularBooks = await repository.fetchBooksByGenre(
+          'ベストセラー',
+          page: popularPage,
+        );
+        _popularPageCache[popularPage] = popularBooks;
+        _popularReachedEnd = popularBooks.isEmpty;
+        hasMorePopular = !_popularReachedEnd;
+      } catch (_) {
+        popularBooks = [];
+        hasMorePopular = false;
+      } finally {
+        isLoadingPopular = false;
+        notifyListeners();
+      }
+    }
+    // Do not let a slow NDL new-arrivals query block the independent
+    // language feeds or the user's timeline. Language feeds stay sequential
+    // to avoid parallel requests to the low-volume public metadata service.
+    Future<void> loadLanguages() async {
+      await loadJapanese();
+      await loadWestern();
+    }
+
+    await Future.wait<void>([
+      loadRecommended(),
+      loadLanguages(),
+      loadPopular(),
+      _loadTimeline(),
+    ]);
     isLoading = false;
     notifyListeners();
   }
@@ -365,6 +474,77 @@ class BookListController extends ChangeNotifier {
       timelineReplies = {};
     } finally {
       isLoadingTimeline = false;
+      notifyListeners();
+    }
+  }
+
+  /// Retry a transient NDL failure without reloading the timeline or popular
+  /// section. The repository starts over from the preferred source.
+  Future<void> retryRecommended() async {
+    if (isLoadingRecommended || isLoadingMoreRecommended) return;
+    isLoadingRecommended = true;
+    notifyListeners();
+    try {
+      _repository.resetHomeBooks('新着');
+      final books = await _repository.fetchBooksByGenre('新着', page: 1);
+      recommendedBooks = books;
+      recommendedPage = 1;
+      _recommendedPageCache
+        ..clear()
+        ..[1] = books;
+      _recommendedReachedEnd =
+          books.isEmpty || !_repository.hasMoreHomeBooks('新着');
+      hasMoreRecommended = !_recommendedReachedEnd;
+    } catch (_) {
+      hasMoreRecommended = false;
+    } finally {
+      isLoadingRecommended = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> retryJapanese() async {
+    if (isLoadingJapanese || isLoadingMoreJapanese) return;
+    isLoadingJapanese = true;
+    notifyListeners();
+    try {
+      _repository.resetHomeBooks('和書');
+      final books = await _repository.fetchBooksByGenre('和書', page: 1);
+      japaneseBooks = books;
+      japanesePage = 1;
+      _japanesePageCache
+        ..clear()
+        ..[1] = books;
+      _japaneseReachedEnd =
+          books.isEmpty || !_repository.hasMoreHomeBooks('和書');
+      hasMoreJapanese = !_japaneseReachedEnd;
+    } catch (_) {
+      hasMoreJapanese = false;
+    } finally {
+      isLoadingJapanese = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> retryWestern() async {
+    if (isLoadingWestern || isLoadingMoreWestern) return;
+    isLoadingWestern = true;
+    notifyListeners();
+    try {
+      _repository.resetHomeBooks('English');
+      final books = await _repository.fetchBooksByGenre('English', page: 1);
+      westernBooks = books;
+      westernPage = 1;
+      _westernPageCache
+        ..clear()
+        ..[1] = books;
+      _westernReachedEnd =
+          books.isEmpty || !_repository.hasMoreHomeBooks('English');
+      hasMoreWestern = !_westernReachedEnd;
+    } catch (_) {
+      hasMoreWestern = false;
+    } finally {
+      isLoadingWestern = false;
       notifyListeners();
     }
   }
@@ -399,7 +579,7 @@ class BookListController extends ChangeNotifier {
         _recommendedPageCache[nextPage] = newBooks;
         recommendedBooks = newBooks;
         recommendedPage = nextPage;
-        _recommendedReachedEnd = false;
+        _recommendedReachedEnd = !_repository.hasMoreHomeBooks('新着');
         hasMoreRecommended = !_recommendedReachedEnd;
       }
     } finally {
@@ -416,6 +596,56 @@ class BookListController extends ChangeNotifier {
     recommendedBooks = cachedBooks;
     recommendedPage = previousPage;
     hasMoreRecommended = true;
+    notifyListeners();
+  }
+
+  Future<void> loadMoreJapanese() async {
+    if (isLoadingMoreJapanese || !hasMoreJapanese) return;
+    final nextPage = japanesePage + 1;
+    final cachedBooks = _japanesePageCache[nextPage];
+    if (cachedBooks != null) {
+      japaneseBooks = cachedBooks;
+      japanesePage = nextPage;
+      hasMoreJapanese =
+          _japanesePageCache.containsKey(nextPage + 1) ||
+          !_japaneseReachedEnd;
+      notifyListeners();
+      return;
+    }
+
+    isLoadingMoreJapanese = true;
+    notifyListeners();
+
+    try {
+      final newBooks = await _repository.fetchBooksByGenre(
+        '和書',
+        page: nextPage,
+      );
+
+      if (newBooks.isEmpty) {
+        _japaneseReachedEnd = true;
+        hasMoreJapanese = false;
+      } else {
+        _japanesePageCache[nextPage] = newBooks;
+        japaneseBooks = newBooks;
+        japanesePage = nextPage;
+        _japaneseReachedEnd = !_repository.hasMoreHomeBooks('和書');
+        hasMoreJapanese = !_japaneseReachedEnd;
+      }
+    } finally {
+      isLoadingMoreJapanese = false;
+      notifyListeners();
+    }
+  }
+
+  void loadPreviousJapanese() {
+    if (!canLoadPreviousJapanese || isLoadingMoreJapanese) return;
+    final previousPage = japanesePage - 1;
+    final cachedBooks = _japanesePageCache[previousPage];
+    if (cachedBooks == null) return;
+    japaneseBooks = cachedBooks;
+    japanesePage = previousPage;
+    hasMoreJapanese = true;
     notifyListeners();
   }
 
@@ -448,7 +678,7 @@ class BookListController extends ChangeNotifier {
         _westernPageCache[nextPage] = newBooks;
         westernBooks = newBooks;
         westernPage = nextPage;
-        _westernReachedEnd = false;
+        _westernReachedEnd = !_repository.hasMoreHomeBooks('English');
         hasMoreWestern = !_westernReachedEnd;
       }
     } finally {
@@ -521,6 +751,7 @@ class BookListController extends ChangeNotifier {
 
   List<Book> get books => [
     ...recommendedBooks,
+    ...japaneseBooks,
     ...westernBooks,
     ...popularBooks,
   ];

@@ -8,7 +8,11 @@ test('registration provides copy and paste for all text fields', () => {
   const source = read('lib/screens/profile_onboarding_screen.dart');
   for (const label of ['姓（Family name）', '名（Given name）',
                         '電話番号', 'ユーザー名', 'ユーザーID']) {
-    assert.ok(source.includes(`_editableDecoration('${label}'`), label);
+    assert.match(
+      source,
+      new RegExp(`_editableDecoration\\(\\s*'${label}'`),
+      label,
+    );
   }
   assert.match(source, /pasteClipboardInto\(controller\)/);
   assert.match(source, /copyFieldText\(controller\)/);

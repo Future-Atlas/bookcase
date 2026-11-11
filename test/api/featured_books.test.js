@@ -31,6 +31,10 @@ test("direct book paths are handed to Flutter's real book dialog", () => {
   const screen = read("lib/screens/book_list_screen.dart");
   assert.match(routes, /BookListScreen\(initialBookId: segments\[1\]\)/);
   assert.doesNotMatch(main, /initialBookId: _bookIdFromPath/);
-  assert.match(screen, /RakutenApi\.fetchBookById\(initialBookId\)/);
+  assert.match(screen, /BookCatalogLookup\(\)\.fetchById\(\s*initialBookId/);
+  const catalog = read("lib/api/book_catalog_lookup.dart");
+  assert.match(catalog, /STAGING_RAKUTEN_CATALOG/);
+  assert.match(catalog, /RakutenApi\.fetchBookById/);
+  assert.match(catalog, /NdlApi\.fetchBookById/);
   assert.match(screen, /routeInformationUpdated/);
 });

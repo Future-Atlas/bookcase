@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/book.dart';
+import 'book_cover_image.dart';
 import '../models/post.dart';
 import '../services/content_safety_service.dart';
 import '../services/supabase_service.dart';
@@ -75,15 +76,7 @@ Future<bool> showPostComposerDialog({
                                 width: 88,
                                 height: 126,
                                 color: Colors.grey[350],
-                                child: book.coverUrl.trim().isNotEmpty
-                                    ? Image.network(
-                                        book.coverUrl,
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                _MissingCover(book: book),
-                                      )
-                                    : _MissingCover(book: book),
+                                child: BookCoverImage(book: book),
                               ),
                               const SizedBox(height: 8),
                               Text(
@@ -287,35 +280,3 @@ class _SpoilerButton extends StatelessWidget {
   }
 }
 
-class _MissingCover extends StatelessWidget {
-  const _MissingCover({required this.book});
-
-  final Book book;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.grey[300],
-      padding: const EdgeInsets.all(8),
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.menu_book_outlined, color: Colors.black45, size: 30),
-          const SizedBox(height: 6),
-          Text(
-            book.title,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 10,
-              color: Colors.black54,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

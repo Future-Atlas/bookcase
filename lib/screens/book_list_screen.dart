@@ -6,11 +6,12 @@ import '../services/avatar_url_policy.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../widgets/book_card.dart';
+import '../widgets/book_cover_image.dart';
 import '../config/feature_flags.dart';
 import '../widgets/book_search_results.dart';
-import '../widgets/rakuten_credit.dart';
+import '../widgets/catalog_credit.dart';
 import '../models/profile_page_color.dart';
-import '../api/rakuten_api.dart';
+import '../api/book_catalog_lookup.dart';
 import '../widgets/post_card.dart';
 import '../widgets/timeline_ad_slot.dart';
 import '../widgets/timeline_ad_policy.dart';
@@ -60,6 +61,7 @@ class _BookListScreenState extends State<BookListScreen> {
   final GlobalKey<_PagedBookScrollerState> _popularScrollerKey = GlobalKey();
   final GlobalKey<_PagedBookScrollerState> _newArrivalsScrollerKey =
       GlobalKey();
+  final GlobalKey<_PagedBookScrollerState> _japaneseScrollerKey = GlobalKey();
   final GlobalKey<_PagedBookScrollerState> _westernScrollerKey = GlobalKey();
   String? _openingBookId;
   bool _isServiceIntroductionExpanded = false;
@@ -78,7 +80,10 @@ class _BookListScreenState extends State<BookListScreen> {
     final initialBookId = widget.initialBookId?.trim() ?? '';
     if (initialBookId.isEmpty || _openingBookId == initialBookId) return;
     _openingBookId = initialBookId;
-    final book = await RakutenApi.fetchBookById(initialBookId);
+    final book = await const BookCatalogLookup().fetchById(
+      initialBookId,
+      enrichNdl: true,
+    );
     if (!mounted) return;
     if (book != null) {
       await _showBookDetailDialog(book, openedFromDirectUrl: true);
@@ -132,7 +137,7 @@ class _BookListScreenState extends State<BookListScreen> {
   }
 
   Future<void> _openBookFromPost(Post post) async {
-    final resolvedBook = await RakutenApi.fetchBookById(post.bookId);
+    final resolvedBook = await const BookCatalogLookup().fetchById(post.bookId);
     if (!mounted) return;
     final book =
         resolvedBook ??
@@ -441,7 +446,7 @@ class _BookListScreenState extends State<BookListScreen> {
         await showDialog(
           context: context,
           builder: (context) {
-            final hasCover = book.coverUrl.trim().isNotEmpty;
+            final hasCover = BookCoverImage.isApprovedCover(book);
             final service = Provider.of<SupabaseService>(
               context,
               listen: false,
@@ -480,21 +485,7 @@ class _BookListScreenState extends State<BookListScreen> {
                                   width: isNarrow ? double.infinity : 200,
                                   height: isNarrow ? 240 : 300,
                                   color: Colors.grey[400],
-                                  child: hasCover
-                                      ? Image.network(
-                                          book.coverUrl,
-                                          fit: BoxFit.cover,
-                                          alignment: isNarrow
-                                              ? Alignment.topCenter
-                                              : Alignment.center,
-                                          errorBuilder:
-                                              (context, error, stackTrace) {
-                                                return _buildMissingCoverFallback(
-                                                  book,
-                                                );
-                                              },
-                                        )
-                                      : _buildMissingCoverFallback(book),
+                                  child: BookCoverImage(book: book),
                                 ),
                                 const SizedBox(height: 12),
                                 if (!hasCover) ...[
@@ -882,35 +873,6 @@ class _BookListScreenState extends State<BookListScreen> {
     }
   }
 
-  Widget _buildMissingCoverFallback(Book book) {
-    return Container(
-      color: Colors.grey[300],
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.menu_book, size: 28, color: Colors.black54),
-          const SizedBox(height: 8),
-          Text(
-            book.title,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            book.author,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -1014,17 +976,41 @@ class _BookListScreenState extends State<BookListScreen> {
                                       hasMore: _controller.hasMoreRecommended,
                                       isLoadingInitial:
                                           _controller.isLoadingRecommended,
+                                      onRetry: () => unawaited(
+                                        _controller.retryRecommended(),
+                                      ),
                                     ),
                                   if (kIsWeb &&
                                       timelineAdDisplayReady &&
                                       widget.initialGenre == null &&
                                       _controller.recommendedBooks.isNotEmpty &&
-                                      _controller.westernBooks.isNotEmpty)
+                                      _controller.japaneseBooks.isNotEmpty)
                                     const TimelineAdSlot(
                                       key: ValueKey(
-                                        'home-ad-between-new-western',
+                                        'home-ad-between-new-japanese',
                                       ),
                                       slotIndex: 1,
+                                    ),
+                                  if (widget.initialGenre == null ||
+                                      widget.initialGenre == 'japanese')
+                                    _buildGenreSection(
+                                      title: '和書',
+                                      scrollerKey: _japaneseScrollerKey,
+                                      bookList: _controller.japaneseBooks,
+                                      pageNumber: _controller.japanesePage,
+                                      onLoadMore: _controller.loadMoreJapanese,
+                                      onLoadPrevious:
+                                          _controller.loadPreviousJapanese,
+                                      canLoadPrevious:
+                                          _controller.canLoadPreviousJapanese,
+                                      isLoadingMore:
+                                          _controller.isLoadingMoreJapanese,
+                                      hasMore: _controller.hasMoreJapanese,
+                                      isLoadingInitial:
+                                          _controller.isLoadingJapanese,
+                                      onRetry: () => unawaited(
+                                        _controller.retryJapanese(),
+                                      ),
                                     ),
                                   if (widget.initialGenre == null ||
                                       widget.initialGenre == 'western')
@@ -1043,6 +1029,8 @@ class _BookListScreenState extends State<BookListScreen> {
                                       hasMore: _controller.hasMoreWestern,
                                       isLoadingInitial:
                                           _controller.isLoadingWestern,
+                                      onRetry: () =>
+                                          unawaited(_controller.retryWestern()),
                                     ),
                                   if (widget.initialGenre == null) ...[
                                     Align(
@@ -1338,6 +1326,7 @@ class _BookListScreenState extends State<BookListScreen> {
     required bool isLoadingMore,
     required bool hasMore,
     required bool isLoadingInitial,
+    VoidCallback? onRetry,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1356,6 +1345,7 @@ class _BookListScreenState extends State<BookListScreen> {
           canLoadPrevious: canLoadPrevious,
           isLoadingMore: isLoadingMore,
           hasMore: hasMore,
+          onRetry: onRetry,
         ),
       ],
     );
@@ -1466,6 +1456,7 @@ class _BookListScreenState extends State<BookListScreen> {
     required bool canLoadPrevious,
     required bool isLoadingMore,
     required bool hasMore,
+    VoidCallback? onRetry,
   }) {
     if (bookList.isEmpty) {
       if (isLoadingInitial) {
@@ -1530,9 +1521,17 @@ class _BookListScreenState extends State<BookListScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              '楽天APIキー未設定、または通信エラーの可能性があります。',
+              '書籍が見つからないか、取得先が一時的に応答していません。',
               style: TextStyle(color: Colors.grey[500], fontSize: 11),
             ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('もう一度取得する'),
+              ),
+            ],
           ],
         ),
       );
@@ -1917,7 +1916,7 @@ class _BookListScreenState extends State<BookListScreen> {
             style: TextStyle(color: Colors.grey[400], fontSize: 11),
           ),
           const SizedBox(height: 8),
-          const RakutenCredit(),
+          const CatalogCredit(),
           const SizedBox(height: 4),
           Text(
             'Powered by Supabase & PostgreSQL',

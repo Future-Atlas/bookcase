@@ -54,7 +54,7 @@ jobs:
 
       - name: Upload nonsecret missing-name diagnostic
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cloudflare-staging-missing-secret-names
           path: ${{ runner.temp }}/cloudflare-staging-missing-secret-names.txt
@@ -67,7 +67,7 @@ jobs:
           cache: true
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
@@ -85,14 +85,17 @@ jobs:
           npm run test:cloudflare
 
       - name: Build Flutter Web (Cloudflare staging)
-        run: flutter build web --release --dart-define=FLUTTER_WEB_RENDERER=html --dart-define=APP_ENV=staging --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} --dart-define=SUPABASE_REDIRECT_URL=${{ secrets.SUPABASE_REDIRECT_URL }}
+        run: flutter build web --release --no-web-resources-cdn --dart-define=APP_ENV=staging --dart-define=STAGING_RAKUTEN_CATALOG=true --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} --dart-define=SUPABASE_REDIRECT_URL=${{ secrets.SUPABASE_REDIRECT_URL }}
+
+      - name: Verify local CanvasKit engine assets
+        run: node scripts/verify-local-canvaskit.mjs
 
       - name: Prepare Cloudflare assets
         run: npm run prepare:cloudflare
 
       - name: Deploy staging Worker
         id: deploy
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -119,9 +122,25 @@ jobs:
           SMOKE_DIAGNOSTIC_FILE: ${{ runner.temp }}/cloudflare-staging-smoke-diagnostic.json
         run: node scripts/cloudflare-smoke.mjs
 
+      # The staging catalog now uses Rakuten Books, not Open Library.
+      # Use two tiny read-only genre probes and avoid exposing book metadata
+      # or upstream credentials in Actions logs.
+      - name: Sample staging Rakuten book and foreign catalogs (non-blocking)
+        continue-on-error: true
+        env:
+          RAKUTEN_STAGE_BASE: ${{ steps.deploy.outputs.deployment-url }}
+        run: node scripts/staging-rakuten-probe.mjs
+
+      # Read-only sampling: an absent book jacket or transient upstream outage
+      # is recorded, not confused with a broken Cloudflare API route.
+      - name: Probe book cover provider availability (staging only)
+        env:
+          COVER_STAGE_BASE_URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: node scripts/cover-stage-probe.mjs
+
       - name: Upload safe smoke failure classification
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cloudflare-staging-smoke-diagnostic
           path: ${{ runner.temp }}/cloudflare-staging-smoke-diagnostic.json

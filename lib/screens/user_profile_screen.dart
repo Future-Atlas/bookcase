@@ -3,8 +3,9 @@ import '../services/avatar_url_policy.dart';
 import 'package:provider/provider.dart';
 import '../config/feature_flags.dart';
 import '../services/supabase_service.dart';
-import '../api/rakuten_api.dart';
+import '../api/book_catalog_lookup.dart';
 import '../models/book.dart';
+import '../widgets/book_cover_image.dart';
 import '../models/user_profile.dart';
 import '../models/post.dart';
 import '../models/post_reply.dart';
@@ -1017,15 +1018,22 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       floatingActionButton: AnimatedBuilder(
         animation: _tabController,
         builder: (context, _) {
-          if (_profile == null || !_isOwnProfile) return const SizedBox.shrink();
+          if (_profile == null || !_isOwnProfile)
+            return const SizedBox.shrink();
           final calendarSelected = _tabController.index == 2;
           return FloatingActionButton(
-            heroTag: calendarSelected ? 'addCalendarReading' : 'addReadBookFromProfile',
-            onPressed: calendarSelected ? _openCalendarBookSearch : _openBookSearch,
+            heroTag: calendarSelected
+                ? 'addCalendarReading'
+                : 'addReadBookFromProfile',
+            onPressed: calendarSelected
+                ? _openCalendarBookSearch
+                : _openBookSearch,
             backgroundColor: calendarSelected
                 ? (isDarkMode ? Colors.black : Colors.white)
                 : Colors.black,
-            foregroundColor: calendarSelected ? profileHeaderColor : Colors.white,
+            foregroundColor: calendarSelected
+                ? profileHeaderColor
+                : Colors.white,
             shape: CircleBorder(
               side: BorderSide(
                 color: calendarSelected ? profileHeaderColor : Colors.white24,
@@ -1072,7 +1080,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           _buildPostsTab(),
                           _buildReadBooksTab(),
                           ReadingCalendarTab(
-                            key: ValueKey('reading-calendar-${_profile!.id}-$_calendarVersion'),
+                            key: ValueKey(
+                              'reading-calendar-${_profile!.id}-$_calendarVersion',
+                            ),
                             ownerId: _profile!.id,
                             accentColor: profileHeaderColor,
                             onProfileTap: (selectedProfile) {
@@ -1080,13 +1090,16 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                 MaterialPageRoute<void>(
                                   builder: (routeContext) => UserProfileScreen(
                                     profileId: selectedProfile.id,
-                                    onBack: () => Navigator.of(routeContext).pop(),
+                                    onBack: () =>
+                                        Navigator.of(routeContext).pop(),
                                     onOpenProfile: widget.onOpenProfile,
                                   ),
                                 ),
                               );
                             },
-                            onResume: _isOwnProfile ? _resumeCalendarTimer : null,
+                            onResume: _isOwnProfile
+                                ? _resumeCalendarTimer
+                                : null,
                           ),
                           if (FeatureFlags.favoritesUiEnabled)
                             _buildFavoritesTab(),
@@ -1523,7 +1536,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _openBookFromPost(Post post) async {
-    final resolvedBook = await RakutenApi.fetchBookById(post.bookId);
+    final resolvedBook = await const BookCatalogLookup().fetchById(
+      post.bookId,
+      enrichNdl: true,
+    );
     if (!mounted) return;
     final book =
         resolvedBook ??
@@ -1559,8 +1575,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         final horizontalPadding = mobile
             ? geometry.outerPadding
             : compactThreeColumn
-                ? (compactPadding < 16 ? 16.0 : compactPadding)
-                : 16.0;
+            ? (compactPadding < 16 ? 16.0 : compactPadding)
+            : 16.0;
         return GridView.builder(
           padding: EdgeInsets.symmetric(
             horizontal: horizontalPadding,
@@ -1581,7 +1597,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               height: 140,
               coverHeightRatio: mobile
                   ? geometry.coverHeightRatio
-                  : showDescription ? (2 / 3) : (1 / 3),
+                  : showDescription
+                  ? (2 / 3)
+                  : (1 / 3),
               marginRight: mobile ? 0 : 16,
               marginBottom: mobile ? 0 : 12,
               showDescription: showDescription,
@@ -1664,14 +1682,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.network(
-                      book.coverUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: Colors.grey[300],
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.book, size: 36),
-                      ),
+                    // Reserve the lower rating strip; never cover the jacket.
+                    Positioned.fill(
+                      bottom: 32,
+                      child: BookCoverImage(book: book),
                     ),
                     Positioned(
                       left: 0,
@@ -1855,14 +1869,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               width: 62,
               height: 96,
               color: Colors.grey[300],
-              child: book.coverUrl.trim().isNotEmpty
-                  ? Image.network(
-                      book.coverUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Icon(Icons.menu_book, color: Colors.black54),
-                    )
-                  : const Icon(Icons.menu_book, color: Colors.black54),
+              child: BookCoverImage(book: book),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -2041,21 +2048,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (book.coverUrl.trim().isNotEmpty)
-                        Center(
-                          child: SizedBox(
-                            height: narrow ? 220 : 300,
-                            child: Image.network(
-                              book.coverUrl,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, _, _) => const Icon(
-                                Icons.menu_book,
-                                size: 64,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
+                      Center(
+                        child: SizedBox(
+                          height: narrow ? 220 : 300,
+                          child: BookCoverImage(book: book),
                         ),
+                      ),
                       const SizedBox(height: 12),
                       Text(
                         book.title.trim().isEmpty ? 'タイトル不明' : book.title,

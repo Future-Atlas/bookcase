@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
       - name: Audit taxonomy (no changes to restrictions)
@@ -45,7 +45,7 @@ jobs:
           GENRE_AUDIT_OUTPUT: "${{ runner.temp }}/rakuten-genre-audit.json"
         run: node scripts/audit-rakuten-books-genres.mjs
       - name: Save taxonomy candidates for manual review
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rakuten-books-genre-audit
           path: ${{ runner.temp }}/rakuten-genre-audit.json

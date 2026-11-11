@@ -176,12 +176,14 @@ class _PrivateAccountAdminPanelState extends State<PrivateAccountAdminPanel> {
     );
     if (confirmed != true || !mounted) return;
     setState(() => _processing = true);
-    final succeeded = await context.read<SupabaseService>().adminResetTotpFactor(
-      targetIdentifier: _targetController.text,
-      adminPassword: _passwordController.text,
-      reason: _reasonController.text,
-      requestReference: _referenceController.text,
-    );
+    final succeeded = await context
+        .read<SupabaseService>()
+        .adminResetTotpFactor(
+          targetIdentifier: _targetController.text,
+          adminPassword: _passwordController.text,
+          reason: _reasonController.text,
+          requestReference: _referenceController.text,
+        );
     if (!mounted) return;
     setState(() => _processing = false);
     _passwordController.clear();

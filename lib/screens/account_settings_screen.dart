@@ -19,6 +19,7 @@ import 'community_guidelines_screen.dart';
 import 'contact_screen.dart';
 import 'external_transmission_screen.dart';
 import 'infringement_policy_screen.dart';
+import 'mfa_settings_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'profile_onboarding_screen.dart';
 import 'subscription_status_screen.dart';
@@ -199,6 +200,14 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                     subtitle: const Text('プロフィール画像・ユーザー名・ユーザーID（変更不可）・鍵アカウント'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _push(const _PublicAccountSettingsScreen()),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.verified_user_outlined),
+                    title: const Text('二段階認証（MFA）'),
+                    subtitle: const Text('認証アプリを登録・確認してアカウントを保護'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _push(const MfaSettingsScreen()),
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -573,11 +582,9 @@ class _PublicAccountSettingsScreenState
       _updatingAvatar = false;
       if (result.url != null) _avatarUrl = result.url!;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result.error ?? 'プロフィール画像を更新しました。'),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.error ?? 'プロフィール画像を更新しました。')));
   }
 
   Future<void> _unlockPageColor(
@@ -1424,7 +1431,9 @@ class _ChangePrivacyPasswordScreenState
                     IconButton(
                       tooltip: _obscure ? 'パスワードを表示' : 'パスワードを隠す',
                       onPressed: () => setState(() => _obscure = !_obscure),
-                      icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                      icon: Icon(
+                        _obscure ? Icons.visibility : Icons.visibility_off,
+                      ),
                     ),
                   ],
                 ),
@@ -1444,7 +1453,8 @@ class _ChangePrivacyPasswordScreenState
                   children: [
                     IconButton(
                       tooltip: '確認用パスワードを貼り付け',
-                      onPressed: () => pasteClipboardInto(_confirmationController),
+                      onPressed: () =>
+                          pasteClipboardInto(_confirmationController),
                       icon: const Icon(Icons.content_paste_outlined),
                     ),
                     IconButton(

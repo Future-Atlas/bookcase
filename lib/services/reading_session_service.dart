@@ -9,7 +9,7 @@ import '../models/user_profile.dart';
 /// All writes go through authenticated, server-clock RPCs.
 class ReadingSessionService {
   ReadingSessionService({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
@@ -61,9 +61,10 @@ class ReadingSessionService {
     if (_currentId.isEmpty || ownerId.isEmpty) return false;
     try {
       return await _client.rpc(
-        'can_view_reading_calendar',
-        params: {'target_owner': ownerId},
-      ) == true;
+            'can_view_reading_calendar',
+            params: {'target_owner': ownerId},
+          ) ==
+          true;
     } on PostgrestException catch (error) {
       // During a staged production rollout, the social calendar RPC may not
       // be installed yet. Preserve the original owner-only calendar rather
@@ -87,10 +88,10 @@ class ReadingSessionService {
 
   Future<void> setFollowerHidden(String followerId, bool hidden) async {
     if (_currentId.isEmpty) throw StateError('ログインが必要です。');
-    await _client.rpc('set_reading_calendar_follower_hidden', params: {
-      'p_follower_id': followerId,
-      'p_hidden': hidden,
-    });
+    await _client.rpc(
+      'set_reading_calendar_follower_hidden',
+      params: {'p_follower_id': followerId, 'p_hidden': hidden},
+    );
   }
 
   Future<Map<String, ReadingReactionSummary>> reactionSummaries(
@@ -103,34 +104,35 @@ class ReadingSessionService {
     // Keep requests small even if the user has an exceptionally large month.
     try {
       for (var from = 0; from < ids.length; from += 100) {
-      final subset = ids.skip(from).take(100).toList(growable: false);
-      var offset = 0;
-      while (true) {
-        final rows = await _client
-            .from('reading_session_reactions')
-            .select('reading_session_id,profile_id,reaction_type')
-            .inFilter('reading_session_id', subset)
-            .range(offset, offset + pageSize - 1);
-        for (final row in rows) {
-          final sessionId = row['reading_session_id']?.toString() ?? '';
-          final type = PostReactionType.fromDatabase(
-            row['reaction_type']?.toString(),
-          );
-          if (sessionId.isEmpty || type == null) continue;
-          final current = summaries[sessionId] ?? const ReadingReactionSummary();
-          final next = Map<PostReactionType, int>.from(current.counts);
-          next[type] = (next[type] ?? 0) + 1;
-          summaries[sessionId] = ReadingReactionSummary(
-            counts: next,
-            selected: row['profile_id']?.toString() == _currentId
-                ? type
-                : current.selected,
-          );
+        final subset = ids.skip(from).take(100).toList(growable: false);
+        var offset = 0;
+        while (true) {
+          final rows = await _client
+              .from('reading_session_reactions')
+              .select('reading_session_id,profile_id,reaction_type')
+              .inFilter('reading_session_id', subset)
+              .range(offset, offset + pageSize - 1);
+          for (final row in rows) {
+            final sessionId = row['reading_session_id']?.toString() ?? '';
+            final type = PostReactionType.fromDatabase(
+              row['reaction_type']?.toString(),
+            );
+            if (sessionId.isEmpty || type == null) continue;
+            final current =
+                summaries[sessionId] ?? const ReadingReactionSummary();
+            final next = Map<PostReactionType, int>.from(current.counts);
+            next[type] = (next[type] ?? 0) + 1;
+            summaries[sessionId] = ReadingReactionSummary(
+              counts: next,
+              selected: row['profile_id']?.toString() == _currentId
+                  ? type
+                  : current.selected,
+            );
+          }
+          if (rows.length < pageSize) break;
+          offset += pageSize;
         }
-        if (rows.length < pageSize) break;
-        offset += pageSize;
       }
-    }
     } on PostgrestException catch (error) {
       // A missing reactions table is expected before the production social
       // migration; keep the original private reading calendar usable.
@@ -181,8 +183,11 @@ class ReadingSessionService {
   ) async {
     if (_currentId.isEmpty) throw StateError('ログインが必要です。');
     if (previous == type) {
-      await _client.from('reading_session_reactions').delete()
-          .eq('reading_session_id', sessionId).eq('profile_id', _currentId);
+      await _client
+          .from('reading_session_reactions')
+          .delete()
+          .eq('reading_session_id', sessionId)
+          .eq('profile_id', _currentId);
     } else {
       await _client.from('reading_session_reactions').upsert({
         'reading_session_id': sessionId,
@@ -195,7 +200,10 @@ class ReadingSessionService {
   /// Fetch every session overlapping a month, paging beyond PostgREST's
   /// default row limit. A session is capped at 24h, so one day of lookback
   /// is enough to include overnight reading on the first day of the month.
-  Future<List<ReadingSession>> loadMonth(DateTime month, {String? profileId}) async {
+  Future<List<ReadingSession>> loadMonth(
+    DateTime month, {
+    String? profileId,
+  }) async {
     final owner = profileId ?? _currentId;
     if (_currentId.isEmpty || owner.isEmpty) return [];
     final firstDay = DateTime(month.year, month.month, 1);
@@ -223,10 +231,7 @@ class ReadingSessionService {
 }
 
 class ReadingReactionSummary {
-  const ReadingReactionSummary({
-    this.counts = const {},
-    this.selected,
-  });
+  const ReadingReactionSummary({this.counts = const {}, this.selected});
 
   final Map<PostReactionType, int> counts;
   final PostReactionType? selected;

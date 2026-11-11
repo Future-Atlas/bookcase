@@ -226,6 +226,7 @@ class _MainNavigationShellState extends State<MainNavigationShell>
   String? _genreFromPath(String path) {
     if (path == '/featured-books') return 'featured';
     if (path == '/genre/recommended') return 'recommended';
+    if (path == '/genre/japanese') return 'japanese';
     if (path == '/genre/western') return 'western';
     if (path == '/genre/popular') return 'popular';
     return null;

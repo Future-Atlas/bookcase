@@ -114,19 +114,21 @@ export function deploy({
   // Password is read from SUPABASE_DB_PASSWORD, never passed as a CLI argument.
   run(['link', '--project-ref', STAGING_PROJECT, '--yes']);
   checkTarget();
+  // CLI v3 defaults to local: every hosted operation MUST explicitly name
+  // the validated remote target. Never remove these --remote flags.
   // Use the IPv4-capable Session pooler explicitly. GitHub-hosted runners
   // cannot reliably reach Supabase's IPv6-only direct database endpoint.
-  run(['migration', 'list', '--db-url', dbUrl]);
+  run(['migration', 'list', '--remote=' + dbUrl]);
   // include-all also handles an older migration added after newer migrations.
-  run(['db', 'push', '--db-url', dbUrl, '--include-all', '--dry-run']);
+  run(['db', 'push', '--remote=' + dbUrl, '--include-all', '--dry-run']);
   if (mode === 'plan') return;
 
   checkTarget();
   // Never reset a linked/cloud database. Only apply pending migrations.
-  run(['db', 'push', '--db-url', dbUrl, '--include-all', '--yes']);
+  run(['db', 'push', '--remote=' + dbUrl, '--include-all', '--yes']);
   for (const name of FUNCTIONS) {
     checkTarget();
-    run(['functions', 'deploy', name, '--project-ref', STAGING_PROJECT, '--yes']);
+    run(['functions', 'deploy', name, '--remote=' + STAGING_PROJECT, '--yes']);
   }
 }
 

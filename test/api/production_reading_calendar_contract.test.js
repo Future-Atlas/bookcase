@@ -10,7 +10,7 @@ test('production My Page exposes private calendar between bookshelf and favorite
   assert.match(source, /const Tab\(text: 'My 本棚'\),\s+const Tab\(text: 'カレンダー'\)/);
   assert.match(source, /ReadingCalendarTab\(/);
   assert.match(source, /ownerId: _profile!\.id/);
-  assert.match(source, /onResume: _isOwnProfile \? _resumeCalendarTimer : null/);
+  assert.match(source, /onResume: _isOwnProfile\s+\? _resumeCalendarTimer\s+: null/);
   assert.match(source, /tooltip: calendarSelected \? 'カレンダーに追加'/);
   assert.match(source, /ReadingTimerScreen\(/);
 });

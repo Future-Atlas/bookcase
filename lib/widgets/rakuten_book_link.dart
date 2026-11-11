@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../api/rakuten_api.dart';
 import '../models/book.dart';
+import '../config/rakuten_affiliate_links.dart';
 
 class RakutenBookLink extends StatefulWidget {
   const RakutenBookLink({super.key, required this.book, this.lookup});
@@ -35,7 +35,7 @@ class RakutenBookLink extends StatefulWidget {
 }
 
 class _RakutenBookLinkState extends State<RakutenBookLink> {
-  late Future<({Uri uri, int itemPrice})?> _destination;
+  late Future<Uri?> _destination;
 
   @override
   void initState() {
@@ -48,65 +48,32 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.book.id != widget.book.id ||
         oldWidget.book.isbn != widget.book.isbn ||
-        oldWidget.book.rakutenAffiliateUrl != widget.book.rakutenAffiliateUrl ||
-        oldWidget.book.itemPrice != widget.book.itemPrice) {
+        oldWidget.book.rakutenAffiliateUrl != widget.book.rakutenAffiliateUrl) {
       _destination = _resolve();
     }
   }
 
-  Future<({Uri uri, int itemPrice})?> _resolve() async {
+  Future<Uri?> _resolve() async {
     final provided = RakutenBookLink.validatedDestination(
       widget.book.rakutenAffiliateUrl,
     );
     if (provided != null) {
-      return (uri: provided, itemPrice: widget.book.itemPrice);
+      return provided;
     }
     try {
       if (widget.lookup != null) {
         final uri = RakutenBookLink.validatedDestination(
           await widget.lookup!(widget.book),
         );
-        return uri == null
-            ? null
-            : (uri: uri, itemPrice: widget.book.itemPrice);
+        return uri;
       }
 
-      final bookId = widget.book.isbn.isNotEmpty
-          ? widget.book.isbn
-          : widget.book.id;
-      final resolvedBook = await RakutenApi.fetchBookById(bookId);
-      final resolvedUri = RakutenBookLink.validatedDestination(
-        resolvedBook?.rakutenAffiliateUrl,
-      );
-      if (resolvedUri != null) {
-        return (
-          uri: resolvedUri,
-          itemPrice: resolvedBook?.itemPrice ?? widget.book.itemPrice,
-        );
-      }
-
-      final fallbackUri = RakutenBookLink.validatedDestination(
-        await RakutenApi.fetchAffiliateUrlForBook(widget.book),
-      );
-      return fallbackUri == null
-          ? null
-          : (uri: fallbackUri, itemPrice: widget.book.itemPrice);
+      // Only verified ISBN-specific URLs. Never guess product links.
+      return RakutenBookLink.validatedDestination(
+        RakutenAffiliateLinks.forIsbn(widget.book.isbn));
     } catch (_) {
       return null;
     }
-  }
-
-  String _priceLabel(int itemPrice) {
-    if (itemPrice <= 0) return '';
-    final digits = itemPrice.toString();
-    final output = StringBuffer();
-    for (var index = 0; index < digits.length; index++) {
-      if (index > 0 && (digits.length - index) % 3 == 0) {
-        output.write(',');
-      }
-      output.write(digits[index]);
-    }
-    return '（税込$output円）';
   }
 
   Future<void> _open(Uri uri) async {
@@ -123,7 +90,7 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
 
   @override
   Widget build(BuildContext context) =>
-      FutureBuilder<({Uri uri, int itemPrice})?>(
+      FutureBuilder<Uri?>(
         future: _destination,
         builder: (context, snapshot) {
           final destination = snapshot.data;
@@ -131,7 +98,6 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
               destination == null) {
             return const SizedBox.shrink();
           }
-          final priceLabel = _priceLabel(destination.itemPrice);
           return Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Column(
@@ -146,9 +112,9 @@ class _RakutenBookLinkState extends State<RakutenBookLink> {
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: () => _open(destination.uri),
+                    onPressed: () => _open(destination),
                     icon: const Icon(Icons.open_in_new, size: 18),
-                    label: Text('楽天ブックスで購入する$priceLabel'),
+                    label: const Text('楽天ブックスで購入する'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFFBF0000),
                       backgroundColor: const Color(0xFF77C6A6),

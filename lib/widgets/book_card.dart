@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/book.dart';
+import 'book_cover_image.dart';
 
 class BookCard extends StatefulWidget {
   final Book book;
@@ -95,37 +96,16 @@ class _BookCardState extends State<BookCard> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // The cover fills the whole card. Book information is
-                  // overlaid on its lower portion without changing the
-                  // information panel's existing height ratio.
-                  Hero(
-                    tag: 'book-cover-${widget.book.id}',
-                    child: Image.network(
-                      widget.book.coverUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: Colors.grey[300],
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.book,
-                            size: 40,
-                            color: Colors.grey,
-                          ),
-                        );
-                      },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          color: Colors.grey[200],
-                          alignment: Alignment.center,
-                          child: const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        );
-                      },
+                  // Keep the entire cover in the image area above the
+                  // information panel; never cover or crop publisher artwork.
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: cardHeight * widget.coverHeightRatio,
+                    child: Hero(
+                      tag: 'book-cover-${widget.book.id}',
+                      child: BookCoverImage(book: widget.book),
                     ),
                   ),
                   Align(
