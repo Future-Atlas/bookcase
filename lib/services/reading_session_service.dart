@@ -59,10 +59,20 @@ class ReadingSessionService {
   /// Owner or an accepted follower not excluded by the owner.
   Future<bool> canViewCalendar(String ownerId) async {
     if (_currentId.isEmpty || ownerId.isEmpty) return false;
-    return await _client.rpc(
-      'can_view_reading_calendar',
-      params: {'target_owner': ownerId},
-    ) == true;
+    try {
+      return await _client.rpc(
+        'can_view_reading_calendar',
+        params: {'target_owner': ownerId},
+      ) == true;
+    } on PostgrestException catch (error) {
+      // During a staged production rollout, the social calendar RPC may not
+      // be installed yet. Preserve the original owner-only calendar rather
+      // than allowing followers to view private sessions.
+      if (error.code == 'PGRST202' || error.code == '42883') {
+        return ownerId == _currentId;
+      }
+      rethrow;
+    }
   }
 
   /// The only editable visibility entries are accepted followers.
@@ -91,7 +101,8 @@ class ReadingSessionService {
     const pageSize = 500;
     final ids = sessions.map((session) => session.id).toSet().toList();
     // Keep requests small even if the user has an exceptionally large month.
-    for (var from = 0; from < ids.length; from += 100) {
+    try {
+      for (var from = 0; from < ids.length; from += 100) {
       final subset = ids.skip(from).take(100).toList(growable: false);
       var offset = 0;
       while (true) {
@@ -119,6 +130,14 @@ class ReadingSessionService {
         if (rows.length < pageSize) break;
         offset += pageSize;
       }
+    }
+    } on PostgrestException catch (error) {
+      // A missing reactions table is expected before the production social
+      // migration; keep the original private reading calendar usable.
+      if (error.code == '42P01' || error.code == 'PGRST205') {
+        return {};
+      }
+      rethrow;
     }
     return summaries;
   }

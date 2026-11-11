@@ -1944,12 +1944,14 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
-  Future<List<SocialNotification>> fetchNotifications() async {
-    final profileId = activeProfileId;
-    if (!_isInitialized || _client == null || profileId.isEmpty) return [];
-
+  /// Keep existing post and follow notifications working while the new
+  /// follower-calendar migration is staged separately in production.
+  /// Only missing-column / missing-relationship errors use the legacy query.
+  Future<List<Map<String, dynamic>>> _readNotificationsAcrossSchemaVersions(
+    String profileId,
+  ) async {
     try {
-      final response = await _client!
+      return await _client!
           .from('notifications')
           .select(
             'id, type, actor_id, post_id, reply_id, reading_session_id, read_at, created_at, '
@@ -1960,6 +1962,32 @@ class SupabaseService extends ChangeNotifier {
           .eq('recipient_id', profileId)
           .order('created_at', ascending: false)
           .limit(100);
+    } on PostgrestException catch (error) {
+      if (error.code != '42703' &&
+          error.code != 'PGRST200' &&
+          error.code != 'PGRST204' &&
+          error.code != 'PGRST205') {
+        rethrow;
+      }
+      return await _client!
+          .from('notifications')
+          .select(
+            'id, type, actor_id, post_id, reply_id, read_at, created_at, '
+            'actor:profiles!notifications_actor_id_fkey(username, user_id, avatar_url), '
+            'post:posts!notifications_post_id_fkey(book_id, book_title)',
+          )
+          .eq('recipient_id', profileId)
+          .order('created_at', ascending: false)
+          .limit(100);
+    }
+  }
+
+  Future<List<SocialNotification>> fetchNotifications() async {
+    final profileId = activeProfileId;
+    if (!_isInitialized || _client == null || profileId.isEmpty) return [];
+
+    try {
+      final response = await _readNotificationsAcrossSchemaVersions(profileId);
       final pendingResponse = await _client!
           .from('follows')
           .select('follower_id')
