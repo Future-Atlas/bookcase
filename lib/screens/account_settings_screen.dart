@@ -23,6 +23,7 @@ import 'mfa_settings_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'profile_onboarding_screen.dart';
 import 'subscription_status_screen.dart';
+import 'reading_calendar_visibility_screen.dart';
 import 'terms_screen.dart';
 
 class AccountSettingsScreen extends StatefulWidget {
@@ -220,6 +221,15 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                     title: const Text('ブロックしているアカウント'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _push(const _BlockedAccountsScreen()),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    contentPadding: const EdgeInsets.only(left: 40, right: 16),
+                    leading: const Icon(Icons.calendar_month_outlined),
+                    title: const Text('読書カレンダーを表示しない人'),
+                    subtitle: const Text('フォロワーごとにカレンダー・通知を非公開'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _push(const ReadingCalendarVisibilityScreen()),
                   ),
                   const Divider(height: 1),
                   Consumer<ThemeService>(

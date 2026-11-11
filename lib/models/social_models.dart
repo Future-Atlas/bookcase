@@ -57,6 +57,8 @@ enum SocialNotificationType {
   follow,
   followRequest,
   newPost,
+  readingSession,
+  readingReaction,
 }
 
 class SocialNotification {
@@ -71,6 +73,7 @@ class SocialNotification {
     required this.replyId,
     required this.bookId,
     required this.bookTitle,
+    this.readingSessionId,
     required this.isRead,
     required this.followRequestPending,
     required this.createdAt,
@@ -86,6 +89,7 @@ class SocialNotification {
   final String? replyId;
   final String? bookId;
   final String? bookTitle;
+  final String? readingSessionId;
   final bool isRead;
   final bool followRequestPending;
   final DateTime createdAt;
@@ -106,6 +110,7 @@ class SocialNotification {
       replyId: replyId,
       bookId: bookId,
       bookTitle: bookTitle ?? this.bookTitle,
+      readingSessionId: readingSessionId,
       isRead: isRead ?? this.isRead,
       followRequestPending: followRequestPending ?? this.followRequestPending,
       createdAt: createdAt,
