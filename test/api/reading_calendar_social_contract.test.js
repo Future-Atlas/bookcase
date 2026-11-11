@@ -49,3 +49,13 @@ test('reader reactions support the exact post reaction types and are scoped', ()
   assert.match(calendar, /PostReactionType.values/);
   assert.match(calendar, /_reactionButtons\(session/);
 });
+
+test('calendar reaction user lists reuse review post engagement UI', () => {
+  const calendar = read('lib/screens/reading_calendar_tab.dart');
+  const usersScreen = read('lib/screens/post_engagement_users_screen.dart');
+  const service = read('lib/services/reading_session_service.dart');
+  assert.match(calendar, /onLongPress: \(\) => _showReactionUsers\(session, reaction\)/);
+  assert.match(calendar, /onSecondaryTap: \(\) => _showReactionUsers\(session, reaction\)/);
+  assert.match(usersScreen, /ReadingSessionService\(\)\.reactionUsers\(/);
+  assert.match(service, /Future<List<UserProfile>> reactionUsers\(/);
+});

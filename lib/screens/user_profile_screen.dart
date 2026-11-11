@@ -1076,6 +1076,17 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             key: ValueKey('reading-calendar-${_profile!.id}-$_calendarVersion'),
                             ownerId: _profile!.id,
                             accentColor: profileHeaderColor,
+                            onProfileTap: (selectedProfile) {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (routeContext) => UserProfileScreen(
+                                    profileId: selectedProfile.id,
+                                    onBack: () => Navigator.of(routeContext).pop(),
+                                    onOpenProfile: widget.onOpenProfile,
+                                  ),
+                                ),
+                              );
+                            },
                             onResume: _isOwnProfile ? _resumeCalendarTimer : null,
                           ),
                           if (FeatureFlags.favoritesUiEnabled)
