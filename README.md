@@ -22,7 +22,7 @@ Vercel remains available only through manual fallback deployment workflows.
 - provider ^6.1.2
 - google_fonts ^9.0.0
 - Wrangler is pinned for Cloudflare production/staging deployments; Vercel CLI is retained only for manual fallback deployments
-- Supabase CLI 2.115.0 in validation/deployment workflows; npm development dependency 2.120.0 (independent pins)
+- Supabase CLI 3.0.0 in validation/deployment workflows and npm development dependencies
 
 ## Local Development
 
@@ -181,7 +181,7 @@ npm run test:api
 ```
 
 Relevant Supabase PRs additionally run `.github/workflows/supabase-validate.yaml`
-with Supabase CLI 2.115.0:
+with Supabase CLI 3.0.0:
 
 ```bash
 supabase start

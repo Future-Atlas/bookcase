@@ -45,7 +45,7 @@ mainを選んで手動実行してもジョブはスキップされます。
 4. Supabase Management APIの読み取り専用GETで、stagingのPATが指定プロジェクトにアクセスできるか確認。401/403/404などのエラーを秘密情報を出さずに検出。実際のDBへの書き込み権限はこの段階では未検証。
 5. 検証プロジェクトにリンクし、その結果が指定IDと一致するか検査。
 6. IPv4対応のSession pooler URLでリモートのマイグレーション履歴を確認。
-7. `db push --dry-run --include-all --db-url` で未適用ファイルを確認。
+7. `db push --dry-run --include-all --remote=` で未適用ファイルを確認。
 8. applyの場合だけ、同じSession pooler経由で未適用ファイルを反映。
 9. `session-guard`、`delete-account`、`admin-delete-account`、`billing-checkout`、`billing-cancel-subscription`、`billing-change-plan`、`billing-webhook` の7関数を検証プロジェクトに配置。
 
@@ -54,6 +54,8 @@ mainを選んで手動実行してもジョブはスキップされます。
 SQLは複数ファイル全体で一括トランザクションにはなりません。途中で失敗した場合は後続処理を停止しますが、成功済みの変更は残り得ます。エラーを修正し、適用履歴と次のdry-runを確認してから再実行してください。`--include-all` は後から追加された古い日付の未適用ファイルも対象にします。
 
 ## 完了確認と、まだ必要な設定
+
+設定・ツール・ワークフローだけの更新を `develop` にマージした場合は `plan` のみ実行し、DBとEdge Functionsには書き込みません。`supabase/migrations/` または `supabase/functions/` の更新を含むpushだけ自動的に `apply` します。手動実行の `apply_changes=true` でもapplyできます。すべてのリモート操作にはCLI v3の `--remote` 指定を使用します。
 
 Actionsのvalidate/deployが成功し、SummaryのModeが `apply` であることを確認します。plan成功だけではDB構築完了ではありません。
 
