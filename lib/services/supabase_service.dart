@@ -1604,9 +1604,10 @@ class SupabaseService extends ChangeNotifier {
       final response = await _client!
           .from('notifications')
           .select(
-            'id, type, actor_id, post_id, reply_id, read_at, created_at, '
+            'id, type, actor_id, post_id, reply_id, reading_session_id, read_at, created_at, '
             'actor:profiles!notifications_actor_id_fkey(username, user_id, avatar_url), '
-            'post:posts!notifications_post_id_fkey(book_id, book_title)',
+            'post:posts!notifications_post_id_fkey(book_id, book_title), '
+            'reading:reading_sessions!notifications_reading_session_id_fkey(book_title)',
           )
           .eq('recipient_id', profileId)
           .order('created_at', ascending: false)
@@ -1627,6 +1628,7 @@ class SupabaseService extends ChangeNotifier {
         final row = raw as Map<String, dynamic>;
         final actor = row['actor'] as Map<String, dynamic>?;
         final post = row['post'] as Map<String, dynamic>?;
+        final reading = row['reading'] as Map<String, dynamic>?;
         final rawType = row['type']?.toString();
         final type = switch (rawType) {
           'reaction' => SocialNotificationType.reaction,
@@ -1636,12 +1638,15 @@ class SupabaseService extends ChangeNotifier {
           'reply' => SocialNotificationType.reply,
           'follow_request' => SocialNotificationType.followRequest,
           'new_post' => SocialNotificationType.newPost,
+          'reading_session' => SocialNotificationType.readingSession,
+          'reading_reaction' => SocialNotificationType.readingReaction,
           _ => SocialNotificationType.follow,
         };
         final actorId = row['actor_id']?.toString() ?? '';
         final bookId = post?['book_id']?.toString();
         String? bookTitle;
-        bookTitle = post?['book_title']?.toString();
+        bookTitle = post?['book_title']?.toString() ??
+            reading?['book_title']?.toString();
         if ((bookTitle == null || bookTitle.isEmpty) &&
             bookId != null &&
             bookId.isNotEmpty) {
@@ -1664,6 +1669,7 @@ class SupabaseService extends ChangeNotifier {
             replyId: row['reply_id']?.toString(),
             bookId: bookId,
             bookTitle: bookTitle,
+            readingSessionId: row['reading_session_id']?.toString(),
             isRead: row['read_at'] != null,
             followRequestPending:
                 type == SocialNotificationType.followRequest &&
