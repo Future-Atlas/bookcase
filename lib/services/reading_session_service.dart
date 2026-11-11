@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/book.dart';
 import '../models/reading_session.dart';
 import '../models/social_models.dart';
+import '../models/user_profile.dart';
 
 /// No local timestamp can create or modify a stored reading record.
 /// All writes go through authenticated, server-clock RPCs.
@@ -120,6 +121,37 @@ class ReadingSessionService {
       }
     }
     return summaries;
+  }
+
+  Future<List<UserProfile>> reactionUsers(
+    String sessionId,
+    PostReactionType reaction,
+  ) async {
+    if (_currentId.isEmpty) return [];
+    const pageSize = 500;
+    var offset = 0;
+    final profiles = <UserProfile>[];
+    while (true) {
+      final rows = await _client
+          .from('reading_session_reactions')
+          .select(
+            'profile:profiles!reading_session_reactions_profile_id_fkey('
+            'id,username,user_id,avatar_url,bio,followers_count,'
+            'following_count,read_count,is_private,page_color)',
+          )
+          .eq('reading_session_id', sessionId)
+          .eq('reaction_type', reaction.databaseValue)
+          .range(offset, offset + pageSize - 1);
+      for (final row in rows) {
+        final profile = row['profile'];
+        if (profile is Map<String, dynamic>) {
+          profiles.add(UserProfile.fromJson(profile));
+        }
+      }
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+    }
+    return profiles;
   }
 
   /// The same three reactions and toggle behavior as book reviews.

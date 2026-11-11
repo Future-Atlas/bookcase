@@ -6,6 +6,8 @@ import '../utils/reading_calendar_border.dart';
 
 import '../models/reading_session.dart';
 import '../models/social_models.dart';
+import '../models/user_profile.dart';
+import 'post_engagement_users_screen.dart';
 import '../models/book.dart';
 import '../widgets/book_cover_image.dart';
 import '../services/reading_session_service.dart';
@@ -16,11 +18,13 @@ class ReadingCalendarTab extends StatefulWidget {
     super.key,
     required this.accentColor,
     required this.ownerId,
+    required this.onProfileTap,
     this.onResume,
   });
 
   final Color accentColor;
   final String ownerId;
+  final ValueChanged<UserProfile> onProfileTap;
   final Future<void> Function(ReadingSession session)? onResume;
 
   @override
@@ -136,6 +140,21 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
     );
   }
 
+  Future<void> _showReactionUsers(
+    ReadingSession session, PostReactionType reaction,
+  ) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PostEngagementUsersScreen(
+          readingSessionId: session.id,
+          reaction: reaction,
+          title: 'このリアクションをしたユーザー',
+          onProfileTap: widget.onProfileTap,
+        ),
+      ),
+    );
+  }
+
   Widget _reactionButtons(
     ReadingSession session, {
     required StateSetter refreshDialog,
@@ -150,6 +169,8 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
           InkWell(
             key: ValueKey('reading-reaction-${session.id}-${reaction.databaseValue}'),
             borderRadius: BorderRadius.circular(18),
+            onLongPress: () => _showReactionUsers(session, reaction),
+            onSecondaryTap: () => _showReactionUsers(session, reaction),
             onTap: widget.onResume != null
                 ? null
                 : () async {
