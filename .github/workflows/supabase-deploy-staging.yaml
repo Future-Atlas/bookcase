@@ -51,16 +51,16 @@ jobs:
         id: setup_supabase
         uses: supabase/setup-cli@v3
         with:
-          version: "2.115.0"
+          version: "3.0.0"
 
       - name: Build a disposable local database
         run: supabase start
 
       - name: Replay all migrations locally
-        run: supabase db reset --local --yes
+        run: supabase db reset --yes
 
       - name: Test database access policies
-        run: supabase test db --local
+        run: supabase test db
 
       - name: Stop disposable database
         if: always() && steps.setup_supabase.outcome == 'success'
@@ -83,6 +83,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+          # Git history is required to detect whether SQL/function sources changed.
+          fetch-depth: 0
 
       - name: Check staging target and credentials before connecting
         run: node scripts/deploy-staging-db.mjs guard
@@ -93,16 +95,23 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3
         with:
-          version: "2.115.0"
+          version: "3.0.0"
+
+      - name: Select safe staging deployment mode
+        id: db_mode
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          MANUAL_APPLY: ${{ inputs.apply_changes }}
+        run: node scripts/staging-db-deployment-mode.mjs
 
       - name: Plan then apply to staging only
         env:
-          DEPLOY_MODE: ${{ (github.event_name == 'push' || inputs.apply_changes) && 'apply' || 'plan' }}
+          DEPLOY_MODE: ${{ steps.db_mode.outputs.mode }}
         run: node scripts/deploy-staging-db.mjs "$DEPLOY_MODE"
 
       - name: Record result without credentials
         env:
-          DEPLOY_MODE: ${{ (github.event_name == 'push' || inputs.apply_changes) && 'apply' || 'plan' }}
+          DEPLOY_MODE: ${{ steps.db_mode.outputs.mode }}
         run: |
           printf '### Supabase staging\n\nProject: `wpoigmywpewrrbudqhgh`\n\nMode: `%s`\n\nCommit: `%s`\n' "$DEPLOY_MODE" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           if [[ "$DEPLOY_MODE" == "plan" ]]; then
