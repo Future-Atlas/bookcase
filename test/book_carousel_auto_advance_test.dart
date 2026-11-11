@@ -20,9 +20,9 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
     expect(first, 1);
     a.resumeAfterBookDetail();
-    await tester.pump(const Duration(seconds: 11));
+    await tester.pump(const Duration(seconds: 14));
     expect(first, 1);
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 1));
     expect(first, 2);
     a.dispose();
     b.dispose();
@@ -76,6 +76,38 @@ void main() {
     controller.dispose();
   });
 
+  testWidgets('hover or touch holds pause until 15 seconds after release', (
+    tester,
+  ) async {
+    var advances = 0;
+    final hover = Object();
+    final touch = Object();
+    final controller = BookCarouselAutoAdvance(
+      onAdvance: () => advances++,
+      advanceInterval: const Duration(milliseconds: 1500),
+      holdResumeDelay: const Duration(seconds: 15),
+    )..start();
+
+    controller.beginInteractionHold(hover);
+    controller.beginInteractionHold(touch);
+    controller.registerUserInteraction();
+    await tester.pump(const Duration(minutes: 1));
+    expect(advances, 0);
+
+    controller.endInteractionHold(touch);
+    await tester.pump(const Duration(seconds: 30));
+    expect(advances, 0, reason: 'hover still holds this carousel');
+
+    controller.endInteractionHold(hover);
+    await tester.pump(const Duration(seconds: 14));
+    expect(advances, 0);
+    await tester.pump(const Duration(seconds: 1));
+    expect(advances, 1);
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(advances, 2);
+    controller.dispose();
+  });
+
   test('page scrolling is not treated as a carousel interaction', () {
     final source = File('lib/screens/book_list_screen.dart').readAsStringSync();
     expect(
@@ -92,5 +124,13 @@ void main() {
     );
     expect(source, contains('notification.metrics.axis != Axis.horizontal'));
     expect(source, contains('notification.dragDetails != null'));
+    expect(source, contains('_beginInteractionHold(_hoverInteraction)'));
+    expect(source, contains('_endInteractionHold(_hoverInteraction)'));
+    expect(source, contains('_beginInteractionHold(_pointerInteraction)'));
+    expect(source, contains('_endInteractionHold(_pointerInteraction)'));
+    expect(
+      source,
+      contains('_scrollController.jumpTo(_scrollController.offset)'),
+    );
   });
 }

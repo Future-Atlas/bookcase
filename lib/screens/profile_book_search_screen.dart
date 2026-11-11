@@ -12,7 +12,9 @@ import '../widgets/book_action_label.dart';
 import '../widgets/post_reply_dialog.dart';
 
 class ProfileBookSearchScreen extends StatefulWidget {
-  const ProfileBookSearchScreen({super.key});
+  const ProfileBookSearchScreen({super.key, this.calendarSelection = false});
+
+  final bool calendarSelection;
 
   @override
   State<ProfileBookSearchScreen> createState() =>
@@ -116,8 +118,8 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 0,
-        title: const Text(
-          '本を検索',
+        title: Text(
+          widget.calendarSelection ? 'カレンダーに追加する本を検索' : '本を検索',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
@@ -245,8 +247,15 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          FutureBuilder<bool>(
-                            future: _readStatusFutures.putIfAbsent(
+                          if (widget.calendarSelection)
+                            FilledButton.icon(
+                              onPressed: () => Navigator.of(context).pop(book),
+                              icon: const Icon(Icons.timer_outlined),
+                              label: const Text('この本で計測'),
+                            ),
+                          if (!widget.calendarSelection)
+                            FutureBuilder<bool>(
+                              future: _readStatusFutures.putIfAbsent(
                               book.id,
                               () => Provider.of<SupabaseService>(
                                 context,
@@ -287,9 +296,11 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
                               );
                             },
                           ),
-                          const SizedBox(width: 8),
-                          FutureBuilder<bool>(
-                            future: _wantedStatusFutures.putIfAbsent(
+                          if (!widget.calendarSelection)
+                            const SizedBox(width: 8),
+                          if (!widget.calendarSelection)
+                            FutureBuilder<bool>(
+                              future: _wantedStatusFutures.putIfAbsent(
                               book.id,
                               () => Provider.of<SupabaseService>(
                                 context,

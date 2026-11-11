@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:crop_your_image/crop_your_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../services/avatar_url_policy.dart';
 import 'package:image_picker/image_picker.dart';
@@ -12,6 +13,8 @@ import '../models/user_profile.dart';
 import '../models/profile_page_color.dart';
 import '../services/supabase_service.dart';
 import '../services/theme_service.dart';
+import '../utils/avatar_image_format.dart';
+import '../utils/text_field_clipboard.dart';
 import 'community_guidelines_screen.dart';
 import 'contact_screen.dart';
 import 'external_transmission_screen.dart';
@@ -188,7 +191,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                   ListTile(
                     leading: const Icon(Icons.manage_accounts_outlined),
                     title: const Text('アカウント設定'),
-                    subtitle: const Text('ユーザー名・ユーザーID（変更不可）・鍵アカウント'),
+                    subtitle: const Text(
+                      'プロフィール画像・ユーザー名・ユーザーID（変更不可）・鍵アカウント',
+                    ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _push(const _PublicAccountSettingsScreen()),
                   ),
@@ -488,14 +493,37 @@ class _PublicAccountSettingsScreenState
   }
 
   Future<void> _chooseAvatar() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 85,
-    );
+    XFile? picked;
+    try {
+      picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        // The web plugin resizes through a temporary browser canvas. That
+        // conversion can fail in embedded/mobile browsers after a valid file
+        // has already been selected. The crop dialog below performs the
+        // actual edit, so keep the original bytes on web and only request the
+        // picker-side optimization on native platforms.
+        maxWidth: kIsWeb ? null : 1024,
+        maxHeight: kIsWeb ? null : 1024,
+        imageQuality: kIsWeb ? null : 85,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('端末から画像を選択できませんでした。もう一度お試しください。')),
+      );
+      return;
+    }
     if (picked == null || !mounted) return;
-    final bytes = await picked.readAsBytes();
+    Uint8List bytes;
+    try {
+      bytes = await picked.readAsBytes();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('選択した画像を読み込めませんでした。')));
+      return;
+    }
     if (!mounted) return;
     if (bytes.lengthInBytes > 5 * 1024 * 1024) {
       ScaffoldMessenger.of(
@@ -516,13 +544,18 @@ class _PublicAccountSettingsScreenState
       ).showSnackBar(const SnackBar(content: Text('編集後の画像は5MB以下にしてください。')));
       return;
     }
+    if (AvatarImageFormat.detect(croppedBytes) == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('JPEG・PNG・WebP形式の画像を選択してください。')),
+      );
+      return;
+    }
 
-    final mimeType = picked.mimeType ?? _mimeTypeFromName(picked.name);
     setState(() => _updatingAvatar = true);
     final url = await Provider.of<SupabaseService>(
       context,
       listen: false,
-    ).uploadProfileAvatar(bytes: croppedBytes, mimeType: mimeType);
+    ).uploadProfileAvatar(bytes: croppedBytes);
     if (!mounted) return;
     setState(() {
       _updatingAvatar = false;
@@ -533,13 +566,6 @@ class _PublicAccountSettingsScreenState
         content: Text(url == null ? '画像を保存できませんでした。' : 'プロフィール画像を更新しました。'),
       ),
     );
-  }
-
-  String _mimeTypeFromName(String name) {
-    final lower = name.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    return 'image/jpeg';
   }
 
   Future<void> _unlockPageColor(
@@ -1262,16 +1288,27 @@ class _PrivacyPasswordDialogState extends State<_PrivacyPasswordDialog> {
         controller: _controller,
         autofocus: true,
         obscureText: _obscure,
+        enableInteractiveSelection: true,
         onSubmitted: (value) {
           if (value.isNotEmpty) Navigator.of(context).pop(value);
         },
         decoration: InputDecoration(
           labelText: '個人情報変更用パスワード',
           border: const OutlineInputBorder(),
-          suffixIcon: IconButton(
-            tooltip: _obscure ? 'パスワードを表示' : 'パスワードを隠す',
-            onPressed: () => setState(() => _obscure = !_obscure),
-            icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'パスワードを貼り付け',
+                onPressed: () => pasteClipboardInto(_controller),
+                icon: const Icon(Icons.content_paste_outlined),
+              ),
+              IconButton(
+                tooltip: _obscure ? 'パスワードを表示' : 'パスワードを隠す',
+                onPressed: () => setState(() => _obscure = !_obscure),
+                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+              ),
+            ],
           ),
         ),
       ),
@@ -1355,14 +1392,29 @@ class _ChangePrivacyPasswordScreenState
             TextFormField(
               controller: _passwordController,
               obscureText: _obscure,
+              enableInteractiveSelection: true,
               decoration: InputDecoration(
                 labelText: '新しいパスワード',
                 border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                  icon: Icon(
-                    _obscure ? Icons.visibility : Icons.visibility_off,
-                  ),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: '新しいパスワードを貼り付け',
+                      onPressed: () => pasteClipboardInto(_passwordController),
+                      icon: const Icon(Icons.content_paste_outlined),
+                    ),
+                    IconButton(
+                      tooltip: '新しいパスワードをコピー',
+                      onPressed: () => copyFieldText(_passwordController),
+                      icon: const Icon(Icons.copy_outlined),
+                    ),
+                    IconButton(
+                      tooltip: _obscure ? 'パスワードを表示' : 'パスワードを隠す',
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                      icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                    ),
+                  ],
                 ),
               ),
               validator: validatePrivacyPassword,
@@ -1371,9 +1423,25 @@ class _ChangePrivacyPasswordScreenState
             TextFormField(
               controller: _confirmationController,
               obscureText: _obscure,
-              decoration: const InputDecoration(
+              enableInteractiveSelection: true,
+              decoration: InputDecoration(
                 labelText: '新しいパスワード（確認）',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: '確認用パスワードを貼り付け',
+                      onPressed: () => pasteClipboardInto(_confirmationController),
+                      icon: const Icon(Icons.content_paste_outlined),
+                    ),
+                    IconButton(
+                      tooltip: '確認用パスワードをコピー',
+                      onPressed: () => copyFieldText(_confirmationController),
+                      icon: const Icon(Icons.copy_outlined),
+                    ),
+                  ],
+                ),
               ),
               validator: (value) =>
                   value != _passwordController.text ? 'パスワードが一致しません。' : null,

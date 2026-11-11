@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../utils/text_field_clipboard.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Optional authenticator-app MFA setup and step-up verification.
@@ -156,9 +158,15 @@ class _MfaSettingsScreenState extends State<MfaSettingsScreen> {
                   controller: _codeController,
                   keyboardType: TextInputType.number,
                   maxLength: 6,
-                  decoration: const InputDecoration(
+                  enableInteractiveSelection: true,
+                  decoration: InputDecoration(
                     labelText: '認証アプリの6桁コード',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      tooltip: '認証コードを貼り付け',
+                      onPressed: _busy ? null : () => pasteClipboardInto(_codeController),
+                      icon: const Icon(Icons.content_paste_outlined),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),

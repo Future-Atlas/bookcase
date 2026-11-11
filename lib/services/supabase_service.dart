@@ -19,6 +19,7 @@ import 'content_safety_service.dart';
 import 'input_security_service.dart';
 import 'timeline_ranking_service.dart';
 import '../utils/dev_logger.dart';
+import '../utils/avatar_image_format.dart';
 import '../utils/public_user_id.dart';
 
 // Kept for local troubleshooting. `debugLog` is silent outside debug builds.
@@ -1058,23 +1059,14 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
-  Future<String?> uploadProfileAvatar({
-    required Uint8List bytes,
-    required String mimeType,
-  }) async {
+  Future<String?> uploadProfileAvatar({required Uint8List bytes}) async {
     final profileId = activeProfileId;
     if (!_isInitialized || _client == null || profileId.isEmpty) return null;
     if (bytes.isEmpty || bytes.lengthInBytes > 5 * 1024 * 1024) return null;
 
-    const allowedTypes = {'image/jpeg', 'image/png', 'image/webp'};
-    final normalizedType = mimeType.toLowerCase();
-    if (!allowedTypes.contains(normalizedType)) return null;
-    final extension = switch (normalizedType) {
-      'image/png' => 'png',
-      'image/webp' => 'webp',
-      _ => 'jpg',
-    };
-    final path = '$profileId/avatar.$extension';
+    final format = AvatarImageFormat.detect(bytes);
+    if (format == null) return null;
+    final path = '$profileId/avatar.${format.extension}';
 
     try {
       final bucket = _client!.storage.from('avatars');
@@ -1083,7 +1075,7 @@ class SupabaseService extends ChangeNotifier {
         bytes,
         fileOptions: FileOptions(
           upsert: true,
-          contentType: normalizedType,
+          contentType: format.mimeType,
           cacheControl: '3600',
         ),
       );
@@ -1502,10 +1494,35 @@ class SupabaseService extends ChangeNotifier {
           'list_type': followers ? 'followers' : 'following',
         },
       );
-      return (response as List<dynamic>)
+      final profiles = (response as List<dynamic>)
           .whereType<Map<String, dynamic>>()
           .map(UserProfile.fromJson)
           .toList(growable: false);
+      if (profiles.isEmpty) return profiles;
+
+      try {
+        final colorRows = await _client!
+            .from('profiles')
+            .select('id, page_color')
+            .inFilter('id', profiles.map((profile) => profile.id).toList());
+        final colorByProfileId = <String, String>{
+          for (final row in colorRows as List<dynamic>)
+            if (row is Map<String, dynamic>)
+              row['id']?.toString() ?? '':
+                  row['page_color']?.toString() ?? 'yellow',
+        }..remove('');
+        return profiles
+            .map(
+              (profile) => profile.copyWith(
+                pageColorKey:
+                    colorByProfileId[profile.id] ?? profile.pageColorKey,
+              ),
+            )
+            .toList(growable: false);
+      } catch (e) {
+        debugPrint('Error enriching follow-list profile colors: $e');
+        return profiles;
+      }
     } catch (e) {
       debugPrint('Error fetching profile follow list: $e');
       return [];
