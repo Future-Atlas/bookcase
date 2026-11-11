@@ -59,8 +59,8 @@ test('plan only links and previews, without applying or deploying functions', ()
   deploy({ mode: 'plan', env: environment(), run: args => calls.push(args), readLinkedProject: () => STAGING_PROJECT });
   assert.deepEqual(calls, [
     ['link', '--project-ref', STAGING_PROJECT, '--yes'],
-    ['migration', 'list', '--db-url', environment().SUPABASE_DB_URL],
-    ['db', 'push', '--db-url', environment().SUPABASE_DB_URL, '--include-all', '--dry-run'],
+    ['migration', 'list', '--remote=' + environment().SUPABASE_DB_URL],
+    ['db', 'push', '--remote=' + environment().SUPABASE_DB_URL, '--include-all', '--dry-run'],
   ]);
 });
 
@@ -69,10 +69,10 @@ test('apply previews first and deploys only the approved staging functions', () 
   deploy({ mode: 'apply', env: environment(), run: args => calls.push(args), readLinkedProject: () => `${STAGING_PROJECT}\n` });
   assert.deepEqual(calls, [
     ['link', '--project-ref', STAGING_PROJECT, '--yes'],
-    ['migration', 'list', '--db-url', environment().SUPABASE_DB_URL],
-    ['db', 'push', '--db-url', environment().SUPABASE_DB_URL, '--include-all', '--dry-run'],
-    ['db', 'push', '--db-url', environment().SUPABASE_DB_URL, '--include-all', '--yes'],
-    ...FUNCTIONS.map(name => ['functions', 'deploy', name, '--project-ref', STAGING_PROJECT, '--yes']),
+    ['migration', 'list', '--remote=' + environment().SUPABASE_DB_URL],
+    ['db', 'push', '--remote=' + environment().SUPABASE_DB_URL, '--include-all', '--dry-run'],
+    ['db', 'push', '--remote=' + environment().SUPABASE_DB_URL, '--include-all', '--yes'],
+    ...FUNCTIONS.map(name => ['functions', 'deploy', name, '--remote=' + STAGING_PROJECT, '--yes']),
   ]);
   assert.ok(calls.flat().every(argument => argument !== environment().SUPABASE_DB_PASSWORD));
   assert.ok(!JSON.stringify(calls).includes(environment().SUPABASE_ACCESS_TOKEN));
@@ -127,8 +127,8 @@ test('workflow gates cloud deployment on validation and uses staging, never prod
   assert.ok(deployment.includes('name: staging'));
   assert.ok(!workflow.includes('name: production'));
   assert.ok(!validation.includes('${{ secrets.'));
-  assert.ok(validation.includes('supabase db reset --local --yes'));
-  assert.ok(validation.includes('supabase test db --local'));
+  assert.ok(validation.includes('supabase db reset --yes'));
+  assert.ok(validation.includes('supabase test db'));
   assert.ok(!deployment.includes('db reset'));
   assert.ok(deployment.includes('node scripts/deploy-staging-db.mjs guard'));
   for (const key of ['SUPABASE_PROJECT_ID', 'SUPABASE_DB_PASSWORD', 'SUPABASE_DB_URL', 'SUPABASE_ACCESS_TOKEN']) {
@@ -136,4 +136,7 @@ test('workflow gates cloud deployment on validation and uses staging, never prod
   }
   assert.ok(workflow.includes('runs-on: ubuntu-24.04'));
   assert.ok(!workflow.includes('runs-on: ubuntu-latest'));
+  assert.ok(workflow.includes('version: "3.0.0"'));
+  assert.ok(workflow.includes('node scripts/staging-db-deployment-mode.mjs'));
+  assert.ok(workflow.includes('fetch-depth: 0'));
 });

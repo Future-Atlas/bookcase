@@ -8,7 +8,7 @@
     "model:revenue": "node scripts/monetization-scenario.mjs"
   },
   "devDependencies": {
-    "supabase": "2.122.0",
+    "supabase": "3.0.0",
     "wrangler": "4.158.0"
   },
   "dependencies": {

@@ -15,11 +15,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Test staging database deployment guards
+        run: |
+          node --test test/deployment/*.test.mjs
+          node scripts/deploy-staging-db.mjs check
+
       - name: Setup Supabase CLI
         id: setup_supabase
         uses: supabase/setup-cli@v3
         with:
-          version: "2.115.0"
+          version: "3.0.0"
 
       - name: Verify Supabase CLI
         run: supabase --version

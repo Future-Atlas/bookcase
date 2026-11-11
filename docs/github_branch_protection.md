@@ -71,7 +71,7 @@ feature/* -> develop -> release PR -> main
 The required check name is the workflow/job combination `CI / flutter`.
 
 `.github/workflows/supabase-validate.yaml` runs for relevant pull requests and
-uses Supabase CLI 2.115.0 to:
+uses Supabase CLI 3.0.0 to:
 
 - start local Supabase services
 - replay migrations with `supabase db reset`
