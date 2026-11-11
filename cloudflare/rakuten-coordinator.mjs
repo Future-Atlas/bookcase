@@ -99,8 +99,10 @@ export class RakutenCoordinator {
       await this.state.storage.put("nextAllowedAt", Date.now() + INTERVAL_MS);
       let upstream;
       try {
-        const origin = payload.origin === "https://staging.sharemarium.com/"
-          ? "https://staging.sharemarium.com/"
+        // The referer must identify the actual deployment hostname, not a
+        // planned staging custom domain that is not serving the app.
+        const origin = payload.origin === "https://sharemarium-staging.sharemarium.workers.dev/"
+          ? "https://sharemarium-staging.sharemarium.workers.dev/"
           : "https://www.sharemarium.com/";
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
