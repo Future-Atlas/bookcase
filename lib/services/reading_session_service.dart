@@ -2,6 +2,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/book.dart';
 import '../models/reading_session.dart';
+import '../models/social_models.dart';
+import '../models/user_profile.dart';
 
 /// No local timestamp can create or modify a stored reading record.
 /// All writes go through authenticated, server-clock RPCs.
@@ -54,11 +56,148 @@ class ReadingSessionService {
     return ReadingSession.fromJson(Map<String, dynamic>.from(row as Map));
   }
 
+  /// Owner or an accepted follower not excluded by the owner.
+  Future<bool> canViewCalendar(String ownerId) async {
+    if (_currentId.isEmpty || ownerId.isEmpty) return false;
+    try {
+      return await _client.rpc(
+        'can_view_reading_calendar',
+        params: {'target_owner': ownerId},
+      ) == true;
+    } on PostgrestException catch (error) {
+      // During a staged production rollout, the social calendar RPC may not
+      // be installed yet. Preserve the original owner-only calendar rather
+      // than allowing followers to view private sessions.
+      if (error.code == 'PGRST202' || error.code == '42883') {
+        return ownerId == _currentId;
+      }
+      rethrow;
+    }
+  }
+
+  /// The only editable visibility entries are accepted followers.
+  Future<Set<String>> hiddenFollowerIds() async {
+    if (_currentId.isEmpty) return {};
+    final rows = await _client
+        .from('reading_calendar_hidden_followers')
+        .select('follower_id')
+        .eq('owner_id', _currentId);
+    return rows.map((row) => row['follower_id'].toString()).toSet();
+  }
+
+  Future<void> setFollowerHidden(String followerId, bool hidden) async {
+    if (_currentId.isEmpty) throw StateError('ログインが必要です。');
+    await _client.rpc('set_reading_calendar_follower_hidden', params: {
+      'p_follower_id': followerId,
+      'p_hidden': hidden,
+    });
+  }
+
+  Future<Map<String, ReadingReactionSummary>> reactionSummaries(
+    List<ReadingSession> sessions,
+  ) async {
+    if (_currentId.isEmpty || sessions.isEmpty) return {};
+    final summaries = <String, ReadingReactionSummary>{};
+    const pageSize = 500;
+    final ids = sessions.map((session) => session.id).toSet().toList();
+    // Keep requests small even if the user has an exceptionally large month.
+    try {
+      for (var from = 0; from < ids.length; from += 100) {
+      final subset = ids.skip(from).take(100).toList(growable: false);
+      var offset = 0;
+      while (true) {
+        final rows = await _client
+            .from('reading_session_reactions')
+            .select('reading_session_id,profile_id,reaction_type')
+            .inFilter('reading_session_id', subset)
+            .range(offset, offset + pageSize - 1);
+        for (final row in rows) {
+          final sessionId = row['reading_session_id']?.toString() ?? '';
+          final type = PostReactionType.fromDatabase(
+            row['reaction_type']?.toString(),
+          );
+          if (sessionId.isEmpty || type == null) continue;
+          final current = summaries[sessionId] ?? const ReadingReactionSummary();
+          final next = Map<PostReactionType, int>.from(current.counts);
+          next[type] = (next[type] ?? 0) + 1;
+          summaries[sessionId] = ReadingReactionSummary(
+            counts: next,
+            selected: row['profile_id']?.toString() == _currentId
+                ? type
+                : current.selected,
+          );
+        }
+        if (rows.length < pageSize) break;
+        offset += pageSize;
+      }
+    }
+    } on PostgrestException catch (error) {
+      // A missing reactions table is expected before the production social
+      // migration; keep the original private reading calendar usable.
+      if (error.code == '42P01' || error.code == 'PGRST205') {
+        return {};
+      }
+      rethrow;
+    }
+    return summaries;
+  }
+
+  Future<List<UserProfile>> reactionUsers(
+    String sessionId,
+    PostReactionType reaction,
+  ) async {
+    if (_currentId.isEmpty) return [];
+    const pageSize = 500;
+    var offset = 0;
+    final profiles = <UserProfile>[];
+    while (true) {
+      final rows = await _client
+          .from('reading_session_reactions')
+          .select(
+            'profile:profiles!reading_session_reactions_profile_id_fkey('
+            'id,username,user_id,avatar_url,bio,followers_count,'
+            'following_count,read_count,is_private,page_color)',
+          )
+          .eq('reading_session_id', sessionId)
+          .eq('reaction_type', reaction.databaseValue)
+          .range(offset, offset + pageSize - 1);
+      for (final row in rows) {
+        final profile = row['profile'];
+        if (profile is Map<String, dynamic>) {
+          profiles.add(UserProfile.fromJson(profile));
+        }
+      }
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+    }
+    return profiles;
+  }
+
+  /// The same three reactions and toggle behavior as book reviews.
+  Future<void> toggleReaction(
+    String sessionId,
+    PostReactionType type,
+    PostReactionType? previous,
+  ) async {
+    if (_currentId.isEmpty) throw StateError('ログインが必要です。');
+    if (previous == type) {
+      await _client.from('reading_session_reactions').delete()
+          .eq('reading_session_id', sessionId).eq('profile_id', _currentId);
+    } else {
+      await _client.from('reading_session_reactions').upsert({
+        'reading_session_id': sessionId,
+        'profile_id': _currentId,
+        'reaction_type': type.databaseValue,
+      });
+    }
+  }
+
   /// Fetch every session overlapping a month, paging beyond PostgREST's
   /// default row limit. A session is capped at 24h, so one day of lookback
   /// is enough to include overnight reading on the first day of the month.
-  Future<List<ReadingSession>> loadMonth(DateTime month) async {
-    if (_currentId.isEmpty) return [];
+  Future<List<ReadingSession>> loadMonth(DateTime month, {String? profileId}) async {
+    final owner = profileId ?? _currentId;
+    if (_currentId.isEmpty || owner.isEmpty) return [];
     final firstDay = DateTime(month.year, month.month, 1);
     final from = firstDay.subtract(const Duration(days: 1));
     final until = DateTime(month.year, month.month + 1, 1);
@@ -70,7 +209,7 @@ class ReadingSessionService {
       final rows = await _client
           .from('reading_sessions')
           .select()
-          .eq('profile_id', _currentId)
+          .eq('profile_id', owner)
           .gte('started_at', from.toUtc().toIso8601String())
           .lt('started_at', until.toUtc().toIso8601String())
           .order('started_at', ascending: false)
@@ -81,4 +220,14 @@ class ReadingSessionService {
     }
     return all;
   }
+}
+
+class ReadingReactionSummary {
+  const ReadingReactionSummary({
+    this.counts = const {},
+    this.selected,
+  });
+
+  final Map<PostReactionType, int> counts;
+  final PostReactionType? selected;
 }

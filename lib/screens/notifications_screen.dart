@@ -191,6 +191,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (mounted) await _load();
       return;
     }
+    if (notification.type == SocialNotificationType.readingSession ||
+        notification.type == SocialNotificationType.readingReaction) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (routeContext) => UserProfileScreen(
+            profileId: notification.type == SocialNotificationType.readingReaction
+                ? Provider.of<SupabaseService>(
+                    routeContext, listen: false).activeProfileId
+                : notification.actorId,
+            openCalendar: true,
+            onBack: () => Navigator.of(routeContext).pop(),
+          ),
+        ),
+      );
+      if (mounted) await _load();
+      return;
+    }
     await _openActorProfile(notification);
   }
 
@@ -214,6 +231,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return '$actorからあなたにフォローリクエストが届いています';
       case SocialNotificationType.newPost:
         return '$actorが『$bookTitle』の感想を投稿しました';
+      case SocialNotificationType.readingSession:
+        return '$actorが『$bookTitle』の読書記録を追加しました';
+      case SocialNotificationType.readingReaction:
+        return '$actorがあなたの『$bookTitle』の読書記録にリアクションしました';
     }
   }
 

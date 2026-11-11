@@ -8,7 +8,9 @@ const read = (name) => fs.readFileSync(path.join(__dirname, '../..', name), 'utf
 test('production My Page exposes private calendar between bookshelf and favorites', () => {
   const source = read('lib/screens/user_profile_screen.dart');
   assert.match(source, /const Tab\(text: 'My 本棚'\),\s+const Tab\(text: 'カレンダー'\)/);
-  assert.match(source, /if \(_isOwnProfile\)\s+ReadingCalendarTab\(/);
+  assert.match(source, /ReadingCalendarTab\(/);
+  assert.match(source, /ownerId: _profile!\.id/);
+  assert.match(source, /onResume: _isOwnProfile \? _resumeCalendarTimer : null/);
   assert.match(source, /tooltip: calendarSelected \? 'カレンダーに追加'/);
   assert.match(source, /ReadingTimerScreen\(/);
 });

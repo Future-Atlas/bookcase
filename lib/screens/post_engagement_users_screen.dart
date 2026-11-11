@@ -5,19 +5,22 @@ import 'package:provider/provider.dart';
 import '../models/social_models.dart';
 import '../models/user_profile.dart';
 import '../services/supabase_service.dart';
+import '../services/reading_session_service.dart';
 import '../widgets/profile_color_border.dart';
 
 class PostEngagementUsersScreen extends StatefulWidget {
   const PostEngagementUsersScreen({
     super.key,
-    required this.postId,
+    this.postId = '',
+    this.readingSessionId,
     required this.title,
     required this.onProfileTap,
     this.reaction,
     this.wantToRead = false,
-  });
+  }) : assert(postId != '' || readingSessionId != null);
 
   final String postId;
+  final String? readingSessionId;
   final String title;
   final PostReactionType? reaction;
   final bool wantToRead;
@@ -42,11 +45,15 @@ class _PostEngagementUsersScreenState extends State<PostEngagementUsersScreen> {
 
   Future<void> _load() async {
     final service = Provider.of<SupabaseService>(context, listen: false);
-    final profiles = await service.fetchPostEngagementUsers(
-      postId: widget.postId,
-      reaction: widget.reaction,
-      wantToRead: widget.wantToRead,
-    );
+    final profiles = widget.readingSessionId != null && widget.reaction != null
+        ? await ReadingSessionService().reactionUsers(
+            widget.readingSessionId!, widget.reaction!,
+          )
+        : await service.fetchPostEngagementUsers(
+            postId: widget.postId,
+            reaction: widget.reaction,
+            wantToRead: widget.wantToRead,
+          );
     final statuses = await service.fetchCurrentFollowStatuses(
       profiles.map((profile) => profile.id),
     );
