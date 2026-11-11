@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../utils/reading_calendar_border.dart';
+
 import '../models/reading_session.dart';
 import '../models/book.dart';
 import '../widgets/book_cover_image.dart';
@@ -213,9 +215,13 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
         onTap: () => _showDay(day),
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(
-              color: isToday ? widget.accentColor : Colors.grey.withValues(alpha: 0.25),
-              width: isToday ? 2 : 1,
+            border: Border.fromBorderSide(
+              readingCalendarDayBorder(
+                brightness: Theme.of(context).brightness,
+                isToday: isToday,
+                isDesktop: MediaQuery.sizeOf(context).width >= 768,
+                accentColor: widget.accentColor,
+              ),
             ),
             borderRadius: BorderRadius.circular(8),
           ),
