@@ -126,7 +126,7 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'closeProfileBookSearch',
-        onPressed: () => Navigator.of(context).pop(false),
+        onPressed: () => Navigator.of(context).pop(),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         shape: const CircleBorder(),

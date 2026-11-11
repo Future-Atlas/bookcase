@@ -44,6 +44,7 @@ void main() {
       isNull,
     );
   });
+
   test('web avatar selection skips picker-side canvas conversion', () {
     final source = File(
       'lib/screens/account_settings_screen.dart',

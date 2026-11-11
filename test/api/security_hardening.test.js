@@ -27,13 +27,24 @@ test("contact requests are limited to five per rolling 24 hours", () => {
   assert.match(migration, /SET search_path = ''/i);
   assert.match(migration, /NEW\.profile_id := requester/i);
   assert.match(migration, /CONTACT_RATE_LIMIT_EXCEEDED/i);
+
+  const retryMigration = read(
+    "supabase/migrations/20261031110000_return_contact_rate_limit_retry_at.sql",
+  );
+  assert.match(retryMigration, /min\(created_at\)/i);
+  assert.match(retryMigration, /oldest_counted_at \+ interval '24 hours'/i);
+  assert.match(retryMigration, /'retry_at', retry_at/i);
+  assert.doesNotMatch(retryMigration, /'email'\s*,|'message'\s*,|'subject'\s*,/i);
 });
 
 test("contact UI explains the 24-hour limit without exposing database details", () => {
   const service = read("lib/services/supabase_service.dart");
   const screen = read("lib/screens/contact_screen.dart");
   assert.match(service, /24時間以内に送信できるお問い合わせは5件までです/);
-  assert.match(service, /24時間経過後にお送りください/);
+  assert.match(service, /24時間経過後/);
+  assert.match(service, /formatJapaneseMonthDayTime\(retryAt\)/);
+  assert.match(service, /上限件数に達しました/);
+  assert.match(service, /formatJapaneseMonthDayTime\(retryAt\)\}以降/);
   assert.match(screen, /運営チームが順次対応いたします/);
   assert.match(screen, /返信に時間がかかる場合があります/);
   assert.match(screen, /24時間以内に送信できるお問い合わせは5件までです/);

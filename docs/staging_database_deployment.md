@@ -47,7 +47,7 @@ mainを選んで手動実行してもジョブはスキップされます。
 6. IPv4対応のSession pooler URLでリモートのマイグレーション履歴を確認。
 7. `db push --dry-run --include-all --remote=` で未適用ファイルを確認。
 8. applyの場合だけ、同じSession pooler経由で未適用ファイルを反映。
-9. `session-guard`、`delete-account`、`admin-delete-account`、`billing-checkout`、`billing-cancel-subscription`、`billing-change-plan`、`billing-webhook` の7関数を検証プロジェクトに配置。
+9. `session-guard`、`delete-account`、`admin-delete-account`、`totp-recovery`、`billing-checkout`、`billing-cancel-subscription`、`billing-change-plan`、`billing-webhook` の8関数を検証プロジェクトに配置。
 
 クラウドDBにresetは行いません。DBリセットはSecretsを渡していないGitHubランナーの一時DBに限定しています。dry-runはSQLの実行結果を保証するものではないため、一時DBの構築とテストも必須です。
 

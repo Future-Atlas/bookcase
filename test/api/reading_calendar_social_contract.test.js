@@ -47,7 +47,7 @@ test('reader reactions support the exact post reaction types and are scoped', ()
   assert.match(service, /PostReactionType.fromDatabase/);
   assert.match(service, /toggleReaction\(/);
   assert.match(calendar, /PostReactionType.values/);
-  assert.match(calendar, /_reactionButtons\(session/);
+  assert.match(calendar, /_reactionButtons\(\s*session/);
 });
 
 test('calendar reaction user lists reuse review post engagement UI', () => {
