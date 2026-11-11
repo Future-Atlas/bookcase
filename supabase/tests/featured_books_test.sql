@@ -62,7 +62,7 @@ select results_eq(
 select throws_ok(
   $$insert into public.featured_books (book_id, book_title) values ('featured-anon-001', 'Anonymous Write')$$,
   '42501',
-  'permission denied for table featured_books',
+  'new row violates row-level security policy for table "featured_books"',
   'anonymous visitors cannot manage featured books'
 );
 
