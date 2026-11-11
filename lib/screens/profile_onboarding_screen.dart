@@ -228,9 +228,6 @@ class PrivacyPasswordSetupScreen extends StatefulWidget {
   /// Reuse the original first-time password setup page for a verified reset.
   final bool isRecovery;
 
-  /// Reuse the original first-time password setup page for a verified reset.
-  final bool isRecovery;
-
   @override
   State<PrivacyPasswordSetupScreen> createState() =>
       _PrivacyPasswordSetupScreenState();

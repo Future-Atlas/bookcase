@@ -446,7 +446,7 @@ class _BookListScreenState extends State<BookListScreen> {
         await showDialog(
           context: context,
           builder: (context) {
-            final hasCover = book.coverUrl.trim().isNotEmpty;
+            final hasCover = BookCoverImage.isApprovedCover(book);
             final service = Provider.of<SupabaseService>(
               context,
               listen: false,
@@ -485,21 +485,7 @@ class _BookListScreenState extends State<BookListScreen> {
                                   width: isNarrow ? double.infinity : 200,
                                   height: isNarrow ? 240 : 300,
                                   color: Colors.grey[400],
-                                  child: hasCover
-                                      ? Image.network(
-                                          book.coverUrl,
-                                          fit: BoxFit.cover,
-                                          alignment: isNarrow
-                                              ? Alignment.topCenter
-                                              : Alignment.center,
-                                          errorBuilder:
-                                              (context, error, stackTrace) {
-                                                return _buildMissingCoverFallback(
-                                                  book,
-                                                );
-                                              },
-                                        )
-                                      : _buildMissingCoverFallback(book),
+                                  child: BookCoverImage(book: book),
                                 ),
                                 const SizedBox(height: 12),
                                 if (!hasCover) ...[
