@@ -101,14 +101,14 @@ select results_eq($$select profile_id, book_id from public.favorites where profi
 select is_empty($$select profile_id from public.favorites where profile_id = '00000000-0000-4000-8000-000000000103'::uuid$$, 'anon cannot read private favorites');
 select results_eq($$select id from public.post_replies where id = 900000000101$$, $$values (900000000101::bigint)$$, 'anon can read replies visible through a public post and public replier');
 select is_empty($$select id from public.post_replies where id = 900000000103$$, 'anon cannot read replies on private profile content');
-select is_empty($select id from public.notifications where id = 910000000101$, 'anon cannot read notifications');
-select is_empty($select blocker_id from public.blocks where blocker_id = '00000000-0000-4000-8000-000000000101'::uuid$, 'anon cannot read block settings');
-select throws_ok($insert into public.posts (profile_id, book_id, rating, comment, book_title) values ('00000000-0000-4000-8000-000000000101', 'rls-anon-write', 3, 'anon write', 'Anon Write')$, '42501', 'new row violates row-level security policy for table "posts"', 'anon cannot insert posts');
+select is_empty($$select id from public.notifications where id = 910000000101$$, 'anon cannot read notifications');
+select is_empty($$select blocker_id from public.blocks where blocker_id = '00000000-0000-4000-8000-000000000101'::uuid$$, 'anon cannot read block settings');
+select throws_ok($$insert into public.posts (profile_id, book_id, rating, comment, book_title) values ('00000000-0000-4000-8000-000000000101', 'rls-anon-write', 3, 'anon write', 'Anon Write')$$, '42501', 'new row violates row-level security policy for table "posts"', 'anon cannot insert posts');
 -- Use a book already posted by this profile so the trigger cannot short-circuit
 -- before the test exercises the anonymous INSERT RLS policy.
-select throws_ok($insert into public.favorites (profile_id, book_id) values ('00000000-0000-4000-8000-000000000101', 'rls-owner-delete-book')$, '42501', 'new row violates row-level security policy for table "favorites"', 'anon cannot insert favorites');
+select throws_ok($$insert into public.favorites (profile_id, book_id) values ('00000000-0000-4000-8000-000000000101', 'rls-owner-delete-book')$$, '42501', 'new row violates row-level security policy for table "favorites"', 'anon cannot insert favorites');
 select throws_ok($$select public.create_post_reply('10000000-0000-4000-8000-000000000101'::uuid, 'anon reply', null::bigint, false)$$, '42501', 'permission denied for function create_post_reply', 'anon cannot create replies through reply RPC');
-select throws_ok($insert into public.notifications (recipient_id, actor_id, type) values ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000102', 'follow')$, '42501', 'new row violates row-level security policy for table "notifications"', 'anon cannot create notifications directly');
+select throws_ok($$insert into public.notifications (recipient_id, actor_id, type) values ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000102', 'follow')$$, '42501', 'new row violates row-level security policy for table "notifications"', 'anon cannot create notifications directly');
 
 reset role;
 select set_config('request.jwt.claim.role', '', true);
@@ -136,7 +136,7 @@ select results_eq($$with rows as (update public.profiles set bio = 'should not u
 select results_eq($$with rows as (update public.profiles set is_private = false where id = '00000000-0000-4000-8000-000000000103'::uuid returning 1) select count(*)::bigint from rows$$, $$values (0::bigint)$$, 'privacy setting is mutable only by the owner');
 select results_eq($$with rows as (update public.posts set comment = 'should not update other post' where id = '10000000-0000-4000-8000-000000000103'::uuid returning 1) select count(*)::bigint from rows$$, $$values (0::bigint)$$, 'authenticated user cannot update another user post');
 select results_eq($$with rows as (delete from public.posts where id = '10000000-0000-4000-8000-000000000103'::uuid returning 1) select count(*)::bigint from rows$$, $$values (0::bigint)$$, 'authenticated user cannot delete another user post');
-select throws_ok($insert into public.notifications (recipient_id, actor_id, type) values ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000102', 'follow')$, '42501', 'new row violates row-level security policy for table "notifications"', 'authenticated user cannot create notifications directly');
+select throws_ok($$insert into public.notifications (recipient_id, actor_id, type) values ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000102', 'follow')$$, '42501', 'new row violates row-level security policy for table "notifications"', 'authenticated user cannot create notifications directly');
 select results_eq($$select id from public.notifications where id = 910000000101$$, $$values (910000000101::bigint)$$, 'authenticated user reads only own notifications');
 select lives_ok($$update public.notifications set read_at = timezone('utc'::text, now()) where id = 910000000101$$, 'notification recipient can mark own notification read');
 select results_eq($$with rows as (update public.notifications set read_at = timezone('utc'::text, now()) where id = 910000000102 returning 1) select count(*)::bigint from rows$$, $$values (0::bigint)$$, 'authenticated user cannot update another user notification');
@@ -144,9 +144,9 @@ select results_eq($$select blocker_id, blocked_id from public.blocks$$, $$values
 select lives_ok($$select public.unblock_profile('00000000-0000-4000-8000-000000000105'::uuid)$$, 'authenticated user can unblock own block target through RPC');
 select is_empty($$select blocker_id from public.blocks where blocked_id = '00000000-0000-4000-8000-000000000105'::uuid$$, 'unblock RPC removes only caller-owned block row');
 select lives_ok($$select public.block_profile('00000000-0000-4000-8000-000000000105'::uuid)$$, 'authenticated user can create own block through RPC');
-select throws_ok($insert into public.blocks (blocker_id, blocked_id) values ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000103')$, '42501', 'new row violates row-level security policy for table "blocks"', 'authenticated user cannot create arbitrary block rows directly');
+select throws_ok($$insert into public.blocks (blocker_id, blocked_id) values ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000103')$$, '42501', 'new row violates row-level security policy for table "blocks"', 'authenticated user cannot create arbitrary block rows directly');
 select is_empty($$select * from public.moderation_reports$$, 'non-admin authenticated user cannot read moderation reports');
-select results_eq($with changed as (update public.moderation_reports set status = 'resolved' where id = 920000000101 returning 1) select count(*)::bigint from changed$, $values (0::bigint)$, 'non-admin authenticated user cannot update moderation reports directly');
+select results_eq($$with changed as (update public.moderation_reports set status = 'resolved' where id = 920000000101 returning 1) select count(*)::bigint from changed$$, $$values (0::bigint)$$, 'non-admin authenticated user cannot update moderation reports directly');
 select throws_ok($$select public.admin_resolve_report(920000000101, 'not admin')$$, 'P0001', 'Administrator access required', 'non-admin authenticated user cannot execute admin resolve RPC successfully');
 select throws_ok($$select public.admin_set_account_suspension('00000000-0000-4000-8000-000000000102'::uuid, true, 'not admin')$$, 'P0001', 'Administrator access required', 'non-admin authenticated user cannot execute admin suspension RPC successfully');
 select is_empty($$select * from public.adult_content_terms$$, 'non-admin authenticated user cannot read adult content terms');
