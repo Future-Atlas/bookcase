@@ -176,8 +176,10 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
               ),
               const SizedBox(height: 24),
               const Text(
-                '計測開始・終了時刻はサーバーで記録されます。過去の記録を追加・編集することはできません。'
-                '1回の計測は最大24時間です。画面を閉じても、計測中の記録はカレンダーから再開できます。',
+                '計測開始・終了時刻はサーバーで記録されます。\n'
+                '過去の記録を追加・編集することはできません。\n'
+                '1回の計測は最大24時間です。\n'
+                '画面を閉じても、計測中の記録はカレンダーから再開できます。',
                 textAlign: TextAlign.center,
               ),
               if (_error != null) ...[
