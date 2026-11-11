@@ -20,7 +20,7 @@ test('owner controls hidden followers only via authenticated server-side RPC', (
   const sql = read('supabase/migrations/20261111180000_share_reading_calendar_with_followers.sql');
   const settings = read('lib/screens/reading_calendar_visibility_screen.dart');
   assert.match(sql, /CREATE OR REPLACE FUNCTION public.set_reading_calendar_follower_hidden/);
-  assert.match(sql, /requester := auth.uid\(\)/);
+  assert.match(sql, /requester uuid := auth.uid\(\)/);
   assert.match(sql, /follow.following_id = requester/);
   assert.match(sql, /follow.status = 'accepted'/);
   assert.match(sql, /DELETE FROM public.notifications[\s\S]*type = 'reading_session'/);
