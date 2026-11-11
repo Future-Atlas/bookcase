@@ -197,7 +197,7 @@ test("Staging diagnosis exports only missing secret NAMES in a short-lived artif
   const workflow = fs.readFileSync(path.resolve(__dirname, "../../.github/workflows/deploy-cloudflare-staging.yaml"), "utf8");
   assert.match(workflow, /printf '%s\\n' "\$\{missing\[@\]\}"/);
   assert.match(workflow, /cloudflare-staging-missing-secret-names\.txt/);
-  assert.match(workflow, /uses: actions\/upload-artifact@v4/);
+  assert.match(workflow, /uses: actions\/upload-artifact@v7/);
   assert.match(workflow, /retention-days: 1/);
   assert.doesNotMatch(workflow, /printf.*\$\{!name\}/);
 });
