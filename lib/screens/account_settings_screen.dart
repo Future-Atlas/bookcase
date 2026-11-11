@@ -25,6 +25,7 @@ import 'profile_onboarding_screen.dart';
 import 'subscription_status_screen.dart';
 import 'reading_calendar_visibility_screen.dart';
 import 'terms_screen.dart';
+import 'totp_authentication_screen.dart';
 
 class AccountSettingsScreen extends StatefulWidget {
   const AccountSettingsScreen({
@@ -119,11 +120,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     final error = await service.beginPrivacyPasswordRecovery();
     if (!mounted) return;
     setState(() => _startingPrivacyRecovery = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(error ?? 'GoogleまたはXで本人確認してください。'),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error ?? 'GoogleまたはXで本人確認してください。')));
   }
 
   Future<void> _deleteAccount() async {
@@ -168,6 +167,12 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       return const Center(child: Text('設定を利用するにはログインしてください。'));
     }
     if (_showRecovery) {
+      if (!service.isPrivacyRecoveryTotpVerified) {
+        return TotpChallengeScreen(
+          purpose: 'privacy_recovery',
+          onCompleted: () => setState(() {}),
+        );
+      }
       return PrivacyPasswordSetupScreen(
         isRecovery: true,
         onCompleted: () {
@@ -192,9 +197,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                   ListTile(
                     leading: const Icon(Icons.manage_accounts_outlined),
                     title: const Text('アカウント設定'),
-                    subtitle: const Text(
-                      'プロフィール画像・ユーザー名・ユーザーID（変更不可）・鍵アカウント',
-                    ),
+                    subtitle: const Text('プロフィール画像・ユーザー名・ユーザーID（変更不可）・鍵アカウント'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => _push(const _PublicAccountSettingsScreen()),
                   ),
@@ -213,6 +216,14 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                     subtitle: const Text('氏名・性別・生年月日・電話番号・メールアドレス'),
                     trailing: const Icon(Icons.lock_outline),
                     onTap: _openPrivacySettings,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.phonelink_lock_outlined),
+                    title: const Text('認証アプリ・二段階認証'),
+                    subtitle: const Text('登録状態の確認・認証用QRコードの再取得'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _push(const TotpManagementScreen()),
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -562,20 +573,18 @@ class _PublicAccountSettingsScreenState
     }
 
     setState(() => _updatingAvatar = true);
-    final url = await Provider.of<SupabaseService>(
+    final result = await Provider.of<SupabaseService>(
       context,
       listen: false,
     ).uploadProfileAvatar(bytes: croppedBytes);
     if (!mounted) return;
     setState(() {
       _updatingAvatar = false;
-      if (url != null) _avatarUrl = url;
+      if (result.url != null) _avatarUrl = result.url!;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(url == null ? '画像を保存できませんでした。' : 'プロフィール画像を更新しました。'),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.error ?? 'プロフィール画像を更新しました。')));
   }
 
   Future<void> _unlockPageColor(
@@ -1422,7 +1431,9 @@ class _ChangePrivacyPasswordScreenState
                     IconButton(
                       tooltip: _obscure ? 'パスワードを表示' : 'パスワードを隠す',
                       onPressed: () => setState(() => _obscure = !_obscure),
-                      icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                      icon: Icon(
+                        _obscure ? Icons.visibility : Icons.visibility_off,
+                      ),
                     ),
                   ],
                 ),
@@ -1442,7 +1453,8 @@ class _ChangePrivacyPasswordScreenState
                   children: [
                     IconButton(
                       tooltip: '確認用パスワードを貼り付け',
-                      onPressed: () => pasteClipboardInto(_confirmationController),
+                      onPressed: () =>
+                          pasteClipboardInto(_confirmationController),
                       icon: const Icon(Icons.content_paste_outlined),
                     ),
                     IconButton(

@@ -1,8 +1,14 @@
 // Shared timeline advertising placement policy.
 import '../config/app_environment.dart';
 
+/// Temporary operational pause. Keep placement frames in the UI while this is
+/// true, but never mount the third-party advertising SDK or provider content.
+const bool timelineAdDeliveryPaused = true;
+
 bool get timelineAdDisplayReady =>
-    AppEnvironmentConfig.current == AppEnvironment.staging || timelineAdReady;
+    AppEnvironmentConfig.current == AppEnvironment.staging ||
+    timelineAdDeliveryPaused ||
+    timelineAdReady;
 
 /// Disabled unless a Web release explicitly opts into Ninja AdMax.
 const bool timelineAdEnabled = bool.fromEnvironment(

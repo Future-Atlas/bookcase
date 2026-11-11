@@ -99,6 +99,27 @@ class _TimelineAdSlotState extends State<TimelineAdSlot> {
         child: const Text('広告（検証用表示・配信なし）', textAlign: TextAlign.center),
       );
     }
+    if (timelineAdDeliveryPaused) {
+      return Container(
+        key: ValueKey('paused-ad-$slotIndex'),
+        width: double.infinity,
+        height: ninjaAdmaxAsyncType == 'banner' ? 126 : 286,
+        margin: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFF1D600)),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        child: const Align(
+          alignment: Alignment.topCenter,
+          child: Text(
+            '広告',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12),
+          ),
+        ),
+      );
+    }
     if (!timelineAdReady || slotIndex < 0) {
       return const SizedBox.shrink();
     }

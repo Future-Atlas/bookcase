@@ -8,8 +8,7 @@ import '../models/reading_session.dart';
 import '../models/social_models.dart';
 import '../models/user_profile.dart';
 import 'post_engagement_users_screen.dart';
-import '../models/book.dart';
-import '../widgets/book_cover_image.dart';
+import '../widgets/reading_cover_art.dart';
 import '../services/reading_session_service.dart';
 import '../widgets/book_detail_dialog_frame.dart';
 
@@ -99,33 +98,22 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
 
   List<ReadingSession> _sessionsFor(DateTime day) {
     return _sessions
-        .where((session) =>
-            session.endedAt != null &&
-            session.durationOnDay(day) > Duration.zero)
+        .where(
+          (session) =>
+              session.endedAt != null &&
+              session.durationOnDay(day) > Duration.zero,
+        )
         .toList()
       ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
   }
 
   Duration _totalFor(DateTime day) {
-    return _sessionsFor(day).fold(
-      Duration.zero,
-      (sum, session) => sum + session.durationOnDay(day),
-    );
+    return _sessionsFor(
+      day,
+    ).fold(Duration.zero, (sum, session) => sum + session.durationOnDay(day));
   }
 
   Widget _roundCover(ReadingSession session, {double size = 52}) {
-    final book = Book(
-      id: session.bookId,
-      title: session.bookTitle,
-      author: '',
-      publisher: '',
-      pubDate: '',
-      isbn: session.bookIsbn,
-      coverUrl: session.bookCoverUrl,
-      coverSource: session.bookCoverSource,
-    );
-    // BookCoverImage applies verified source rules and preserves the entire
-    // jacket. Inset the rectangle inside the circle instead of cropping art.
     return ClipOval(
       child: SizedBox.square(
         dimension: size,
@@ -133,7 +121,7 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
           color: Colors.black12,
           child: Padding(
             padding: EdgeInsets.all(size * 0.15),
-            child: BookCoverImage(book: book),
+            child: ReadingCoverArt(url: session.bookCoverUrl),
           ),
         ),
       ),
@@ -141,7 +129,8 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
   }
 
   Future<void> _showReactionUsers(
-    ReadingSession session, PostReactionType reaction,
+    ReadingSession session,
+    PostReactionType reaction,
   ) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -159,15 +148,16 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
     ReadingSession session, {
     required StateSetter refreshDialog,
   }) {
-    final summary =
-        _reactions[session.id] ?? const ReadingReactionSummary();
+    final summary = _reactions[session.id] ?? const ReadingReactionSummary();
     return Wrap(
       spacing: 5,
       runSpacing: 5,
       children: [
         for (final reaction in PostReactionType.values)
           InkWell(
-            key: ValueKey('reading-reaction-${session.id}-${reaction.databaseValue}'),
+            key: ValueKey(
+              'reading-reaction-${session.id}-${reaction.databaseValue}',
+            ),
             borderRadius: BorderRadius.circular(18),
             onLongPress: () => _showReactionUsers(session, reaction),
             onSecondaryTap: () => _showReactionUsers(session, reaction),
@@ -176,7 +166,9 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
                 : () async {
                     try {
                       await _service.toggleReaction(
-                        session.id, reaction, summary.selected,
+                        session.id,
+                        reaction,
+                        summary.selected,
                       );
                       final next = await _service.reactionSummaries([session]);
                       if (!mounted) return;
@@ -210,8 +202,10 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
                   Text(reaction.symbol, style: const TextStyle(fontSize: 17)),
                   if ((summary.counts[reaction] ?? 0) > 0) ...[
                     const SizedBox(width: 3),
-                    Text('${summary.counts[reaction]}',
-                        style: const TextStyle(color: Colors.black, fontSize: 11)),
+                    Text(
+                      '${summary.counts[reaction]}',
+                      style: const TextStyle(color: Colors.black, fontSize: 11),
+                    ),
                   ],
                 ],
               ),
@@ -229,86 +223,94 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, refreshDialog) => BookDetailDialogFrame(
-        child: SizedBox(
-          width: math.min(MediaQuery.sizeOf(dialogContext).width - 70, 650),
-          height: math.min(MediaQuery.sizeOf(dialogContext).height * 0.77, 600),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  '${day.year}年${day.month}月${day.day}日の読書記録',
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+          child: SizedBox(
+            width: math.min(MediaQuery.sizeOf(dialogContext).width - 70, 650),
+            height: math.min(
+              MediaQuery.sizeOf(dialogContext).height * 0.77,
+              600,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '${day.year}年${day.month}月${day.day}日の読書記録',
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: entries.isEmpty
-                      ? const Center(child: Text('この日の読書記録はありません。'))
-                      : ListView.separated(
-                          itemCount: entries.length,
-                          separatorBuilder: (_, __) =>
-                              const Divider(height: 24),
-                          itemBuilder: (context, index) {
-                            final session = entries[index];
-                            final start = session.startedAt.isBefore(begin)
-                                ? begin
-                                : session.startedAt;
-                            final end = session.endedAt!.isAfter(next)
-                                ? next
-                                : session.endedAt!;
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                  width: 90,
-                                  child: Column(
-                                    children: [
-                                      _roundCover(session, size: 66),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        session.bookTitle,
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          color: Colors.black,
-                                          fontSize: 11,
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: entries.isEmpty
+                        ? const Center(child: Text('この日の読書記録はありません。'))
+                        : ListView.separated(
+                            itemCount: entries.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 24),
+                            itemBuilder: (context, index) {
+                              final session = entries[index];
+                              final start = session.startedAt.isBefore(begin)
+                                  ? begin
+                                  : session.startedAt;
+                              final end = session.endedAt!.isAfter(next)
+                                  ? next
+                                  : session.endedAt!;
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 90,
+                                    child: Column(
+                                      children: [
+                                        _roundCover(session, size: 66),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          session.bookTitle,
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            color: Colors.black,
+                                            fontSize: 11,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${ReadingSession.timeLabel(start)}～'
-                                        '${ReadingSession.timeLabel(end)}'
-                                        '（${ReadingSession.durationLabel(session.durationOnDay(day))}）',
-                                        style: const TextStyle(color: Colors.black),
-                                      ),
-                                      const SizedBox(height: 7),
-                                      _reactionButtons(session,
-                                          refreshDialog: refreshDialog),
-                                    ],
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${ReadingSession.timeLabel(start)}～'
+                                          '${ReadingSession.timeLabel(end)}'
+                                          '（${ReadingSession.durationLabel(session.durationOnDay(day))}）',
+                                          style: const TextStyle(
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 7),
+                                        _reactionButtons(
+                                          session,
+                                          refreshDialog: refreshDialog,
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                ),
-              ],
+                                ],
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
         ),
       ),
     );
@@ -322,7 +324,8 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
     final day = DateTime(_month.year, _month.month, number);
     final hasRecords = _sessionsFor(day).isNotEmpty;
     final today = DateTime.now();
-    final isToday = day.year == today.year &&
+    final isToday =
+        day.year == today.year &&
         day.month == today.month &&
         day.day == today.day;
     return Padding(
@@ -417,9 +420,7 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
           else if (!_canView)
             const Padding(
               padding: EdgeInsets.all(24),
-              child: Center(
-                child: Text('読書カレンダーは承認されたフォロワーのみに公開されています。'),
-              ),
+              child: Center(child: Text('読書カレンダーは承認されたフォロワーのみに公開されています。')),
             )
           else ...[
             Row(
@@ -440,10 +441,7 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
                   _dayCell(index, weekday, daysInMonth),
             ),
             const SizedBox(height: 20),
-            Text(
-              'この月の読書記録',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('この月の読書記録', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 10),
             if (daysWithReading.isEmpty)
               const Padding(

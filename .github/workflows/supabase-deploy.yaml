@@ -136,6 +136,7 @@ jobs:
             session-guard
             delete-account
             admin-delete-account
+            totp-recovery
             billing-checkout
             billing-cancel-subscription
             billing-change-plan

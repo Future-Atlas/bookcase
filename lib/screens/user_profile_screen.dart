@@ -21,6 +21,7 @@ import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
 import '../widgets/book_detail_dialog_frame.dart';
 import '../widgets/rakuten_book_link.dart';
+import '../widgets/book_detail_dialog.dart';
 import 'profile_book_search_screen.dart';
 import 'reading_calendar_tab.dart';
 import 'reading_timer_screen.dart';
@@ -537,7 +538,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     }
     setState(() {
       _isSocialActionInProgress = false;
-      // Re-check the calendar RLS permission as soon as the follow state changes.
       _calendarVersion++;
       if (returnedStatus != null && returnedStatus != optimisticStatus) {
         _relationship = relationship.copyWith(followStatus: returnedStatus);
@@ -1018,15 +1018,22 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       floatingActionButton: AnimatedBuilder(
         animation: _tabController,
         builder: (context, _) {
-          if (_profile == null || !_isOwnProfile) return const SizedBox.shrink();
+          if (_profile == null || !_isOwnProfile)
+            return const SizedBox.shrink();
           final calendarSelected = _tabController.index == 2;
           return FloatingActionButton(
-            heroTag: calendarSelected ? 'addCalendarReading' : 'addReadBookFromProfile',
-            onPressed: calendarSelected ? _openCalendarBookSearch : _openBookSearch,
+            heroTag: calendarSelected
+                ? 'addCalendarReading'
+                : 'addReadBookFromProfile',
+            onPressed: calendarSelected
+                ? _openCalendarBookSearch
+                : _openBookSearch,
             backgroundColor: calendarSelected
                 ? (isDarkMode ? Colors.black : Colors.white)
                 : Colors.black,
-            foregroundColor: calendarSelected ? profileHeaderColor : Colors.white,
+            foregroundColor: calendarSelected
+                ? profileHeaderColor
+                : Colors.white,
             shape: CircleBorder(
               side: BorderSide(
                 color: calendarSelected ? profileHeaderColor : Colors.white24,
@@ -1073,7 +1080,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           _buildPostsTab(),
                           _buildReadBooksTab(),
                           ReadingCalendarTab(
-                            key: ValueKey('reading-calendar-${_profile!.id}-$_calendarVersion'),
+                            key: ValueKey(
+                              'reading-calendar-${_profile!.id}-$_calendarVersion',
+                            ),
                             ownerId: _profile!.id,
                             accentColor: profileHeaderColor,
                             onProfileTap: (selectedProfile) {
@@ -1081,13 +1090,16 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                 MaterialPageRoute<void>(
                                   builder: (routeContext) => UserProfileScreen(
                                     profileId: selectedProfile.id,
-                                    onBack: () => Navigator.of(routeContext).pop(),
+                                    onBack: () =>
+                                        Navigator.of(routeContext).pop(),
                                     onOpenProfile: widget.onOpenProfile,
                                   ),
                                 ),
                               );
                             },
-                            onResume: _isOwnProfile ? _resumeCalendarTimer : null,
+                            onResume: _isOwnProfile
+                                ? _resumeCalendarTimer
+                                : null,
                           ),
                           if (FeatureFlags.favoritesUiEnabled)
                             _buildFavoritesTab(),
@@ -1540,7 +1552,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           isbn: post.bookId,
           coverUrl: post.bookCoverUrl,
         );
-    await _showSearchedBookDetailDialog(book);
+    await _showCanonicalBookDetailDialog(book);
   }
 
   Widget _buildGridTab(
@@ -1555,16 +1567,16 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Smartphone shelf: 2:8:1:8:1:8:2, including the entire
-        // visible card (not just its internal book cover).
+        // On mobile, distribute the full width as 2:8:1:8:1:8:2.
+        // Do not allow BookCard's internal margin to alter that ratio.
         final mobile = compactThreeColumn && constraints.maxWidth < 600;
         final geometry = MobileBookshelfGeometry(constraints.maxWidth);
         final compactPadding = constraints.maxWidth * 0.125;
         final horizontalPadding = mobile
             ? geometry.outerPadding
             : compactThreeColumn
-                ? (compactPadding < 16 ? 16.0 : compactPadding)
-                : 16.0;
+            ? (compactPadding < 16 ? 16.0 : compactPadding)
+            : 16.0;
         return GridView.builder(
           padding: EdgeInsets.symmetric(
             horizontal: horizontalPadding,
@@ -1585,12 +1597,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               height: 140,
               coverHeightRatio: mobile
                   ? geometry.coverHeightRatio
-                  : showDescription ? (2 / 3) : (1 / 3),
+                  : showDescription
+                  ? (2 / 3)
+                  : (1 / 3),
               marginRight: mobile ? 0 : 16,
               marginBottom: mobile ? 0 : 12,
               showDescription: showDescription,
               descriptionMaxLines: 3,
-              onTap: () => _showSearchedBookDetailDialog(book),
+              onTap: () => _showCanonicalBookDetailDialog(book),
             );
           },
         );
@@ -1653,7 +1667,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 ? 0.0
                 : matchingPosts.first.rating;
             return GestureDetector(
-              onTap: () => _showSearchedBookDetailDialog(book),
+              onTap: () => _showCanonicalBookDetailDialog(book),
               child: Container(
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
@@ -1839,7 +1853,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final service = Provider.of<SupabaseService>(context, listen: false);
 
     return InkWell(
-      onTap: () => _showSearchedBookDetailDialog(book),
+      onTap: () => _showCanonicalBookDetailDialog(book),
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.all(8),
@@ -1882,7 +1896,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             ),
                             onPressed: isRead
                                 ? null
-                                : () => _showSearchedBookDetailDialog(book),
+                                : () => _showCanonicalBookDetailDialog(book),
                             child: BookActionLabel(
                               bookId: book.id,
                               label: isRead ? '読了済み' : '読了',
@@ -1936,11 +1950,61 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
+  Future<bool> _ensureBookDetailAuthenticated() async {
+    return _ensureAuthenticated();
+  }
+
   Future<bool> _ensureAuthenticated() async {
     final service = Provider.of<SupabaseService>(context, listen: false);
     if (service.canWrite) return true;
     final result = await Navigator.of(context).pushNamed('/login');
     return mounted && (result == true || service.canWrite);
+  }
+
+  Future<void> _showCanonicalBookDetailDialog(Book book) async {
+    final service = Provider.of<SupabaseService>(context, listen: false);
+    if (ContentSafetyService.isAdultBook(book) &&
+        !await service.canViewAdultContent()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('この書籍は18歳未満の利用者には表示できません。')));
+      return;
+    }
+    if (!mounted) return;
+
+    // Keep the former profile-specific dialog available as a release fallback,
+    // but use the canonical Home/search detail surface by default.
+    if (const bool.fromEnvironment('USE_LEGACY_PROFILE_BOOK_DETAIL')) {
+      await _showSearchedBookDetailDialog(book);
+      return;
+    }
+
+    final preferredProfileId =
+        (_profile?.id ?? widget.profileId ?? service.activeProfileId).trim();
+    await showDialog<void>(
+      context: context,
+      builder: (_) => BookDetailDialog(
+        book: book,
+        preferredProfileId: preferredProfileId.isEmpty
+            ? null
+            : preferredProfileId,
+        ensureAuthenticated: _ensureBookDetailAuthenticated,
+        onRead: () async {
+          final posted = await showPostComposerDialog(
+            context: context,
+            book: book,
+          );
+          if (posted && mounted) await _loadProfileData();
+        },
+        onDataChanged: _loadProfileData,
+        onUserTap: _openReplyProfile,
+        onReaction: (post, reaction) => _toggleReaction(post.id, reaction),
+        onReport: (post) => _reportPost(post.id),
+        onReply: (post, parentReply) => _replyToPost(post, parentReply),
+        onReplyReport: _reportReply,
+      ),
+    );
   }
 
   Future<void> _showSearchedBookDetailDialog(Book book) async {

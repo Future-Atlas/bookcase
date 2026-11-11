@@ -1,6 +1,7 @@
 // SupabaseService: handles real Supabase interactions only – no mock data.
 // Mock book data removed – books are fetched from external APIs via BookRepository.
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,12 +20,30 @@ import 'content_safety_service.dart';
 import 'input_security_service.dart';
 import 'timeline_ranking_service.dart';
 import '../utils/dev_logger.dart';
+import '../utils/japanese_datetime.dart';
 import '../utils/avatar_image_format.dart';
 import '../utils/public_user_id.dart';
 
 // Kept for local troubleshooting. `debugLog` is silent outside debug builds.
 void debugPrint(String? message, {int? wrapWidth}) {
   debugLog(message, wrapWidth: wrapWidth);
+}
+
+String _totpLockedMessage(DateTime? retryAt) => retryAt == null
+    ? '上限回数に達しました。24時間後に再度入力してください。'
+    : '上限回数に達しました。${formatJapaneseMonthDayTime(retryAt)}（24時間後）以降に再度入力してください。';
+
+DateTime? _contactRateLimitRetryAt(Object? details) {
+  Object? decoded = details;
+  if (decoded is String) {
+    try {
+      decoded = jsonDecode(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+  if (decoded is! Map) return null;
+  return DateTime.tryParse(decoded['retry_at']?.toString() ?? '');
 }
 
 enum FavoriteToggleResult {
@@ -76,6 +95,49 @@ class BookEngagementCounts {
   final int wantToReadCount;
 }
 
+class TotpEnrollmentData {
+  const TotpEnrollmentData({
+    required this.factorId,
+    required this.uri,
+    required this.secret,
+  });
+
+  final String factorId;
+  final String uri;
+  final String secret;
+}
+
+class TotpVerificationState {
+  const TotpVerificationState({
+    required this.locked,
+    required this.remainingAttempts,
+    this.lockedUntil,
+  });
+
+  final bool locked;
+  final int remainingAttempts;
+  final DateTime? lockedUntil;
+
+  factory TotpVerificationState.fromJson(Map<String, dynamic> json) {
+    final lockedUntil = DateTime.tryParse(
+      json['locked_until']?.toString() ?? '',
+    );
+    return TotpVerificationState(
+      locked: json['locked'] == true,
+      remainingAttempts: (json['remaining_attempts'] as num?)?.toInt() ?? 5,
+      lockedUntil: lockedUntil?.toLocal(),
+    );
+  }
+}
+
+class TotpVerificationResult {
+  const TotpVerificationResult({required this.state, this.error});
+
+  final TotpVerificationState state;
+  final String? error;
+  bool get succeeded => error == null;
+}
+
 class SupabaseService extends ChangeNotifier {
   static const int standardFavoriteLimit = 3;
   static const int subscriberFavoriteLimit = 12;
@@ -99,6 +161,7 @@ class SupabaseService extends ChangeNotifier {
   String _activePageColorKey = ProfilePageColors.defaultKey;
   Timer? _sessionGuardTimer;
   Future<bool>? _canUseWantToReadFuture;
+  bool _privacyRecoveryTotpVerified = false;
   final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
   // ----- Initialization ----------------------------------------------------
@@ -175,6 +238,8 @@ class SupabaseService extends ChangeNotifier {
 
   User? get currentUser => _client?.auth.currentUser;
 
+  bool get isPrivacyRecoveryTotpVerified => _privacyRecoveryTotpVerified;
+
   /// The OAuth provider that owns the current Sharemarium account.
   ///
   /// Privacy-password recovery must use this same provider. Never ask the
@@ -224,6 +289,7 @@ class SupabaseService extends ChangeNotifier {
   }
 
   Future<void> clearPrivacyPasswordRecoveryIntent() async {
+    _privacyRecoveryTotpVerified = false;
     await _preferences.remove(_privacyRecoveryIntentStartedAtKey);
   }
 
@@ -618,6 +684,241 @@ class SupabaseService extends ChangeNotifier {
       return result == true;
     } catch (e) {
       debugPrint('Error checking privacy password: $e');
+      return false;
+    }
+  }
+
+  Future<bool> hasVerifiedTotpFactor() async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return false;
+    try {
+      final factors = await _client!.auth.mfa.listFactors();
+      return factors.totp.isNotEmpty;
+    } catch (e) {
+      debugPrint('Error checking TOTP enrollment: $e');
+      return false;
+    }
+  }
+
+  Future<bool> requiresTotpChallenge() async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return false;
+    try {
+      final factors = await _client!.auth.mfa.listFactors();
+      if (factors.totp.isEmpty) return false;
+      final assurance = _client!.auth.mfa.getAuthenticatorAssuranceLevel();
+      return assurance.currentLevel != AuthenticatorAssuranceLevels.aal2;
+    } catch (e) {
+      debugPrint('Error checking TOTP assurance level: $e');
+      return true;
+    }
+  }
+
+  Future<TotpEnrollmentData?> beginTotpEnrollment() async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return null;
+    try {
+      final factors = await _client!.auth.mfa.listFactors();
+      for (final factor in factors.all) {
+        if (factor.factorType == FactorType.totp &&
+            factor.status == FactorStatus.unverified) {
+          await _client!.auth.mfa.unenroll(factor.id);
+        }
+      }
+      final enrollment = await _client!.auth.mfa.enroll(
+        factorType: FactorType.totp,
+        issuer: 'Sharemarium',
+        friendlyName: 'Sharemarium 認証アプリ',
+      );
+      final totp = enrollment.totp;
+      if (totp == null) return null;
+      return TotpEnrollmentData(
+        factorId: enrollment.id,
+        uri: totp.uri,
+        secret: totp.secret,
+      );
+    } catch (e) {
+      debugPrint('TOTP enrollment could not be started: $e');
+      return null;
+    }
+  }
+
+  Future<String?> verifyTotpEnrollment({
+    required String factorId,
+    required String code,
+  }) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) {
+      return 'ログイン状態を確認できませんでした。';
+    }
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      return '6桁の認証コードを入力してください。';
+    }
+    try {
+      await _client!.auth.mfa.challengeAndVerify(
+        factorId: factorId,
+        code: code,
+      );
+      notifyListeners();
+      return null;
+    } on AuthException {
+      return '認証コードが正しくありません。認証アプリの最新コードを確認してください。';
+    } catch (e) {
+      debugPrint('TOTP enrollment verification failed: $e');
+      return '認証アプリを登録できませんでした。';
+    }
+  }
+
+  Future<String?> verifiedTotpFactorId() async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return null;
+    try {
+      final factors = await _client!.auth.mfa.listFactors();
+      return factors.totp.isEmpty ? null : factors.totp.first.id;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<TotpVerificationState?> fetchTotpVerificationState({
+    required String purpose,
+  }) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return null;
+    try {
+      final response = await _client!.functions.invoke(
+        'totp-recovery',
+        body: {'mode': 'status', 'purpose': purpose},
+      );
+      if (response.status < 200 || response.status >= 300) return null;
+      final data = response.data;
+      return data is Map
+          ? TotpVerificationState.fromJson(Map<String, dynamic>.from(data))
+          : null;
+    } catch (e) {
+      debugPrint('TOTP status could not be loaded: $e');
+      return null;
+    }
+  }
+
+  Future<TotpVerificationResult> verifyTotpCode({
+    required String purpose,
+    required String factorId,
+    required String code,
+  }) async {
+    const fallback = TotpVerificationState(locked: false, remainingAttempts: 5);
+    if (!_isInitialized || _client == null || !isAuthenticated) {
+      return const TotpVerificationResult(
+        state: fallback,
+        error: 'ログイン状態を確認できませんでした。',
+      );
+    }
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      return const TotpVerificationResult(
+        state: fallback,
+        error: '6桁の認証コードを入力してください。',
+      );
+    }
+    try {
+      final response = await _client!.functions.invoke(
+        'totp-recovery',
+        body: {
+          'mode': 'verify',
+          'purpose': purpose,
+          'factorId': factorId,
+          'code': code,
+        },
+      );
+      final data = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+      final state = TotpVerificationState.fromJson(data);
+      if (response.status < 200 || response.status >= 300) {
+        return TotpVerificationResult(
+          state: state,
+          error: purpose == 'privacy_recovery'
+              ? state.locked
+                    ? _totpLockedMessage(state.lockedUntil)
+                    : '認証コードが正しくありません。あと${state.remainingAttempts}回で、24時間ロックされます。'
+              : '認証コードが正しくありません。',
+        );
+      }
+      final accessToken = data['accessToken']?.toString() ?? '';
+      final refreshToken = data['refreshToken']?.toString() ?? '';
+      if (accessToken.isEmpty || refreshToken.isEmpty) {
+        return const TotpVerificationResult(
+          state: fallback,
+          error: '本人確認を完了できませんでした。',
+        );
+      }
+      await _client!.auth.setSession(refreshToken, accessToken: accessToken);
+      if (purpose == 'privacy_recovery') {
+        _privacyRecoveryTotpVerified = true;
+      }
+      notifyListeners();
+      return const TotpVerificationResult(state: fallback);
+    } on FunctionException catch (e) {
+      final details = e.details;
+      final state = details is Map
+          ? TotpVerificationState.fromJson(Map<String, dynamic>.from(details))
+          : fallback;
+      return TotpVerificationResult(
+        state: state,
+        error: purpose == 'privacy_recovery'
+            ? state.locked
+                  ? _totpLockedMessage(state.lockedUntil)
+                  : '認証コードが正しくありません。あと${state.remainingAttempts}回で、24時間ロックされます。'
+            : '認証コードが正しくありません。',
+      );
+    } catch (e) {
+      debugPrint('Protected TOTP verification failed: $e');
+      return const TotpVerificationResult(
+        state: fallback,
+        error: '認証コードを確認できませんでした。',
+      );
+    }
+  }
+
+  Future<String?> resetOwnTotpWithPrivacyPassword(String password) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) {
+      return 'ログイン状態を確認できませんでした。';
+    }
+    try {
+      final response = await _client!.functions.invoke(
+        'totp-recovery',
+        body: {'mode': 'self_reenroll', 'password': password},
+      );
+      if (response.status == 403) return '個人情報変更用パスワードが正しくありません。';
+      if (response.status < 200 || response.status >= 300) {
+        return '認証アプリを再登録できませんでした。';
+      }
+      await _client!.auth.refreshSession();
+      notifyListeners();
+      return null;
+    } on FunctionException catch (e) {
+      if (e.status == 403) return '個人情報変更用パスワードが正しくありません。';
+      return '認証アプリを再登録できませんでした。';
+    } catch (e) {
+      debugPrint('TOTP self recovery failed: $e');
+      return '認証アプリを再登録できませんでした。';
+    }
+  }
+
+  Future<bool> adminResetTotpFactor({
+    required String targetIdentifier,
+    required String adminPassword,
+    required String reason,
+    required String requestReference,
+  }) async {
+    if (!_isInitialized || _client == null || !isAuthenticated) return false;
+    try {
+      final response = await _client!.functions.invoke(
+        'totp-recovery',
+        body: {
+          'mode': 'admin_reset',
+          'targetIdentifier': targetIdentifier.trim(),
+          'adminPassword': adminPassword,
+          'reason': reason.trim(),
+          'requestReference': requestReference.trim(),
+        },
+      );
+      return response.status >= 200 && response.status < 300;
+    } catch (e) {
+      debugPrint('Administrator TOTP reset failed: $e');
       return false;
     }
   }
@@ -1059,17 +1360,28 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
-  Future<String?> uploadProfileAvatar({required Uint8List bytes}) async {
+  Future<({String? url, String? error})> uploadProfileAvatar({
+    required Uint8List bytes,
+  }) async {
     final profileId = activeProfileId;
-    if (!_isInitialized || _client == null || profileId.isEmpty) return null;
-    if (bytes.isEmpty || bytes.lengthInBytes > 5 * 1024 * 1024) return null;
+    if (!_isInitialized ||
+        _client == null ||
+        profileId.isEmpty ||
+        !isAuthenticated) {
+      return (url: null, error: 'ログイン状態を確認できません。再ログインしてください。');
+    }
+    if (bytes.isEmpty || bytes.lengthInBytes > 5 * 1024 * 1024) {
+      return (url: null, error: '画像の容量が5MB以下であることを確認してください。');
+    }
 
     final format = AvatarImageFormat.detect(bytes);
-    if (format == null) return null;
+    if (format == null) {
+      return (url: null, error: 'JPEG・PNG・WebP形式の画像を選択してください。');
+    }
     final path = '$profileId/avatar.${format.extension}';
 
+    final bucket = _client!.storage.from('avatars');
     try {
-      final bucket = _client!.storage.from('avatars');
       await bucket.uploadBinary(
         path,
         bytes,
@@ -1079,18 +1391,68 @@ class SupabaseService extends ChangeNotifier {
           cacheControl: '3600',
         ),
       );
-      final publicUrl = bucket.getPublicUrl(path);
-      final versionedUrl =
-          '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
-      await _client!
+    } on StorageException catch (e) {
+      debugPrint('Avatar storage upload failed: $e');
+      final reason = e.message.toLowerCase();
+      if (reason.contains('bucket not found') || reason.contains('not found')) {
+        return (url: null, error: '画像の保存先が利用できません。運営者にお問い合わせください。');
+      }
+      if (reason.contains('row-level security') ||
+          reason.contains('permission') ||
+          e.statusCode.toString() == '401' ||
+          e.statusCode.toString() == '403') {
+        return (
+          url: null,
+          error: '画像のアップロード権限を確認できません。再ログインしても直らない場合は運営者にお問い合わせください。',
+        );
+      }
+      if (e.statusCode.toString() == '413') {
+        return (url: null, error: '画像の容量が保存先の上限を超えています。');
+      }
+      return (url: null, error: '画像のアップロードに失敗しました。通信環境を確認して再度お試しください。');
+    } catch (e) {
+      debugPrint('Avatar storage upload failed: $e');
+      return (url: null, error: '画像のアップロードに失敗しました。通信環境を確認して再度お試しください。');
+    }
+
+    final publicUrl = bucket.getPublicUrl(path);
+    final versionedUrl =
+        '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+    try {
+      // Returning the row also detects RLS-blocked or missing profile updates;
+      // a bare UPDATE can return no rows without throwing.
+      final updated = await _client!
           .from('profiles')
           .update({'avatar_url': versionedUrl})
-          .eq('id', profileId);
+          .eq('id', profileId)
+          .select('avatar_url')
+          .maybeSingle();
+      if (updated?['avatar_url'] != versionedUrl) {
+        return (
+          url: null,
+          error: '画像は送信されましたが、プロフィールへの反映に失敗しました。ログイン状態を確認してください。',
+        );
+      }
       notifyListeners();
-      return versionedUrl;
+      return (url: versionedUrl, error: null);
+    } on PostgrestException catch (e) {
+      debugPrint('Avatar profile update failed: $e');
+      if (e.code == '42501' ||
+          e.code == '403' ||
+          e.message.toLowerCase().contains('permission')) {
+        return (
+          url: null,
+          error: '画像は送信されましたが、プロフィールの更新権限がありません。運営者にお問い合わせください。',
+        );
+      }
+      if (e.code == '23514' ||
+          e.message.contains('avatar_url_source_not_allowed')) {
+        return (url: null, error: '画像URLが保存先のセキュリティ設定で拒否されました。運営者にお問い合わせください。');
+      }
+      return (url: null, error: '画像は送信されましたが、プロフィールの更新に失敗しました。');
     } catch (e) {
-      debugPrint('Error uploading profile avatar: $e');
-      return null;
+      debugPrint('Avatar profile update failed: $e');
+      return (url: null, error: '画像は送信されましたが、プロフィールの更新に失敗しました。');
     }
   }
 
@@ -1230,6 +1592,7 @@ class SupabaseService extends ChangeNotifier {
       return 'パスワードの再設定はGoogleまたはXでログインしたアカウントのみ対応しています。';
     }
     try {
+      _privacyRecoveryTotpVerified = false;
       // The database records the current UID/provider/time before redirecting.
       // The password can only be changed after a *fresh* matching OAuth login.
       await _client!.rpc('begin_privacy_password_recovery');
@@ -1255,6 +1618,9 @@ class SupabaseService extends ChangeNotifier {
       await clearPrivacyPasswordRecoveryIntent();
       if (e.code == '22023') {
         return 'Google・X以外のログイン方法では再設定できません。';
+      }
+      if (e.code == 'P0001') {
+        return '認証コードを5回誤入力したため、24時間は再設定できません。';
       }
       return '本人確認を開始できませんでした。';
     } catch (e) {
@@ -1596,12 +1962,14 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
-  Future<List<SocialNotification>> fetchNotifications() async {
-    final profileId = activeProfileId;
-    if (!_isInitialized || _client == null || profileId.isEmpty) return [];
-
+  /// Keep existing post and follow notifications working while the new
+  /// follower-calendar migration is staged separately in production.
+  /// Only missing-column / missing-relationship errors use the legacy query.
+  Future<List<Map<String, dynamic>>> _readNotificationsAcrossSchemaVersions(
+    String profileId,
+  ) async {
     try {
-      final response = await _client!
+      return await _client!
           .from('notifications')
           .select(
             'id, type, actor_id, post_id, reply_id, reading_session_id, read_at, created_at, '
@@ -1612,6 +1980,33 @@ class SupabaseService extends ChangeNotifier {
           .eq('recipient_id', profileId)
           .order('created_at', ascending: false)
           .limit(100);
+    } on PostgrestException catch (error) {
+      if (error.code != '42703' &&
+          error.code != 'PGRST200' &&
+          error.code != 'PGRST204' &&
+          error.code != 'PGRST205') {
+        rethrow;
+      }
+      return await _client!
+          .from('notifications')
+          .select(
+            'id, type, actor_id, post_id, reply_id, reading_session_id, read_at, created_at, '
+            'actor:profiles!notifications_actor_id_fkey(username, user_id, avatar_url), '
+            'post:posts!notifications_post_id_fkey(book_id, book_title), '
+            'reading:reading_sessions!notifications_reading_session_id_fkey(book_title)',
+          )
+          .eq('recipient_id', profileId)
+          .order('created_at', ascending: false)
+          .limit(100);
+    }
+  }
+
+  Future<List<SocialNotification>> fetchNotifications() async {
+    final profileId = activeProfileId;
+    if (!_isInitialized || _client == null || profileId.isEmpty) return [];
+
+    try {
+      final response = await _readNotificationsAcrossSchemaVersions(profileId);
       final pendingResponse = await _client!
           .from('follows')
           .select('follower_id')
@@ -1645,7 +2040,8 @@ class SupabaseService extends ChangeNotifier {
         final actorId = row['actor_id']?.toString() ?? '';
         final bookId = post?['book_id']?.toString();
         String? bookTitle;
-        bookTitle = post?['book_title']?.toString() ??
+        bookTitle =
+            post?['book_title']?.toString() ??
             reading?['book_title']?.toString();
         if ((bookTitle == null || bookTitle.isEmpty) &&
             bookId != null &&
@@ -1829,9 +2225,13 @@ class SupabaseService extends ChangeNotifier {
       return null;
     } on PostgrestException catch (e) {
       if (e.message.contains('CONTACT_RATE_LIMIT_EXCEEDED')) {
+        final retryAt = _contactRateLimitRetryAt(e.details);
+        final retryText = retryAt == null
+            ? '24時間経過後'
+            : '${formatJapaneseMonthDayTime(retryAt)}以降';
         return '申し訳ございません。システム上、24時間以内に送信できるお問い合わせは5件までです。\n'
             '運営チームが順次対応しておりますので、しばらくお待ちください。\n'
-            '追加のお問い合わせがある場合は、お手数ですが24時間経過後にお送りください。';
+            '上限件数に達しました。お手数ですが、$retryTextに再度送信してください。';
       }
       debugPrint('Contact request database error: $e');
       return 'お問い合わせを送信できませんでした。データベース更新後にもう一度お試しください。';
@@ -1912,10 +2312,12 @@ class SupabaseService extends ChangeNotifier {
       for (final row in rows as List<dynamic>) {
         if (row is! Map) continue;
         final isbn = (row['book_id']?.toString() ?? '').trim();
-        if (!RegExp(r'^(?:[0-9]{13}|[0-9]{9}[0-9Xx])$').hasMatch(isbn)) continue;
+        if (!RegExp(r'^(?:[0-9]{13}|[0-9]{9}[0-9Xx])$').hasMatch(isbn))
+          continue;
         counts[isbn] = (counts[isbn] ?? 0) + 1;
         final rating = row['rating'];
-        scores[isbn] = (scores[isbn] ?? 0) + (rating is num ? rating.toDouble() : 0);
+        scores[isbn] =
+            (scores[isbn] ?? 0) + (rating is num ? rating.toDouble() : 0);
         firstSeen.putIfAbsent(isbn, () => firstSeen.length);
         final title = (row['book_title']?.toString() ?? '').trim();
         if (title.isNotEmpty) titles.putIfAbsent(isbn, () => title);
@@ -1929,19 +2331,26 @@ class SupabaseService extends ChangeNotifier {
               ? popularity
               : (firstSeen[a] ?? 99999).compareTo(firstSeen[b] ?? 99999);
         });
-      return sorted.take(limit).map((isbn) => Book(
-        id: isbn,
-        isbn: isbn,
-        title: titles[isbn] ?? 'ISBN $isbn',
-        author: authors[isbn] ?? '',
-        publisher: '',
-        pubDate: '',
-        coverUrl: '',
-        reviewCount: counts[isbn] ?? 0,
-        ratingAvg: counts[isbn] == null ? 0 : (scores[isbn] ?? 0) / counts[isbn]!,
-        genre: '人気作品',
-        catalogSource: 'user_post',
-      )).toList(growable: false);
+      return sorted
+          .take(limit)
+          .map(
+            (isbn) => Book(
+              id: isbn,
+              isbn: isbn,
+              title: titles[isbn] ?? 'ISBN $isbn',
+              author: authors[isbn] ?? '',
+              publisher: '',
+              pubDate: '',
+              coverUrl: '',
+              reviewCount: counts[isbn] ?? 0,
+              ratingAvg: counts[isbn] == null
+                  ? 0
+                  : (scores[isbn] ?? 0) / counts[isbn]!,
+              genre: '人気作品',
+              catalogSource: 'user_post',
+            ),
+          )
+          .toList(growable: false);
     } catch (e) {
       debugPrint('Unable to rank public books by Sharemarium activity: $e');
       return const <Book>[];
@@ -1985,6 +2394,7 @@ class SupabaseService extends ChangeNotifier {
   Future<List<Post>> fetchPostsForBook(
     String bookId, {
     bool excludeCurrentUser = false,
+    String? preferredProfileId,
   }) async {
     final normalizedBookId = bookId.trim();
     if (!_isInitialized || _client == null || normalizedBookId.isEmpty) {
@@ -1996,26 +2406,17 @@ class SupabaseService extends ChangeNotifier {
       final enriched = await _enrichPostsWithBookMetadata(parsed);
       final visible = await _filterPostsForCurrentViewer(enriched);
       final viewerId = activeProfileId;
-      final otherUsersPosts = viewerId.isNotEmpty
+      final candidates = excludeCurrentUser && viewerId.isNotEmpty
           ? visible
                 .where((post) => post.profileId != viewerId)
                 .toList(growable: false)
-          : <Post>[];
-      if (excludeCurrentUser || viewerId.isEmpty) {
-        return _arrangeTimelinePosts(
-          excludeCurrentUser ? otherUsersPosts : visible,
-        );
-      }
-
-      final ownPosts =
-          visible
-              .where((post) => post.profileId == viewerId)
-              .toList(growable: false)
-            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      final rankedOtherUsersPosts = await _arrangeTimelinePosts(
-        otherUsersPosts,
+          : visible;
+      final followedProfileIds = await _acceptedFollowingProfileIds();
+      return TimelineRankingService.arrangeBookReviews(
+        posts: candidates,
+        followedProfileIds: followedProfileIds,
+        preferredProfileId: preferredProfileId,
       );
-      return [...ownPosts, ...rankedOtherUsersPosts];
     }
 
     try {
@@ -3026,7 +3427,9 @@ class SupabaseService extends ChangeNotifier {
         'book_cover_url': '',
         'book_description': '',
         'book_metadata_source': book.catalogSource,
-        'book_metadata_observed_at': book.catalogFetchedAt?.toUtc().toIso8601String(),
+        'book_metadata_observed_at': book.catalogFetchedAt
+            ?.toUtc()
+            .toIso8601String(),
         'related_screen_titles': relatedScreenTitles
             .map((value) => value.trim())
             .where((value) => value.isNotEmpty)
@@ -3404,7 +3807,9 @@ class SupabaseService extends ChangeNotifier {
           // and book ISBN/title/author remain intact.
           'book_description': '',
           'book_metadata_source': book.catalogSource,
-          'book_metadata_observed_at': book.catalogFetchedAt?.toUtc().toIso8601String(),
+          'book_metadata_observed_at': book.catalogFetchedAt
+              ?.toUtc()
+              .toIso8601String(),
           'is_age_restricted': isAgeRestricted,
           'rating': rating,
           'comment': normalizedComment,

@@ -64,20 +64,18 @@ class ContentSafetyService {
     return blockedIds.any(book.belongsToRakutenGenre);
   }
 
-  static bool isAdultBook(
-    Book book, {
-    Set<String>? restrictedGenreIds,
-  }) {
-    return book.adultContentFlag || hasRestrictedRakutenGenre(
-      book,
-      restrictedGenreIds: restrictedGenreIds,
-    ) || containsAdultContentTerms([
-      book.title,
-      book.author,
-      book.publisher,
-      book.genre,
-      book.description,
-    ]);
+  static bool isAdultBook(Book book, {Set<String>? restrictedGenreIds}) {
+    return hasRestrictedRakutenGenre(
+          book,
+          restrictedGenreIds: restrictedGenreIds,
+        ) ||
+        containsAdultContentTerms([
+          book.title,
+          book.author,
+          book.publisher,
+          book.genre,
+          book.description,
+        ]);
   }
 
   static bool isAdultSearchQuery(String query) {
@@ -92,10 +90,7 @@ class ContentSafetyService {
     if (allowAdultContent) return List<Book>.of(books);
     return books
         .where(
-          (book) => !isAdultBook(
-            book,
-            restrictedGenreIds: restrictedGenreIds,
-          ),
+          (book) => !isAdultBook(book, restrictedGenreIds: restrictedGenreIds),
         )
         .toList(growable: false);
   }

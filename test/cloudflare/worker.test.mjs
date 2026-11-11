@@ -101,10 +101,47 @@ test("production custom domain adds browser security headers", async () => {
     response.headers.get("content-security-policy") || "",
     /script-src-attr 'none'/,
   );
+  // Release builds self-host CanvasKit, so CSP must not reopen Google's script
+  // CDN. The deployment smoke test separately verifies the local JS/Wasm files.
+  const csp = response.headers.get("content-security-policy") || "";
+  assert.doesNotMatch(csp, /script-src[^;]*https:\/\/www\.gstatic\.com/);
+  assert.doesNotMatch(csp, /'unsafe-eval'/);
+
   assert.equal(
     response.headers.get("content-security-policy-report-only"),
     null,
   );
+});
+
+test("Vercel fallback and Cloudflare share a Flutter-compatible CSP", async () => {
+  const config = JSON.parse(
+    readFileSync(new URL("../../vercel.json", import.meta.url), "utf8"),
+  );
+  const fallbackCsp = config.headers[0].headers.find(
+    ({ key }) => key === "Content-Security-Policy",
+  )?.value;
+  const { env } = environment({ appEnv: "production" });
+  const response = await worker.fetch(
+    new Request("https://www.sharemarium.com/"),
+    env,
+  );
+  const workerCsp = response.headers.get("content-security-policy");
+  assert.equal(fallbackCsp, workerCsp);
+  // crop_your_image reads a browser-created blob URL while processing a
+  // selected avatar. The policy must allow only that local URL scheme, without
+  // relaxing network origins or granting all sources.
+  const connectSrc = workerCsp.split("; ").find(
+    (directive) => directive.startsWith("connect-src "),
+  );
+  assert.equal(connectSrc, "connect-src 'self' blob: https: wss:");
+  assert.equal(
+    fallbackCsp.split("; ").find(
+      (directive) => directive.startsWith("connect-src "),
+    ),
+    connectSrc,
+  );
+  assert.doesNotMatch(fallbackCsp, /script-src[^;]*https:\/\/www\.gstatic\.com/);
+  assert.doesNotMatch(fallbackCsp, /script-src[^;]*'unsafe-eval'/);
 });
 
 test("HTTP requests are permanently redirected to HTTPS", async () => {
