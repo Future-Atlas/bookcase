@@ -59,7 +59,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     appendFileSync(output, 'mode=' + mode + '\n');
     process.stdout.write('Staging database deployment mode: ' + mode + '\n');
   } catch (error) {
-    process.stderr.write('Staging deployment mode could not be verified; stopped.\\n');
+    process.stderr.write('Staging deployment mode could not be verified; stopped.\n');
     process.exitCode = 1;
   }
 }
