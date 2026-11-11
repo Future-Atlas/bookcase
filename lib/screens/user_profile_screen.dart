@@ -11,6 +11,7 @@ import '../models/post.dart';
 import '../models/post_reply.dart';
 import '../models/social_models.dart';
 import '../models/profile_page_color.dart';
+import '../utils/mobile_bookshelf_geometry.dart';
 import '../services/content_safety_service.dart';
 import '../widgets/post_card.dart';
 import '../widgets/book_card.dart';
@@ -18,8 +19,12 @@ import '../widgets/post_composer_dialog.dart';
 import '../widgets/post_reply_dialog.dart';
 import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
+import '../widgets/book_detail_dialog_frame.dart';
 import '../widgets/rakuten_book_link.dart';
 import 'profile_book_search_screen.dart';
+import 'reading_calendar_tab.dart';
+import 'reading_timer_screen.dart';
+import '../models/reading_session.dart';
 import 'report_post_dialog.dart';
 import 'follow_list_screen.dart';
 import 'post_engagement_users_screen.dart';
@@ -287,6 +292,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   ProfileRelationship? _relationship;
   bool _isSocialActionInProgress = false;
   final Set<String> _pendingReactionPostIds = <String>{};
+  int _calendarVersion = 0;
 
   bool get _isOwnProfile => _relationship?.isOwnProfile ?? false;
 
@@ -305,7 +311,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     super.initState();
     _tabController = TabController(
       length:
-          2 +
+          3 +
           (FeatureFlags.favoritesUiEnabled ? 1 : 0) +
           (FeatureFlags.wantToReadUiEnabled ? 1 : 0),
       vsync: this,
@@ -482,6 +488,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     if (profile == null || relationship == null || relationship.isOwnProfile) {
       return;
     }
+    if (!await _ensureAuthenticated() || !mounted) return;
 
     final wasFollowing =
         relationship.followStatus != FollowRelationshipStatus.none;
@@ -588,6 +595,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final profile = _profile;
     final relationship = _relationship;
     if (profile == null || relationship == null) return;
+    if (!await _ensureAuthenticated() || !mounted) return;
     if (relationship.blockedEitherDirection) return;
     if (!relationship.isOwnProfile && profile.isPrivate) {
       ScaffoldMessenger.of(
@@ -918,6 +926,41 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
+  Future<void> _openCalendarBookSearch() async {
+    if (!_isOwnProfile) return;
+    final book = await Navigator.of(context).push<Book>(
+      MaterialPageRoute(
+        builder: (_) => const ProfileBookSearchScreen(calendarSelection: true),
+      ),
+    );
+    if (book == null || !mounted) return;
+    final recorded = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ReadingTimerScreen(
+          book: book,
+          accentColor: ProfilePageColors.colorFor(_profile?.pageColorKey),
+        ),
+      ),
+    );
+    if (recorded == true && mounted) {
+      setState(() => _calendarVersion++);
+    }
+  }
+
+  Future<void> _resumeCalendarTimer(ReadingSession session) async {
+    final recorded = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ReadingTimerScreen(
+          resuming: session,
+          accentColor: ProfilePageColors.colorFor(_profile?.pageColorKey),
+        ),
+      ),
+    );
+    if (recorded == true && mounted) {
+      setState(() => _calendarVersion++);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -967,19 +1010,33 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               centerTitle: true,
             )
           : null,
-      floatingActionButton: _profile == null || !_isOwnProfile
-          ? null
-          : FloatingActionButton(
-              heroTag: 'addReadBookFromProfile',
-              onPressed: _openBookSearch,
-              backgroundColor: Colors.black,
-              foregroundColor: Colors.white,
-              shape: const CircleBorder(
-                side: BorderSide(color: Colors.white24),
+      floatingActionButton: AnimatedBuilder(
+        animation: _tabController,
+        builder: (context, _) {
+          if (_profile == null || !_isOwnProfile) return const SizedBox.shrink();
+          final calendarSelected = _tabController.index == 2;
+          return FloatingActionButton(
+            heroTag: calendarSelected ? 'addCalendarReading' : 'addReadBookFromProfile',
+            onPressed: calendarSelected ? _openCalendarBookSearch : _openBookSearch,
+            backgroundColor: calendarSelected
+                ? (isDarkMode ? Colors.black : Colors.white)
+                : Colors.black,
+            foregroundColor: calendarSelected ? profileHeaderColor : Colors.white,
+            shape: CircleBorder(
+              side: BorderSide(
+                color: calendarSelected ? profileHeaderColor : Colors.white24,
+                width: 2,
               ),
-              tooltip: '読了した本を投稿',
-              child: const Icon(Icons.add, size: 32),
             ),
+            tooltip: calendarSelected ? 'カレンダーに追加' : '読了した本を投稿',
+            child: Icon(
+              Icons.add,
+              size: 32,
+              color: calendarSelected ? profileHeaderColor : Colors.white,
+            ),
+          );
+        },
+      ),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFFD00303)),
@@ -1010,6 +1067,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                         children: [
                           _buildPostsTab(),
                           _buildReadBooksTab(),
+                          if (_isOwnProfile)
+                            ReadingCalendarTab(
+                              key: ValueKey(_calendarVersion),
+                              accentColor: profileHeaderColor,
+                              onResume: _resumeCalendarTimer,
+                            )
+                          else
+                            const Center(child: Text('読書カレンダーは本人のみ閲覧できます。')),
                           if (FeatureFlags.favoritesUiEnabled)
                             _buildFavoritesTab(),
                           if (FeatureFlags.wantToReadUiEnabled)
@@ -1329,6 +1394,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         tabs: [
           const Tab(text: '投稿'),
           const Tab(text: 'My 本棚'),
+          const Tab(text: 'カレンダー'),
           if (FeatureFlags.favoritesUiEnabled) const Tab(text: 'お気に入り'),
           if (FeatureFlags.wantToReadUiEnabled) const Tab(text: '読みたい！'),
         ],
@@ -1445,7 +1511,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   Future<void> _openBookFromPost(Post post) async {
     final resolvedBook = await const BookCatalogLookup().fetchById(
-      post.bookId, enrichNdl: true,
+      post.bookId,
+      enrichNdl: true,
     );
     if (!mounted) return;
     final book =
@@ -1474,22 +1541,26 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Keep three books per row, but size each card approximately like a
-        // four-column grid so the bookshelf has comfortable side whitespace.
+        // Smartphone shelf: 2:8:1:8:1:8:2, including the entire
+        // visible card (not just its internal book cover).
+        final mobile = compactThreeColumn && constraints.maxWidth < 600;
+        final geometry = MobileBookshelfGeometry(constraints.maxWidth);
         final compactPadding = constraints.maxWidth * 0.125;
-        final horizontalPadding = compactThreeColumn
-            ? (compactPadding < 16 ? 16.0 : compactPadding)
-            : 16.0;
+        final horizontalPadding = mobile
+            ? geometry.outerPadding
+            : compactThreeColumn
+                ? (compactPadding < 16 ? 16.0 : compactPadding)
+                : 16.0;
         return GridView.builder(
           padding: EdgeInsets.symmetric(
             horizontal: horizontalPadding,
-            vertical: 16,
+            vertical: mobile ? geometry.verticalPadding : 16,
           ),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
-            childAspectRatio: 0.62,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
+            childAspectRatio: mobile ? geometry.childAspectRatio : 0.62,
+            crossAxisSpacing: mobile ? geometry.interBookGap : 12,
+            mainAxisSpacing: mobile ? geometry.rowGap : 12,
           ),
           itemCount: booksList.length,
           itemBuilder: (context, index) {
@@ -1498,7 +1569,11 @@ class _UserProfileScreenState extends State<UserProfileScreen>
               book: book,
               width: double.infinity,
               height: 140,
-              coverHeightRatio: showDescription ? (2 / 3) : (1 / 3),
+              coverHeightRatio: mobile
+                  ? geometry.coverHeightRatio
+                  : showDescription ? (2 / 3) : (1 / 3),
+              marginRight: mobile ? 0 : 16,
+              marginBottom: mobile ? 0 : 12,
               showDescription: showDescription,
               descriptionMaxLines: 3,
               onTap: () => _showSearchedBookDetailDialog(book),
@@ -1847,14 +1922,21 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     );
   }
 
+  Future<bool> _ensureAuthenticated() async {
+    final service = Provider.of<SupabaseService>(context, listen: false);
+    if (service.canWrite) return true;
+    final result = await Navigator.of(context).pushNamed('/login');
+    return mounted && (result == true || service.canWrite);
+  }
+
   Future<void> _showSearchedBookDetailDialog(Book book) async {
     final service = Provider.of<SupabaseService>(context, listen: false);
     if (ContentSafetyService.isAdultBook(book) &&
         !await service.canViewAdultContent()) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('この書籍は18歳未満の利用者には表示できません。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('この書籍は18歳未満の利用者には表示できません。')));
       return;
     }
     if (!mounted) return;
@@ -1874,12 +1956,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       context: context,
       builder: (dialogContext) {
         final narrow = MediaQuery.sizeOf(dialogContext).width < 600;
-        return Dialog(
-          backgroundColor: const Color(0xFFE6E6E6),
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 24,
-          ),
+        return BookDetailDialogFrame(
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: 920,
@@ -1931,6 +2008,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                                   onPressed: isRead || checking
                                       ? null
                                       : () async {
+                                          if (!await _ensureAuthenticated() ||
+                                              !mounted) {
+                                            return;
+                                          }
                                           Navigator.of(dialogContext).pop();
                                           final posted =
                                               await showPostComposerDialog(

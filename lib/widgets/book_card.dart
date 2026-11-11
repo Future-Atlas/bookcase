@@ -9,6 +9,7 @@ class BookCard extends StatefulWidget {
   final double height;
   final double coverHeightRatio;
   final double marginRight;
+  final double marginBottom;
   final bool showDescription;
   final int descriptionMaxLines;
 
@@ -20,6 +21,7 @@ class BookCard extends StatefulWidget {
     this.height = 202,
     this.coverHeightRatio = 0.66,
     this.marginRight = 16,
+    this.marginBottom = 12,
     this.showDescription = false,
     this.descriptionMaxLines = 2,
   });
@@ -59,7 +61,10 @@ class _BookCardState extends State<BookCard> {
               duration: const Duration(milliseconds: 200),
               width: widget.width ?? 138,
               height: cardHeight,
-              margin: EdgeInsets.only(right: widget.marginRight, bottom: 12),
+              margin: EdgeInsets.only(
+                right: widget.marginRight,
+                bottom: widget.marginBottom,
+              ),
               decoration: BoxDecoration(
                 color: Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(2),
