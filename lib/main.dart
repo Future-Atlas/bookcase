@@ -25,6 +25,7 @@ import 'screens/operator_info_screen.dart';
 import 'screens/profile_onboarding_screen.dart';
 import 'screens/moderation_screen.dart';
 import 'screens/account_suspension_gate.dart';
+import 'screens/reading_timer_resume_gate.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/public_post_routes.dart';
 import 'widgets/public_posts_link.dart';
@@ -174,14 +175,18 @@ class MyApp extends StatelessWidget {
       onUnknownRoute: (_) => MaterialPageRoute<void>(
         builder: (_) => const AccountSuspensionGate(
           child: LegalConsentGate(
-            child: ProfileOnboardingGate(child: MainNavigationShell()),
+            child: ProfileOnboardingGate(
+              child: ReadingTimerResumeGate(child: MainNavigationShell()),
+            ),
           ),
         ),
       ),
       onGenerateRoute: publicPostRoute,
       home: const AccountSuspensionGate(
         child: LegalConsentGate(
-          child: ProfileOnboardingGate(child: MainNavigationShell()),
+          child: ProfileOnboardingGate(
+              child: ReadingTimerResumeGate(child: MainNavigationShell()),
+            ),
         ),
       ),
     );

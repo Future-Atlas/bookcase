@@ -14,11 +14,15 @@ class ReadingTimerScreen extends StatefulWidget {
     this.book,
     this.resuming,
     required this.accentColor,
+    this.onFinished,
+    this.onDefer,
   }) : assert(book != null || resuming != null);
 
   final Book? book;
   final ReadingSession? resuming;
   final Color accentColor;
+  final VoidCallback? onFinished;
+  final VoidCallback? onDefer;
 
   @override
   State<ReadingTimerScreen> createState() => _ReadingTimerScreenState();
@@ -67,8 +71,26 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
       setState(() => _active = current);
       _startTicking();
     } catch (_) {
+      // Another tab or a previous browser session may already be recording.
+      // Restore that server-side session instead of trapping the user in a
+      // repeated start error without a way to stop the running timer.
+      ReadingSession? existing;
+      try {
+        existing = await _service.activeSession();
+      } catch (_) {
+        // Preserve the original failure semantics if the lookup also fails.
+      }
       if (!mounted) return;
-      setState(() => _error = '計測を開始できませんでした。別の読書タイマーが実行中でないか確認してください。');
+      if (existing != null) {
+        setState(() {
+          _active = existing;
+          _error = 'すでに「${existing!.bookTitle}」を計測中です。'
+              'こちらのタイマーを終了すると記録できます。';
+        });
+        _startTicking();
+      } else {
+        setState(() => _error = '計測を開始できませんでした。通信環境とログイン状態を確認してください。');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -84,7 +106,11 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
     try {
       await _service.finish(_active!.id);
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      if (widget.onFinished != null) {
+        widget.onFinished!();
+      } else {
+        Navigator.of(context).pop(true);
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = '読書時間を保存できませんでした。通信環境を確認して再度お試しください。');
@@ -117,7 +143,17 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('読書タイマー')),
+      appBar: AppBar(
+        title: const Text('読書タイマー'),
+        automaticallyImplyLeading: widget.onDefer == null,
+        actions: [
+          if (widget.onDefer != null)
+            TextButton(
+              onPressed: widget.onDefer,
+              child: const Text('あとで終了する'),
+            ),
+        ],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
