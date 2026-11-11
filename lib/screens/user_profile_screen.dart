@@ -34,6 +34,7 @@ class UserProfileScreen extends StatefulWidget {
   final VoidCallback onBack;
   final bool showAppBar;
   final String? profileId;
+  final bool openCalendar;
   final ValueChanged<String>? onOpenProfile;
 
   const UserProfileScreen({
@@ -41,6 +42,7 @@ class UserProfileScreen extends StatefulWidget {
     required this.onBack,
     this.showAppBar = true,
     this.profileId,
+    this.openCalendar = false,
     this.onOpenProfile,
   });
 
@@ -315,6 +317,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           (FeatureFlags.favoritesUiEnabled ? 1 : 0) +
           (FeatureFlags.wantToReadUiEnabled ? 1 : 0),
       vsync: this,
+      initialIndex: widget.openCalendar ? 2 : 0,
     );
     _loadProfileData();
   }
@@ -534,6 +537,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     }
     setState(() {
       _isSocialActionInProgress = false;
+      _calendarVersion++;
       if (returnedStatus != null && returnedStatus != optimisticStatus) {
         _relationship = relationship.copyWith(followStatus: returnedStatus);
         final correctedDelta =
@@ -1067,14 +1071,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                         children: [
                           _buildPostsTab(),
                           _buildReadBooksTab(),
-                          if (_isOwnProfile)
-                            ReadingCalendarTab(
-                              key: ValueKey(_calendarVersion),
-                              accentColor: profileHeaderColor,
-                              onResume: _resumeCalendarTimer,
-                            )
-                          else
-                            const Center(child: Text('読書カレンダーは本人のみ閲覧できます。')),
+                          ReadingCalendarTab(
+                            key: ValueKey('reading-calendar-${_profile!.id}-$_calendarVersion'),
+                            ownerId: _profile!.id,
+                            accentColor: profileHeaderColor,
+                            onResume: _isOwnProfile ? _resumeCalendarTimer : null,
+                          ),
                           if (FeatureFlags.favoritesUiEnabled)
                             _buildFavoritesTab(),
                           if (FeatureFlags.wantToReadUiEnabled)

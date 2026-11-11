@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../utils/reading_calendar_border.dart';
 
 import '../models/reading_session.dart';
+import '../models/social_models.dart';
 import '../widgets/reading_cover_art.dart';
 import '../services/reading_session_service.dart';
 import '../widgets/book_detail_dialog_frame.dart';
@@ -13,11 +14,13 @@ class ReadingCalendarTab extends StatefulWidget {
   const ReadingCalendarTab({
     super.key,
     required this.accentColor,
-    required this.onResume,
+    required this.ownerId,
+    this.onResume,
   });
 
   final Color accentColor;
-  final Future<void> Function(ReadingSession session) onResume;
+  final String ownerId;
+  final Future<void> Function(ReadingSession session)? onResume;
 
   @override
   State<ReadingCalendarTab> createState() => _ReadingCalendarTabState();
@@ -28,6 +31,8 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   List<ReadingSession> _sessions = [];
   ReadingSession? _active;
+  Map<String, ReadingReactionSummary> _reactions = {};
+  bool _canView = false;
   bool _loading = true;
   String? _error;
   int _generation = 0;
@@ -38,6 +43,14 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant ReadingCalendarTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.ownerId != widget.ownerId) {
+      _load();
+    }
+  }
+
   Future<void> _load() async {
     final generation = ++_generation;
     setState(() {
@@ -45,12 +58,22 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
       _error = null;
     });
     try {
-      final sessions = await _service.loadMonth(_month);
-      final active = await _service.activeSession();
+      final canView = await _service.canViewCalendar(widget.ownerId);
+      final sessions = canView
+          ? await _service.loadMonth(_month, profileId: widget.ownerId)
+          : <ReadingSession>[];
+      final reactions = canView
+          ? await _service.reactionSummaries(sessions)
+          : <String, ReadingReactionSummary>{};
+      final active = canView && widget.onResume != null
+          ? await _service.activeSession()
+          : null;
       if (!mounted || generation != _generation) return;
       setState(() {
+        _canView = canView;
         _sessions = sessions;
         _active = active;
+        _reactions = reactions;
         _loading = false;
       });
     } catch (_) {
@@ -100,13 +123,78 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
     );
   }
 
+  Widget _reactionButtons(
+    ReadingSession session, {
+    required StateSetter refreshDialog,
+  }) {
+    final summary =
+        _reactions[session.id] ?? const ReadingReactionSummary();
+    return Wrap(
+      spacing: 5,
+      runSpacing: 5,
+      children: [
+        for (final reaction in PostReactionType.values)
+          InkWell(
+            key: ValueKey('reading-reaction-${session.id}-${reaction.databaseValue}'),
+            borderRadius: BorderRadius.circular(18),
+            onTap: widget.onResume != null
+                ? null
+                : () async {
+                    try {
+                      await _service.toggleReaction(
+                        session.id, reaction, summary.selected,
+                      );
+                      final next = await _service.reactionSummaries([session]);
+                      if (!mounted) return;
+                      refreshDialog(() {
+                        _reactions = {..._reactions, ...next};
+                      });
+                    } catch (_) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('リアクションを保存できませんでした。')),
+                      );
+                    }
+                  },
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 42, minHeight: 34),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+              decoration: BoxDecoration(
+                color: summary.selected == reaction
+                    ? const Color(0xFFD00303).withValues(alpha: 0.12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: summary.selected == reaction
+                      ? const Color(0xFFD00303)
+                      : Colors.grey,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(reaction.symbol, style: const TextStyle(fontSize: 17)),
+                  if ((summary.counts[reaction] ?? 0) > 0) ...[
+                    const SizedBox(width: 3),
+                    Text('${summary.counts[reaction]}',
+                        style: const TextStyle(color: Colors.black, fontSize: 11)),
+                  ],
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Future<void> _showDay(DateTime day) async {
     final entries = _sessionsFor(day);
     final begin = DateTime(day.year, day.month, day.day);
     final next = DateTime(day.year, day.month, day.day + 1);
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => BookDetailDialogFrame(
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, refreshDialog) => BookDetailDialogFrame(
         child: SizedBox(
           width: math.min(MediaQuery.sizeOf(dialogContext).width - 70, 650),
           height: math.min(MediaQuery.sizeOf(dialogContext).height * 0.77, 600),
@@ -163,11 +251,19 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: Text(
-                                    '${ReadingSession.timeLabel(start)}～'
-                                    '${ReadingSession.timeLabel(end)}'
-                                    '（${ReadingSession.durationLabel(session.durationOnDay(day))}）',
-                                    style: const TextStyle(color: Colors.black),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${ReadingSession.timeLabel(start)}～'
+                                        '${ReadingSession.timeLabel(end)}'
+                                        '（${ReadingSession.durationLabel(session.durationOnDay(day))}）',
+                                        style: const TextStyle(color: Colors.black),
+                                      ),
+                                      const SizedBox(height: 7),
+                                      _reactionButtons(session,
+                                          refreshDialog: refreshDialog),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -178,6 +274,7 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );
@@ -248,7 +345,7 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
                 title: Text('計測中：${active.bookTitle}'),
                 subtitle: const Text('タップして読書タイマーに戻る'),
                 onTap: () async {
-                  await widget.onResume(active);
+                  await widget.onResume?.call(active);
                   if (mounted) _load();
                 },
               ),
@@ -282,6 +379,13 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
               onPressed: _load,
               icon: const Icon(Icons.refresh),
               label: Text(_error!),
+            )
+          else if (!_canView)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Text('読書カレンダーは承認されたフォロワーのみに公開されています。'),
+              ),
             )
           else ...[
             Row(
