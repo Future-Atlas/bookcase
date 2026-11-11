@@ -537,6 +537,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     }
     setState(() {
       _isSocialActionInProgress = false;
+      // Re-check the calendar RLS permission as soon as the follow state changes.
+      _calendarVersion++;
       if (returnedStatus != null && returnedStatus != optimisticStatus) {
         _relationship = relationship.copyWith(followStatus: returnedStatus);
         final correctedDelta =
