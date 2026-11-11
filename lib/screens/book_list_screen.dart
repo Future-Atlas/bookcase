@@ -11,8 +11,7 @@ import '../config/feature_flags.dart';
 import '../widgets/book_search_results.dart';
 import '../widgets/catalog_credit.dart';
 import '../models/profile_page_color.dart';
-import '../api/ndl_api.dart';
-import '../api/openbd_api.dart';
+import '../api/book_catalog_lookup.dart';
 import '../widgets/post_card.dart';
 import '../widgets/timeline_ad_slot.dart';
 import '../widgets/timeline_ad_policy.dart';
@@ -27,6 +26,7 @@ import '../widgets/post_composer_dialog.dart';
 import '../widgets/post_reply_dialog.dart';
 import '../widgets/favorite_replacement_dialog.dart';
 import '../widgets/book_action_label.dart';
+import '../widgets/book_detail_dialog_frame.dart';
 import '../widgets/rakuten_book_link.dart';
 import '../widgets/public_posts_link.dart';
 import '../utils/book_carousel_auto_advance.dart';
@@ -79,11 +79,10 @@ class _BookListScreenState extends State<BookListScreen> {
     final initialBookId = widget.initialBookId?.trim() ?? '';
     if (initialBookId.isEmpty || _openingBookId == initialBookId) return;
     _openingBookId = initialBookId;
-    final found = await NdlApi.fetchBookById(initialBookId);
-    final enriched = await OpenBdApi.enrich(
-      found == null ? <Book>[] : <Book>[found],
+    final book = await const BookCatalogLookup().fetchById(
+      initialBookId,
+      enrichNdl: true,
     );
-    final book = enriched.isEmpty ? null : enriched.first;
     if (!mounted) return;
     if (book != null) {
       await _showBookDetailDialog(book, openedFromDirectUrl: true);
@@ -137,7 +136,7 @@ class _BookListScreenState extends State<BookListScreen> {
   }
 
   Future<void> _openBookFromPost(Post post) async {
-    final resolvedBook = await NdlApi.fetchBookById(post.bookId);
+    final resolvedBook = await const BookCatalogLookup().fetchById(post.bookId);
     if (!mounted) return;
     final book =
         resolvedBook ??
@@ -440,12 +439,7 @@ class _BookListScreenState extends State<BookListScreen> {
               ? service.isBookWantedByCurrentUser(book.id)
               : Future<bool>.value(false);
 
-          return Dialog(
-            backgroundColor: const Color(0xFFE6E6E6),
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 24,
-            ),
+          return BookDetailDialogFrame(
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: 920,
@@ -513,7 +507,10 @@ class _BookListScreenState extends State<BookListScreen> {
                                           onPressed: isRead || isChecking
                                               ? null
                                               : () async {
-                                                  if (!mounted) return;
+                                                  if (!await _ensureAuthenticated() ||
+                                                      !mounted) {
+                                                    return;
+                                                  }
                                                   Navigator.of(
                                                     this.context,
                                                   ).pop();
@@ -862,150 +859,173 @@ class _BookListScreenState extends State<BookListScreen> {
         return Container(
           width: double.infinity,
           color: Theme.of(context).scaffoldBackgroundColor,
-          child: RefreshIndicator(
-            onRefresh: () => _controller.loadData(context),
-            color: const Color(0xFFD00303),
-            child: Listener(
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildTopHeroImage(),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: [
+              Padding(
+                key: const ValueKey('home-sticky-search'),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _buildSearchBar(),
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () => _controller.loadData(context),
+                  color: const Color(0xFFD00303),
+                  child: Listener(
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSearchBar(),
-                          if (widget.initialGenre == null &&
-                              _controller.searchQuery.isEmpty)
-                            _buildServiceIntroduction(),
-                          if (_controller.searchQuery.isNotEmpty)
-                            _buildSearchResults()
-                          else ...[
-                            if ((widget.initialGenre == null &&
-                                    (_controller.isLoadingFeatured ||
-                                        _controller
-                                            .featuredBooks
-                                            .isNotEmpty)) ||
-                                widget.initialGenre == 'featured')
-                              _buildFeaturedBooksSection(),
-                            if (widget.initialGenre == null ||
-                                widget.initialGenre == 'popular')
-                              _buildGenreSection(
-                                title: '人気作品',
-                                scrollerKey: _popularScrollerKey,
-                                bookList: _controller.popularBooks,
-                                pageNumber: _controller.popularPage,
-                                onLoadMore: _controller.loadMorePopular,
-                                onLoadPrevious: _controller.loadPreviousPopular,
-                                canLoadPrevious:
-                                    _controller.canLoadPreviousPopular,
-                                isLoadingMore: _controller.isLoadingMorePopular,
-                                hasMore: _controller.hasMorePopular,
-                                isLoadingInitial: _controller.isLoadingPopular,
-                              ),
-                            // Only place the genre ad between real book rows.
-                            if (kIsWeb &&
-                                timelineAdDisplayReady &&
-                                widget.initialGenre == null &&
-                                _controller.popularBooks.isNotEmpty &&
-                                _controller.recommendedBooks.isNotEmpty)
-                              const TimelineAdSlot(
-                                key: ValueKey('home-ad-between-popular-new'),
-                                slotIndex: 0,
-                              ),
-                            if (widget.initialGenre == null ||
-                                widget.initialGenre == 'recommended')
-                              _buildGenreSection(
-                                title: '新着',
-                                scrollerKey: _newArrivalsScrollerKey,
-                                bookList: _controller.recommendedBooks,
-                                pageNumber: _controller.recommendedPage,
-                                onLoadMore: _controller.loadMoreRecommended,
-                                onLoadPrevious:
-                                    _controller.loadPreviousRecommended,
-                                canLoadPrevious:
-                                    _controller.canLoadPreviousRecommended,
-                                isLoadingMore:
-                                    _controller.isLoadingMoreRecommended,
-                                hasMore: _controller.hasMoreRecommended,
-                                isLoadingInitial:
-                                    _controller.isLoadingRecommended,
-                                onRetry: () => unawaited(
-                                  _controller.retryRecommended(),
-                                ),
-                              ),
-                            if (kIsWeb &&
-                                timelineAdDisplayReady &&
-                                widget.initialGenre == null &&
-                                _controller.recommendedBooks.isNotEmpty &&
-                                _controller.japaneseBooks.isNotEmpty)
-                              const TimelineAdSlot(
-                                key: ValueKey('home-ad-between-new-japanese'),
-                                slotIndex: 1,
-                              ),
-                            if (widget.initialGenre == null ||
-                                widget.initialGenre == 'japanese')
-                              _buildGenreSection(
-                                title: '和書',
-                                scrollerKey: _japaneseScrollerKey,
-                                bookList: _controller.japaneseBooks,
-                                pageNumber: _controller.japanesePage,
-                                onLoadMore: _controller.loadMoreJapanese,
-                                onLoadPrevious:
-                                    _controller.loadPreviousJapanese,
-                                canLoadPrevious:
-                                    _controller.canLoadPreviousJapanese,
-                                isLoadingMore: _controller.isLoadingMoreJapanese,
-                                hasMore: _controller.hasMoreJapanese,
-                                isLoadingInitial: _controller.isLoadingJapanese,
-                                onRetry: () => unawaited(
-                                  _controller.retryJapanese(),
-                                ),
-                              ),
-                            if (widget.initialGenre == null ||
-                                widget.initialGenre == 'western')
-                              _buildGenreSection(
-                                title: '洋書',
-                                scrollerKey: _westernScrollerKey,
-                                bookList: _controller.westernBooks,
-                                pageNumber: _controller.westernPage,
-                                onLoadMore: _controller.loadMoreWestern,
-                                onLoadPrevious: _controller.loadPreviousWestern,
-                                canLoadPrevious:
-                                    _controller.canLoadPreviousWestern,
-                                isLoadingMore: _controller.isLoadingMoreWestern,
-                                hasMore: _controller.hasMoreWestern,
-                                isLoadingInitial: _controller.isLoadingWestern,
-                                onRetry: () => unawaited(
-                                  _controller.retryWestern(),
-                                ),
-                              ),
-                            if (widget.initialGenre == null) ...[
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: PublicPostsLink(
-                                  sectionHeading: true,
-                                  foregroundColor: ProfilePageColors.colorFor(
-                                    context
-                                        .watch<SupabaseService>()
-                                        .activePageColorKey,
-                                  ),
-                                ),
-                              ),
-                              _buildTimeline(),
-                            ],
-                          ],
-                          _buildFooter(),
+                          _buildTopHeroImage(),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (widget.initialGenre == null &&
+                                    _controller.searchQuery.isEmpty)
+                                  _buildServiceIntroduction(),
+                                if (_controller.searchQuery.isNotEmpty)
+                                  _buildSearchResults()
+                                else ...[
+                                  if ((widget.initialGenre == null &&
+                                          (_controller.isLoadingFeatured ||
+                                              _controller
+                                                  .featuredBooks
+                                                  .isNotEmpty)) ||
+                                      widget.initialGenre == 'featured')
+                                    _buildFeaturedBooksSection(),
+                                  if (widget.initialGenre == null ||
+                                      widget.initialGenre == 'popular')
+                                    _buildGenreSection(
+                                      title: '人気作品',
+                                      scrollerKey: _popularScrollerKey,
+                                      bookList: _controller.popularBooks,
+                                      pageNumber: _controller.popularPage,
+                                      onLoadMore: _controller.loadMorePopular,
+                                      onLoadPrevious:
+                                          _controller.loadPreviousPopular,
+                                      canLoadPrevious:
+                                          _controller.canLoadPreviousPopular,
+                                      isLoadingMore:
+                                          _controller.isLoadingMorePopular,
+                                      hasMore: _controller.hasMorePopular,
+                                      isLoadingInitial:
+                                          _controller.isLoadingPopular,
+                                    ),
+                                  // Only place the genre ad between real book rows.
+                                  if (kIsWeb &&
+                                      timelineAdDisplayReady &&
+                                      widget.initialGenre == null &&
+                                      _controller.popularBooks.isNotEmpty &&
+                                      _controller.recommendedBooks.isNotEmpty)
+                                    const TimelineAdSlot(
+                                      key: ValueKey(
+                                        'home-ad-between-popular-new',
+                                      ),
+                                      slotIndex: 0,
+                                    ),
+                                  if (widget.initialGenre == null ||
+                                      widget.initialGenre == 'recommended')
+                                    _buildGenreSection(
+                                      title: '新着',
+                                      scrollerKey: _newArrivalsScrollerKey,
+                                      bookList: _controller.recommendedBooks,
+                                      pageNumber: _controller.recommendedPage,
+                                      onLoadMore:
+                                          _controller.loadMoreRecommended,
+                                      onLoadPrevious:
+                                          _controller.loadPreviousRecommended,
+                                      canLoadPrevious: _controller
+                                          .canLoadPreviousRecommended,
+                                      isLoadingMore:
+                                          _controller.isLoadingMoreRecommended,
+                                      hasMore: _controller.hasMoreRecommended,
+                                      isLoadingInitial:
+                                          _controller.isLoadingRecommended,
+                                      onRetry: () => unawaited(
+                                        _controller.retryRecommended(),
+                                      ),
+                                    ),
+                                  if (kIsWeb &&
+                                      timelineAdDisplayReady &&
+                                      widget.initialGenre == null &&
+                                      _controller.recommendedBooks.isNotEmpty &&
+                                      _controller.japaneseBooks.isNotEmpty)
+                                    const TimelineAdSlot(
+                                      key: ValueKey(
+                                        'home-ad-between-new-japanese',
+                                      ),
+                                      slotIndex: 1,
+                                    ),
+                                  if (widget.initialGenre == null ||
+                                      widget.initialGenre == 'japanese')
+                                    _buildGenreSection(
+                                      title: '和書',
+                                      scrollerKey: _japaneseScrollerKey,
+                                      bookList: _controller.japaneseBooks,
+                                      pageNumber: _controller.japanesePage,
+                                      onLoadMore: _controller.loadMoreJapanese,
+                                      onLoadPrevious:
+                                          _controller.loadPreviousJapanese,
+                                      canLoadPrevious:
+                                          _controller.canLoadPreviousJapanese,
+                                      isLoadingMore:
+                                          _controller.isLoadingMoreJapanese,
+                                      hasMore: _controller.hasMoreJapanese,
+                                      isLoadingInitial:
+                                          _controller.isLoadingJapanese,
+                                      onRetry: () => unawaited(
+                                        _controller.retryJapanese(),
+                                      ),
+                                    ),
+                                  if (widget.initialGenre == null ||
+                                      widget.initialGenre == 'western')
+                                    _buildGenreSection(
+                                      title: '洋書',
+                                      scrollerKey: _westernScrollerKey,
+                                      bookList: _controller.westernBooks,
+                                      pageNumber: _controller.westernPage,
+                                      onLoadMore: _controller.loadMoreWestern,
+                                      onLoadPrevious:
+                                          _controller.loadPreviousWestern,
+                                      canLoadPrevious:
+                                          _controller.canLoadPreviousWestern,
+                                      isLoadingMore:
+                                          _controller.isLoadingMoreWestern,
+                                      hasMore: _controller.hasMoreWestern,
+                                      isLoadingInitial:
+                                          _controller.isLoadingWestern,
+                                      onRetry: () =>
+                                          unawaited(_controller.retryWestern()),
+                                    ),
+                                  if (widget.initialGenre == null) ...[
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: PublicPostsLink(
+                                        sectionHeading: true,
+                                        foregroundColor:
+                                            ProfilePageColors.colorFor(
+                                              context
+                                                  .watch<SupabaseService>()
+                                                  .activePageColorKey,
+                                            ),
+                                      ),
+                                    ),
+                                    _buildTimeline(),
+                                  ],
+                                ],
+                                _buildFooter(),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         );
       },
@@ -1054,7 +1074,7 @@ class _BookListScreenState extends State<BookListScreen> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       height: 96,
-      margin: const EdgeInsets.only(bottom: 24),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
@@ -2176,6 +2196,8 @@ class _PagedBookScroller extends StatefulWidget {
 class _PagedBookScrollerState extends State<_PagedBookScroller> {
   final ScrollController _scrollController = ScrollController();
   late final BookCarouselAutoAdvance _autoAdvance;
+  final Object _hoverInteraction = Object();
+  final Object _pointerInteraction = Object();
   bool _pageChangePending = false;
   bool _landAtEndAfterChange = false;
   bool _isRepositioningAfterPageChange = false;
@@ -2197,6 +2219,17 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
     if (_isAutoScrolling && _scrollController.hasClients) {
       _scrollController.jumpTo(_scrollController.offset);
     }
+  }
+
+  void _beginInteractionHold(Object source) {
+    _autoAdvance.beginInteractionHold(source);
+    if (_isAutoScrolling && _scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.offset);
+    }
+  }
+
+  void _endInteractionHold(Object source) {
+    _autoAdvance.endInteractionHold(source);
   }
 
   void pauseForBookDetail() => _autoAdvance.pauseForBookDetail();
@@ -2444,9 +2477,22 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
               Positioned.fill(
                 child: AbsorbPointer(
                   absorbing: widget.isLoadingMore && !_appending,
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: _handleScrollNotification,
-                    child: list,
+                  child: MouseRegion(
+                    onEnter: (_) => _beginInteractionHold(_hoverInteraction),
+                    onExit: (_) => _endInteractionHold(_hoverInteraction),
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (_) =>
+                          _beginInteractionHold(_pointerInteraction),
+                      onPointerUp: (_) =>
+                          _endInteractionHold(_pointerInteraction),
+                      onPointerCancel: (_) =>
+                          _endInteractionHold(_pointerInteraction),
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: _handleScrollNotification,
+                        child: list,
+                      ),
+                    ),
                   ),
                 ),
               ),

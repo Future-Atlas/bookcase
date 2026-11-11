@@ -17,7 +17,11 @@ function makeCoordinator() {
   });
 }
 
-function request({ title = "same", appId = "test-app", accessKey = "test-key", path = "BooksBook/Search" } = {}) {
+function request({
+  title = "same", appId = "test-app", accessKey = "test-key",
+  path = "BooksBook/Search",
+  origin = "https://www.sharemarium.com/",
+} = {}) {
   const url = new URL(`https://openapi.rakuten.co.jp/services/api/${path}/20170404`);
   url.searchParams.set("applicationId", appId);
   url.searchParams.set("accessKey", accessKey);
@@ -25,7 +29,7 @@ function request({ title = "same", appId = "test-app", accessKey = "test-key", p
   return new Request("https://rakuten-quota.internal/request", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url: url.toString(), origin: "https://www.sharemarium.com/" }),
+    body: JSON.stringify({ url: url.toString(), origin }),
   });
 }
 
@@ -101,6 +105,28 @@ test("upstream 429 produces a persisted backoff without caching the failure", as
     assert.equal(hits, 1);
   } finally {
     global.fetch = oldFetch;
+  }
+});
+
+test("staging Rakuten origin identifies the deployed Worker, not an unrelated domain", async () => {
+  const config = JSON.parse(readFileSync("wrangler.jsonc", "utf8"));
+  const stage = "https://sharemarium-staging.sharemarium.workers.dev/";
+  assert.equal(config.env.staging.vars.RAKUTEN_REFERER, stage);
+  assert.equal(config.env.production.vars.RAKUTEN_REFERER, "https://www.sharemarium.com/");
+  const coordinator = makeCoordinator();
+  const previous = global.fetch;
+  let headers;
+  global.fetch = async (_, options) => {
+    headers = options.headers;
+    return Response.json({ Items: [] });
+  };
+  try {
+    const response = await coordinator.fetch(request({ origin: stage }));
+    assert.equal(response.status, 200);
+    assert.equal(headers.Origin, new URL(stage).origin);
+    assert.equal(headers.Referer, stage);
+  } finally {
+    global.fetch = previous;
   }
 });
 

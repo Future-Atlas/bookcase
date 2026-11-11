@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../services/supabase_service.dart';
@@ -538,18 +539,20 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
           const SizedBox(height: 22),
           TextFormField(
             controller: _familyNameController,
+            enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 50,
-            decoration: _decoration('姓（Family name）'),
+            decoration: _editableDecoration('姓（Family name）', _familyNameController),
             validator: (value) =>
                 (value?.trim().isEmpty ?? true) ? '姓を入力してください。' : null,
           ),
           const SizedBox(height: 10),
           TextFormField(
             controller: _givenNameController,
+            enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 50,
-            decoration: _decoration('名（Given name）'),
+            decoration: _editableDecoration('名（Given name）', _givenNameController),
             validator: (value) =>
                 (value?.trim().isEmpty ?? true) ? '名を入力してください。' : null,
           ),
@@ -601,9 +604,10 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
           ],
           TextFormField(
             controller: _phoneController,
+            enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             keyboardType: TextInputType.phone,
-            decoration: _decoration('電話番号'),
+            decoration: _editableDecoration('電話番号', _phoneController),
             validator: (value) {
               final normalized = (value ?? '').replaceAll(
                 RegExp(r'[^0-9+]'),
@@ -674,15 +678,17 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
           const SizedBox(height: 22),
           TextFormField(
             controller: _usernameController,
+            enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 30,
-            decoration: _decoration('ユーザー名'),
+            decoration: _editableDecoration('ユーザー名', _usernameController),
             validator: (value) =>
                 (value?.trim().isEmpty ?? true) ? 'ユーザー名を入力してください。' : null,
           ),
           const SizedBox(height: 10),
           TextFormField(
             controller: _userIdController,
+            enableInteractiveSelection: true,
             style: const TextStyle(color: Colors.white),
             maxLength: 20,
             keyboardType: TextInputType.visiblePassword,
@@ -693,9 +699,7 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
             onChanged: (_) {
               if (_userIdError != null) setState(() => _userIdError = null);
             },
-            decoration: _decoration(
-              'ユーザーID',
-            ).copyWith(prefixText: '@', errorText: _userIdError),
+            decoration: _editableDecoration('ユーザーID', _userIdController).copyWith(prefixText: '@', errorText: _userIdError),
             validator: validatePublicUserId,
           ),
           const SizedBox(height: 24),
@@ -732,6 +736,26 @@ class _ProfileOnboardingScreenState extends State<ProfileOnboardingScreen> {
     );
   }
 
+  InputDecoration _editableDecoration(String label, TextEditingController controller) {
+    return _decoration(label).copyWith(
+      suffixIcon: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: '$labelをコピー',
+            onPressed: () => Clipboard.setData(ClipboardData(text: controller.text)),
+            icon: const Icon(Icons.copy_outlined, color: Colors.white70),
+          ),
+          IconButton(
+            tooltip: '$labelに貼り付け',
+            onPressed: () => _pasteRegistrationText(controller),
+            icon: const Icon(Icons.content_paste_outlined, color: Colors.white70),
+          ),
+        ],
+      ),
+    );
+  }
+
   InputDecoration _decoration(String label) => InputDecoration(
     labelText: label,
     labelStyle: const TextStyle(color: Colors.white70),
@@ -762,6 +786,21 @@ String? validatePrivacyPassword(String? value) {
   return null;
 }
 
+Future<void> _pasteRegistrationText(TextEditingController controller) async {
+  final clipboard = await Clipboard.getData('text/plain');
+  final pasted = clipboard?.text;
+  if (pasted == null) return;
+  final old = controller.value;
+  final selection = old.selection;
+  final start = selection.isValid ? selection.start : old.text.length;
+  final end = selection.isValid ? selection.end : old.text.length;
+  final next = old.text.replaceRange(start, end, pasted);
+  controller.value = TextEditingValue(
+    text: next,
+    selection: TextSelection.collapsed(offset: start + pasted.length),
+  );
+}
+
 class _PasswordField extends StatelessWidget {
   const _PasswordField({
     required this.controller,
@@ -782,6 +821,7 @@ class _PasswordField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
+      enableInteractiveSelection: true,
       enableSuggestions: false,
       autocorrect: false,
       style: const TextStyle(color: Colors.white),
@@ -797,15 +837,40 @@ class _PasswordField extends StatelessWidget {
         errorBorder: const OutlineInputBorder(
           borderSide: BorderSide(color: Colors.redAccent),
         ),
-        suffixIcon: IconButton(
-          tooltip: obscureText ? 'パスワードを表示' : 'パスワードを隠す',
-          onPressed: onToggleVisibility,
-          icon: Icon(
-            obscureText
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined,
-            color: Colors.white70,
-          ),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'パスワードを貼り付け',
+              onPressed: () => _pasteRegistrationText(controller),
+              icon: const Icon(Icons.content_paste_outlined, color: Colors.white70),
+            ),
+            IconButton(
+              tooltip: 'パスワードをコピー',
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: controller.text));
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'パスワードをコピーしました。共有端末ではクリップボードの取り扱いにご注意ください。',
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.copy_outlined, color: Colors.white70),
+            ),
+            IconButton(
+              tooltip: obscureText ? 'パスワードを表示' : 'パスワードを隠す',
+              onPressed: onToggleVisibility,
+              icon: Icon(
+                obscureText
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                color: Colors.white70,
+              ),
+            ),
+          ],
         ),
       ),
       validator: validator,

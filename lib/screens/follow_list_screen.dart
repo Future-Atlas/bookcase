@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/social_models.dart';
 import '../models/user_profile.dart';
 import '../services/supabase_service.dart';
+import '../widgets/profile_color_border.dart';
 
 class FollowListScreen extends StatefulWidget {
   const FollowListScreen({
@@ -175,32 +176,35 @@ class _FollowListScreenState extends State<FollowListScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView.separated(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 itemCount: _profiles.length,
-                separatorBuilder: (context, index) => const Divider(height: 1),
+                separatorBuilder: (context, index) => const SizedBox(height: 6),
                 itemBuilder: (context, index) {
                   final profile = _profiles[index];
-                  return ListTile(
-                    onTap: () => widget.onProfileTap(profile),
-                    leading: CircleAvatar(
-                      backgroundImage: profile.avatarUrl.isEmpty
-                          ? null
-                          : AvatarUrlPolicy.image(profile.avatarUrl),
-                      child: profile.avatarUrl.isEmpty
-                          ? const Icon(Icons.person)
-                          : null,
+                  return ProfileColorBorder(
+                    pageColorKey: profile.pageColorKey,
+                    child: ListTile(
+                      onTap: () => widget.onProfileTap(profile),
+                      leading: CircleAvatar(
+                        backgroundImage: profile.avatarUrl.isEmpty
+                            ? null
+                            : AvatarUrlPolicy.image(profile.avatarUrl),
+                        child: profile.avatarUrl.isEmpty
+                            ? const Icon(Icons.person)
+                            : null,
+                      ),
+                      title: Text(
+                        profile.username,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        profile.userId.isEmpty ? '' : '@${profile.userId}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: _buildFollowButton(profile),
                     ),
-                    title: Text(
-                      profile.username,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      profile.userId.isEmpty ? '' : '@${profile.userId}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: _buildFollowButton(profile),
                   );
                 },
               ),
