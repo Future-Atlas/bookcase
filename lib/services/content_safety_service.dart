@@ -65,7 +65,8 @@ class ContentSafetyService {
   }
 
   static bool isAdultBook(Book book, {Set<String>? restrictedGenreIds}) {
-    return hasRestrictedRakutenGenre(
+    return book.adultContentFlag ||
+        hasRestrictedRakutenGenre(
           book,
           restrictedGenreIds: restrictedGenreIds,
         ) ||
