@@ -87,6 +87,7 @@ class _PostCardState extends State<PostCard> {
           publisher: '',
           pubDate: '',
           coverUrl: post.bookCoverUrl,
+          coverSource: post.bookCoverSource,
         ),
         width: width,
         height: height,

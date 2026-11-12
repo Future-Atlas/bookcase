@@ -534,6 +534,7 @@ class _BookPostsPanelState extends State<BookPostsPanel> {
         pubDate: '',
         isbn: post.bookId,
         coverUrl: post.bookCoverUrl,
+        coverSource: post.bookCoverSource,
       ),
       sourcePostId: post.id,
     );
