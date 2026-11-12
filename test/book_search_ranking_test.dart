@@ -68,7 +68,7 @@ void main() {
     expect(batch.hasMore, isTrue);
   });
 
-  test('楽天検索は4/3/3件に割り当て、通常は最大3回のリクエスト', () async {
+  test('楽天検索は表示配分と無関係に各条件10件まで取得する', () async {
     final calls = <String>[];
     final found = await RakutenApi.searchByKeyword(
       keyword: '芥川',
@@ -85,11 +85,11 @@ void main() {
       },
     );
     expect(calls, [
-      'author:芥川:4',
-      'title:芥川:3',
-      'publisherName:芥川:3',
+      'author:芥川:10',
+      'title:芥川:10',
+      'publisherName:芥川:10',
     ]);
-    expect(found.length, 10);
+    expect(found.length, 30);
   });
 
   test('楽天検索は途中のフィールドが障害でも取得済みの本を破棄しない', () async {
