@@ -28,3 +28,18 @@ test('an already-running timer can be stopped instead of getting stuck on start 
   assert.match(timer, /widget\.onDefer/);
   assert.match(timer, /_service\.finish\(_active!\.id\)/);
 });
+
+test('calendar book selection always resumes an existing timer first', () => {
+  const profile = read('lib/screens/user_profile_screen.dart');
+  assert.match(
+    profile,
+    /if \(await _resumeActiveCalendarTimerIfNeeded\(\)\) return;[\s\S]*ProfileBookSearchScreen\(calendarSelection: true\)/,
+  );
+  assert.match(
+    profile,
+    /if \(book == null \|\| !mounted\) return;[\s\S]*if \(await _resumeActiveCalendarTimerIfNeeded\(\)\) return;/,
+  );
+  assert.match(profile, /active = await _readingSessionService\.activeSession\(\)/);
+  assert.match(profile, /await _resumeCalendarTimer\(active\)/);
+  assert.match(profile, /Fail closed/);
+});

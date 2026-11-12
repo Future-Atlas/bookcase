@@ -13,6 +13,7 @@ import '../models/social_models.dart';
 import '../models/profile_page_color.dart';
 import '../utils/mobile_bookshelf_geometry.dart';
 import '../services/content_safety_service.dart';
+import '../services/reading_session_service.dart';
 import '../widgets/post_card.dart';
 import '../widgets/book_card.dart';
 import '../widgets/post_composer_dialog.dart';
@@ -295,6 +296,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   ProfileRelationship? _relationship;
   bool _isSocialActionInProgress = false;
   final Set<String> _pendingReactionPostIds = <String>{};
+  final ReadingSessionService _readingSessionService = ReadingSessionService();
   int _calendarVersion = 0;
 
   bool get _isOwnProfile => _relationship?.isOwnProfile ?? false;
@@ -933,12 +935,16 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   Future<void> _openCalendarBookSearch() async {
     if (!_isOwnProfile) return;
+    if (await _resumeActiveCalendarTimerIfNeeded()) return;
     final book = await Navigator.of(context).push<Book>(
       MaterialPageRoute(
         builder: (_) => const ProfileBookSearchScreen(calendarSelection: true),
       ),
     );
     if (book == null || !mounted) return;
+    // Recheck after returning from the picker. A timer may have been started
+    // in another browser tab while this screen was open.
+    if (await _resumeActiveCalendarTimerIfNeeded()) return;
     final recorded = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => ReadingTimerScreen(
@@ -950,6 +956,28 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     if (recorded == true && mounted) {
       setState(() => _calendarVersion++);
     }
+  }
+
+  Future<bool> _resumeActiveCalendarTimerIfNeeded() async {
+    ReadingSession? active;
+    try {
+      active = await _readingSessionService.activeSession();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('起動中の読書タイマーを確認できませんでした。通信環境を確認して再度お試しください。'),
+          ),
+        );
+      }
+      // Fail closed: never allow a second book to be selected while the
+      // server-side timer state is unknown.
+      return true;
+    }
+    if (active == null) return false;
+    if (!mounted) return true;
+    await _resumeCalendarTimer(active);
+    return true;
   }
 
   Future<void> _resumeCalendarTimer(ReadingSession session) async {
