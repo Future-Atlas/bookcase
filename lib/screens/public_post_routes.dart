@@ -73,14 +73,6 @@ class PublicPostsScreen extends StatelessWidget {
       ),
       appBar: AppBar(
         title: const Text('タイムライン'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(
-              context,
-            ).pushNamedAndRemoveUntil('/', (route) => false),
-            child: const Text('ホーム'),
-          ),
-        ],
       ),
       body: const BookListScreen(timelineOnly: true),
     );
