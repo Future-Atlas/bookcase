@@ -279,10 +279,9 @@ async function routeRequest(request, env, context) {
   if (path === "/api/openbd") return invoke(openbd, request);
   if (path === "/api/book-covers") return invoke(bookCovers, request);
   if (path === "/api/rakuten") {
-    // Production and default environments retain the retired 410 route.
-    // Staging alone uses the server-owned credentials and existing global
-    // per-app quota Durable Object; never call Rakuten directly per card.
-    if (env.APP_ENV !== "staging") {
+    // Approved Cloudflare environments use server-owned credentials and the
+    // global per-app quota Durable Object; never call Rakuten per card.
+    if (!new Set(["staging", "production"]).has(env.APP_ENV)) {
       return new Response(JSON.stringify({ error: "catalog_migrated" }), {
         status: 410,
         headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },

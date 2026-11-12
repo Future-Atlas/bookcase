@@ -1,5 +1,5 @@
-// Staging-only Rakuten Books metadata proxy. The Worker routes here only when
-// APP_ENV=staging. Never expose applicationId/accessKey or accept an upstream URL.
+// Rakuten Books metadata proxy for Cloudflare production and staging. Never
+// expose applicationId/accessKey or accept a client-selected upstream URL.
 // Upstream traffic is serialized by the existing Cloudflare Durable Object.
 const ENDPOINTS = Object.freeze({
   book: "https://openapi.rakuten.co.jp/services/api/BooksBook/Search/20170404",
@@ -26,8 +26,8 @@ function createHandler({ request, env = {} } = {}) {
       res.setHeader("Allow", "GET");
       return res.status(405).json({ error: "method_not_allowed" });
     }
-    // Protect against unexpected direct routing and production promotion.
-    if (env.APP_ENV !== "staging") {
+    // Protect against unexpected direct routing outside approved environments.
+    if (!new Set(["staging", "production"]).has(env.APP_ENV)) {
       return res.status(410).json({ error: "catalog_migrated" });
     }
     if (!env.RAKUTEN_APP_ID || !env.RAKUTEN_ACCESS_KEY ||
@@ -97,7 +97,9 @@ function createHandler({ request, env = {} } = {}) {
     }
     try {
       const upstream = await request(ENDPOINTS[endpoint] + "?" + query, {
-        origin: env.RAKUTEN_REFERER || "https://sharemarium-staging.sharemarium.workers.dev/",
+        origin: env.RAKUTEN_REFERER || (env.APP_ENV === "production"
+          ? "https://www.sharemarium.com/"
+          : "https://sharemarium-staging.sharemarium.workers.dev/"),
       });
       if (!upstream.ok) {
         // The coordinator and Rakuten provider have distinct failure modes.

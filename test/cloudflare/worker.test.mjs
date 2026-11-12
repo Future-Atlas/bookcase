@@ -204,7 +204,7 @@ test("crawler legal requests use server-rendered HTML", async () => {
   assert.equal(requests.length, 0);
 });
 
-test("staging-only Rakuten proxy uses the existing quota object, not Flutter assets", async () => {
+test("staging Rakuten proxy uses the existing quota object, not Flutter assets", async () => {
   const { env, requests } = environment();
   const called = [];
   env.RAKUTEN_APP_ID = "staging-id";
@@ -240,14 +240,37 @@ test("staging-only Rakuten proxy uses the existing quota object, not Flutter ass
   assert.equal(url.searchParams.get("accessKey"), "staging-access-key");
 });
 
-test("production keeps the removed Rakuten endpoint disabled", async () => {
+test("production Rakuten proxy uses server credentials and the global quota object", async () => {
   const { env, requests } = environment({ appEnv: "production" });
+  const called = [];
+  env.RAKUTEN_APP_ID = "production-id";
+  env.RAKUTEN_ACCESS_KEY = "production-access-key";
+  env.RAKUTEN_QUOTA = {
+    idFromName(name) {
+      assert.equal(name, "production-id");
+      return "global-app-quota";
+    },
+    get(id) {
+      assert.equal(id, "global-app-quota");
+      return {
+        async fetch(_url, options) {
+          const data = JSON.parse(options.body);
+          called.push(data);
+          return Response.json({ Items: [{ Item: { title: "Book" } }] });
+        },
+      };
+    },
+  };
   const response = await worker.fetch(
     new Request("https://www.sharemarium.com/api/rakuten?booksGenreId=001"),
     env,
   );
-  assert.equal(response.status, 410);
-  assert.equal((await response.json()).error, "catalog_migrated");
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).Items.length, 1);
+  assert.equal(called.length, 1);
+  assert.equal(called[0].origin, "https://www.sharemarium.com/");
+  const upstream = new URL(called[0].url);
+  assert.equal(upstream.searchParams.get("accessKey"), "production-access-key");
   assert.equal(requests.length, 0);
 });
 
@@ -296,6 +319,7 @@ test("Production deployment is main-only, manual, and checks required secrets", 
   assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
   assert.match(workflow, /inputs\.confirmation == 'DEPLOY'/);
   assert.match(workflow, /Fail closed when required production secrets are missing/);
+  assert.match(workflow, /--dart-define=RAKUTEN_CATALOG=true/);
   for (const key of ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "SUPABASE_URL", "RAKUTEN_ACCESS_KEY"]) {
     assert.ok(workflow.includes(`secrets.${key}`), `production must validate ${key}`);
   }

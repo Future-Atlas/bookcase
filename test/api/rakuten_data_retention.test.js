@@ -53,7 +53,7 @@ test("featured books persist editorial identity but not third-party description 
   assert.match(controller, /_hydrateFeaturedBooks/);
   assert.match(controller, /BookCatalogLookup\(\)\.fetchById\(\s*normalizedId/);
   const lookup = readFileSync("lib/api/book_catalog_lookup.dart", "utf8");
-  assert.match(lookup, /STAGING_RAKUTEN_CATALOG/);
+  assert.match(lookup, /RAKUTEN_CATALOG/);
   assert.match(lookup, /RakutenApi\.fetchBookById/);
   assert.match(lookup, /NdlApi\.fetchBookById/);
   assert.match(lookup, /OpenBdApi\.enrich/);
