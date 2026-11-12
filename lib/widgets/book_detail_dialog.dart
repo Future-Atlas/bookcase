@@ -9,6 +9,7 @@ import '../models/social_models.dart';
 import '../screens/post_engagement_users_screen.dart';
 import '../services/supabase_service.dart';
 import 'book_action_label.dart';
+import 'book_cover_image.dart';
 import 'favorite_replacement_dialog.dart';
 import 'post_card.dart';
 import 'post_reply_dialog.dart';
@@ -135,39 +136,9 @@ class _BookDetailDialogState extends State<BookDetailDialog> {
     }
   }
 
-  Widget _missingCover() {
-    return Container(
-      color: Colors.grey[300],
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.menu_book, size: 28, color: Colors.black54),
-          const SizedBox(height: 8),
-          Text(
-            widget.book.title,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            widget.book.author,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final book = widget.book;
-    final hasCover = book.coverUrl.trim().isNotEmpty;
     return Dialog(
       backgroundColor: const Color(0xFFE6E6E6),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -190,16 +161,10 @@ class _BookDetailDialogState extends State<BookDetailDialog> {
                       width: isNarrow ? double.infinity : 200,
                       height: isNarrow ? 240 : 300,
                       color: Colors.grey[400],
-                      child: hasCover
-                          ? Image.network(
-                              book.coverUrl,
-                              fit: BoxFit.cover,
-                              alignment: isNarrow
-                                  ? Alignment.topCenter
-                                  : Alignment.center,
-                              errorBuilder: (_, _, _) => _missingCover(),
-                            )
-                          : _missingCover(),
+                      // Use the same provenance-aware HTML image path as the
+                      // catalog cards. A plain Image.network request is
+                      // blocked by CORS for Rakuten covers on Flutter Web.
+                      child: BookCoverImage(book: book),
                     ),
                   );
 
