@@ -14,7 +14,7 @@ Book sample(String id, {String coverUrl = ''}) => Book(
 );
 
 void main() {
-  test('staging uses only Rakuten for book detail and strips retailer art', () async {
+  test('Rakuten detail strips retailer art and uses openBD enrichment', () async {
     final calls = <String>[];
     final lookup = BookCatalogLookup(
       useRakuten: true,
@@ -23,11 +23,15 @@ void main() {
         return sample(id, coverUrl: 'https://thumbnail.image.rakuten.co.jp/x.jpg');
       },
       ndlFetcher: (_) async => throw StateError('NDL must not run'),
-      openBdEnricher: (_) async => throw StateError('NDL enrichment must not run'),
+      openBdEnricher: (books) async => books.map((book) => book.copyWith(
+        coverUrl: 'https://cover.openbd.jp/${book.isbn}.jpg',
+        coverSource: 'openbd',
+      )).toList(),
     );
     final book = await lookup.fetchById('9784000000001', enrichNdl: true);
     expect(book?.title, 'Book 9784000000001');
-    expect(book?.coverUrl, isEmpty);
+    expect(book?.coverUrl, 'https://cover.openbd.jp/9784000000001.jpg');
+    expect(book?.coverSource, 'openbd');
     expect(calls, ['rakuten:9784000000001']);
   });
 
