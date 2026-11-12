@@ -54,9 +54,10 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
 
   void _scheduleSearch() {
     _debounce?.cancel();
+    // Invalidate any outstanding page before the next debounce fires.
+    _searchGeneration++;
     final query = _searchController.text.trim();
     if (query.isEmpty) {
-      _searchGeneration++;
       setState(() {
         _results = [];
         _isSearching = false;
