@@ -55,7 +55,7 @@ select test_subscription_auth('authenticated', '72000000-0000-4000-8000-00000000
 select is(public.current_user_subscription_plan(), 'free', 'account without entitlement is Free');
 select is(public.current_user_favorite_limit(), 3, 'Free favorite limit is 3');
 select is(public.current_user_can_reply(), false, 'Free cannot create replies');
-select is(public.current_user_can_use_want_to_read(), false, 'Free cannot use want-to-read shelf');
+select is(public.current_user_can_use_want_to_read(), true, 'Free members can use want-to-read shelf');
 select is(public.current_user_can_use_all_page_colors(), false, 'Free has only basic page colors');
 select is(public.current_user_has_ad_free_access(), false, 'Free is not ad-free');
 
@@ -73,7 +73,7 @@ select test_subscription_auth('authenticated', '72000000-0000-4000-8000-00000000
 select is(public.current_user_subscription_plan(), 'plus', 'Plus resolves as Plus');
 select is(public.current_user_favorite_limit(), 12, 'Plus favorite limit is 12');
 select is(public.current_user_can_reply(), true, 'Plus may create a limited reply');
-select is(public.current_user_can_use_want_to_read(), false, 'Plus cannot use Premium want-to-read shelf');
+select is(public.current_user_can_use_want_to_read(), true, 'Plus members can use want-to-read shelf');
 select is(public.current_user_can_use_all_page_colors(), false, 'Plus cannot use Premium page colors');
 select is(public.current_user_has_ad_free_access(), true, 'Plus is ad-free');
 
