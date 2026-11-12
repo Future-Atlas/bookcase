@@ -84,7 +84,7 @@ void main(){
     ) async {
       received++;
       // A legitimate NDL window can be full but contain no displayable ISBN.
-      if (start == 1) {
+      if (start <= 21) {
         return NdlSearchBatch(
           books: [], rawCount: count, hasMore: true,
         );
