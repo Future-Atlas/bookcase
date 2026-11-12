@@ -33,6 +33,25 @@ function request({
   });
 }
 
+test("404 misses are briefly cached without caching quota denials", async () => {
+  const coordinator = makeCoordinator();
+  const previous = global.fetch;
+  let requests = 0;
+  global.fetch = async () => {
+    requests++;
+    return new Response('{"error":"not_found"}', { status: 404 });
+  };
+  try {
+    const first = await coordinator.fetch(request({ title: "missing-book" }));
+    const second = await coordinator.fetch(request({ title: "missing-book" }));
+    assert.equal(first.status, 404);
+    assert.equal(second.status, 404);
+    assert.equal(requests, 1);
+  } finally {
+    global.fetch = previous;
+  }
+});
+
 test("coordinator validates credential ownership and blocks untrusted endpoints", async () => {
   const coordinator = makeCoordinator();
   assert.equal((await coordinator.fetch(request({ appId: "another-app" }))).status, 403);

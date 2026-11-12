@@ -228,6 +228,10 @@ class RakutenApi {
 
     try {
       final response = await _requestRakuten(endpoint, queryParameters);
+      // The Rakuten catalog uses 404 for zero matching books. The proxy
+      // normalizes these to 200/Items:[], but accept 404 here for older
+      // deployments and avoid triggering the shared error cooldown.
+      if (response?.statusCode == 404) return [];
       if (response == null || response.statusCode != 200) {
         debugPrint('Rakuten request failed: ${response?.statusCode}');
         if (throwOnSearchFailure) {
@@ -337,11 +341,20 @@ class RakutenApi {
     return null;
   }
 
+  /// Search at most five distinct field/keyword combinations. First respect
+  /// the 4/3/3 title/author/publisher field budget (priority order is supplied
+  /// by BookRepository); query alternate spellings only when still short.
+  ///
+  /// A no-match field or one failing upstream must never erase books obtained
+  /// from other fields. If all attempts fail, rethrow so NDL can take over.
   static Future<List<Book>> searchByKeyword({
     required String keyword,
     int page = 1,
-    int count = 20,
+    int count = 10,
     List<String>? searchFields,
+    Future<List<Book>> Function(
+      String field, String variant, int page, int count
+    )? fieldSearch,
   }) async {
     const allowedFields = {'title', 'author', 'publisherName'};
     final fields = (searchFields ?? const <String>[])
@@ -351,25 +364,63 @@ class RakutenApi {
     if (fields.isEmpty) {
       fields.addAll(const ['title', 'author', 'publisherName']);
     }
-    final merged = <String, Book>{};
-    final keywordVariants = buildSearchKeywordVariants(keyword);
-
-    for (final field in fields) {
-      for (final keywordVariant in keywordVariants) {
-        final books = await searchBySelectedGenre(
-          selectedGenre: keywordVariant,
-          page: page,
-          count: count,
-          keywordSearch: true,
-          searchField: field,
-          sort: 'standard',
-          throwOnSearchFailure: true,
-        );
+    final variants = buildSearchKeywordVariants(keyword);
+    if (variants.isEmpty) return const <Book>[];
+    final result = <String, Book>{};
+    final quota = <int>[
+      (count * 0.4).round(),
+      (count * 0.3).round(),
+      count - (count * 0.4).round() - (count * 0.3).round(),
+    ];
+    var requests = 0;
+    Object? failure;
+    var succeeded = false;
+    Future<bool> queryField(String field, String variant, int limit) async {
+      if (requests >= 5) return false;
+      requests++;
+      try {
+        final books = fieldSearch != null
+            ? await fieldSearch(field, variant, page, limit)
+            : await searchBySelectedGenre(
+                selectedGenre: variant,
+                page: page,
+                count: limit,
+                keywordSearch: true,
+                searchField: field,
+                sort: 'standard',
+                throwOnSearchFailure: true,
+              );
+        succeeded = true;
         for (final book in books) {
-          merged.putIfAbsent(book.id, () => book);
+          result.putIfAbsent(book.id, () => book);
+        }
+        return true;
+      } catch (e) {
+        failure = e;
+        // Further calls within the same browser are likely suppressed by the
+        // global cooldown; preserve any successful field results instead.
+        return false;
+      }
+    }
+
+    for (var i = 0; i < fields.length && requests < 5; i++) {
+      final limit = i < quota.length ? quota[i] : 1;
+      if (limit <= 0) continue;
+      if (!await queryField(fields[i], variants.first, limit)) break;
+    }
+
+    // Try a maximum of two spelling fallbacks, never an unbounded
+    // fields x variants Cartesian product.
+    if (failure == null && result.length < count && variants.length > 1) {
+      for (final alternate in variants.skip(1)) {
+        if (requests >= 5 || result.length >= count) break;
+        if (!await queryField(fields.first, alternate, count - result.length)) {
+          break;
         }
       }
     }
-    return merged.values.toList();
+    if (!succeeded && failure != null) throw failure!;
+    return result.values.toList(growable: false);
   }
+
 }
