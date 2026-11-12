@@ -3,7 +3,7 @@ import '../models/book.dart';
 import 'book_card.dart';
 import 'timeline_ad_slot.dart';
 
-/// Twenty books per loaded batch, with one advertisement after its first ten.
+/// Ten books per loaded batch, with an advertisement after the first ten.
 /// Narrow screens retain readable cards instead of forcing five tiny columns.
 class BookSearchResults extends StatelessWidget {
   const BookSearchResults({
