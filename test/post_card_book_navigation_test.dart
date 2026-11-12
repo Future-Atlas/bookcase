@@ -22,6 +22,7 @@ void main() {
     WidgetTester tester, {
     required Size size,
     required VoidCallback onBookTap,
+    Post? post,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
@@ -29,7 +30,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SingleChildScrollView(
-            child: PostCard(post: _post, onBookTap: onBookTap),
+            child: PostCard(post: post ?? _post, onBookTap: onBookTap),
           ),
         ),
       ),
@@ -60,5 +61,26 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('post-book-cover-post-1')));
     await tester.tap(find.byKey(const ValueKey('post-book-title-post-1')));
     expect(taps, 2);
+  });
+
+  testWidgets('Rakuten provenance is preserved on a post cover', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final rakutenPost = _post.copyWith(
+      bookCoverUrl:
+          'https://thumbnail.image.rakuten.co.jp/@0_mall/book/cover.jpg',
+      bookCoverSource: 'rakuten',
+    );
+    await pumpCard(
+      tester,
+      size: const Size(390, 900),
+      onBookTap: () {},
+      post: rakutenPost,
+    );
+
+    final cover = find.byKey(const ValueKey('post-book-cover-post-1'));
+    final image = find.descendant(of: cover, matching: find.byType(Image));
+    expect(image, findsOneWidget);
+    expect(rakutenPost.bookCoverSource, 'rakuten');
   });
 }
