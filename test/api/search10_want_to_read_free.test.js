@@ -33,5 +33,8 @@ test('want-to-read is usable without a subscription, but still respects profile 
   assert.match(migration, /CREATE POLICY "Visible want-to-read shelves can be read"/);
   assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.current_user_can_use_want_to_read\(\)/);
   assert.doesNotMatch(migration, /profile_has_active_subscription|profile_effective_subscription_plan/);
-  assert.doesNotMatch(plan, /「読みたい！」・返信は利用不可|「読みたい！」を利用可能'[\s\S]*premium/);
+  assert.match(plan, /tier: SubscriptionPlanTier.free,[\s\S]*'「読みたい！」を利用可能'/);
+  assert.doesNotMatch(plan, /「読みたい！」・返信は利用不可/);
+  const premium = plan.slice(plan.indexOf('tier: SubscriptionPlanTier.premium'));
+  assert.doesNotMatch(premium, /'「読みたい！」を利用可能'/);
 });
