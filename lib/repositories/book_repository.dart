@@ -36,9 +36,14 @@ typedef StagingRakutenKeywordFetcher = Future<List<Book>> Function(
 typedef RakutenBookEnricher = Future<List<Book>> Function(List<Book> books);
 
 class BookSearchBatch {
-  const BookSearchBatch({required this.books, required this.hasMore});
+  const BookSearchBatch({required this.books, required this.hasMore, this.temporarilyUnavailable = false});
   final List<Book> books;
   final bool hasMore;
+  final bool temporarilyUnavailable;
+}
+
+class _CatalogTemporarilyUnavailable implements Exception {
+  const _CatalogTemporarilyUnavailable();
 }
 
 extension BookSearchFieldApiName on BookSearchField {
@@ -642,6 +647,11 @@ class BookRepository {
         cursor, cursor.offset, requestCount,
       );
       upstreamRequests++;
+      // Do not consume an upstream cursor on a 429, 502, 503 or timeout.
+      // Otherwise retries silently skip the relevant search results.
+      if (batch.temporarilyUnavailable) {
+        throw const _CatalogTemporarilyUnavailable();
+      }
       cursor.offset += batch.rawCount;
       cursor.buffer.addAll(batch.books);
       if (!batch.hasMore || batch.rawCount == 0) {
@@ -733,8 +743,14 @@ class BookRepository {
         (cursor) => cursor.buffer.isNotEmpty || !cursor.finished,
       );
       return BookSearchBatch(books: result, hasMore: more);
+    } on _CatalogTemporarilyUnavailable {
+      return const BookSearchBatch(
+        books: [], hasMore: true, temporarilyUnavailable: true,
+      );
     } catch (_) {
-      return const BookSearchBatch(books: [], hasMore: false);
+      return const BookSearchBatch(
+        books: [], hasMore: true, temporarilyUnavailable: true,
+      );
     }
   }
 
