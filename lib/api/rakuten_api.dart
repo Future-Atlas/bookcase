@@ -261,6 +261,7 @@ class RakutenApi {
     final pubDate = bookData['salesDate'] as String? ?? '';
     final isbn = bookData['isbn'] as String? ?? '';
     final itemUrl = bookData['itemUrl'] as String? ?? '';
+    final coverUrl = bookData['largeImageUrl'] as String? ?? '';
     final description = bookData['itemCaption'] as String? ?? '';
     final rawReviewAverage = bookData['reviewAverage'];
     final parsedReviewAverage = rawReviewAverage is num
@@ -275,10 +276,6 @@ class RakutenApi {
         ? rawItemPrice.toInt()
         : int.tryParse(rawItemPrice?.toString() ?? '') ?? 0;
 
-    // Rakuten metadata is supported, but retailer image rights are not
-    // established for this app. Do not persist/forward third-party image
-    // proxies or re-enable unapproved thumbnails in staging.
-
     return Book(
       id: isbn.isNotEmpty ? isbn : (itemUrl.isNotEmpty ? itemUrl : fallbackId),
       title: title,
@@ -286,7 +283,8 @@ class RakutenApi {
       publisher: publisher,
       pubDate: pubDate,
       isbn: isbn,
-      coverUrl: '',
+      coverUrl: coverUrl,
+      coverSource: coverUrl.isEmpty ? '' : 'rakuten',
       ratingAvg: parsedReviewAverage,
       reviewCount: parsedReviewCount,
       genre: genre,
