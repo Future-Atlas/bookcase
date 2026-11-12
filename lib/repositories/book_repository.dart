@@ -33,6 +33,9 @@ typedef StagingRakutenGenreFetcher = Future<List<Book>> Function(
 typedef StagingRakutenKeywordFetcher = Future<List<Book>> Function(
   String keyword, int upstreamPage, int count,
 );
+typedef RakutenKeywordPageFetcher = Future<RakutenKeywordSearchBatch> Function(
+  String keyword, int upstreamPage, int count, List<String> searchFields,
+);
 typedef RakutenBookEnricher = Future<List<Book>> Function(List<Book> books);
 
 class BookSearchBatch {
@@ -63,6 +66,7 @@ class BookRepository {
     this.homeFetcher,
     this.stagingRakutenGenreFetcher,
     this.stagingRakutenKeywordFetcher,
+    this.rakutenKeywordPageFetcher,
     this.rakutenBookEnricher,
     bool? stagingRakuten,
   }) : _stagingRakuten = stagingRakuten ??
@@ -79,6 +83,7 @@ class BookRepository {
   final NdlHomeFetcher? homeFetcher;
   final StagingRakutenGenreFetcher? stagingRakutenGenreFetcher;
   final StagingRakutenKeywordFetcher? stagingRakutenKeywordFetcher;
+  final RakutenKeywordPageFetcher? rakutenKeywordPageFetcher;
   final RakutenBookEnricher? rakutenBookEnricher;
   final bool _stagingRakuten;
   final Map<String, _RakutenStagingCursor> _rakutenStagingCursors = {};
@@ -710,13 +715,18 @@ class BookRepository {
         while (cursor.ready.length < count &&
             cursor.hasMoreUpstream && windows < 2) {
           windows++;
-          final batch = await RakutenApi.searchByKeywordPage(
-            keyword: clean,
-            page: cursor.upstreamPage,
-            count: count,
-            searchFields: searchFieldPriority(clean)
-                .map((field) => field.apiName).toList(),
-          );
+          final fields = searchFieldPriority(clean)
+              .map((field) => field.apiName).toList();
+          final batch = rakutenKeywordPageFetcher != null
+              ? await rakutenKeywordPageFetcher!(
+                  clean, cursor.upstreamPage, count, fields,
+                )
+              : await RakutenApi.searchByKeywordPage(
+                  keyword: clean,
+                  page: cursor.upstreamPage,
+                  count: count,
+                  searchFields: fields,
+                );
           if (!identical(cursor, _rakutenKeywordCursor)) {
             return const BookSearchBatch(books: [], hasMore: false);
           }
