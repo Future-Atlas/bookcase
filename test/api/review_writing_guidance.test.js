@@ -36,8 +36,10 @@ test("review composer explains required fields and confirms completion", () => {
   assert.doesNotMatch(source, /レビューを投稿しました/);
 });
 
-test("edit dialog title uses the same red as the submit action", () => {
-  assert.match(source, /'投稿を編集',[\s\S]*color: Color\(0xFFFF3B30\)/);
+test("edit page title and submit action retain the same red", () => {
+  assert.match(source, /isEditing \? '投稿を編集' : '読了の投稿'/);
+  assert.match(source, /foregroundColor: const Color\(0xFFFF3B30\)/);
+  assert.match(source, /backgroundColor: const Color\(0xFFFF3B30\)/);
 });
 
 test("post creation and editing enforce the same 1000 character limit", () => {

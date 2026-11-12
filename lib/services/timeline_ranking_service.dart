@@ -6,7 +6,9 @@ class TimelineRankingService {
   static List<Post> arrange({
     required Iterable<Post> posts,
     required Set<String> followedProfileIds,
+    DateTime? now,
   }) {
+    final rankingTime = now ?? DateTime.now();
     final followedPosts = <Post>[];
     final popularPosts = <Post>[];
     final seenPostIds = <String>{};
@@ -20,8 +22,8 @@ class TimelineRankingService {
       }
     }
 
-    followedPosts.sort(_compareByPopularity);
-    popularPosts.sort(_compareByPopularity);
+    followedPosts.sort((a, b) => _compareByPopularity(a, b, rankingTime));
+    popularPosts.sort((a, b) => _compareByPopularity(a, b, rankingTime));
 
     if (followedPosts.isEmpty) return popularPosts;
     if (popularPosts.isEmpty) return followedPosts;
@@ -46,7 +48,9 @@ class TimelineRankingService {
     required Iterable<Post> posts,
     required Set<String> followedProfileIds,
     String? preferredProfileId,
+    DateTime? now,
   }) {
+    final rankingTime = now ?? DateTime.now();
     final preferred = <Post>[];
     final followed = <Post>[];
     final others = <Post>[];
@@ -65,15 +69,28 @@ class TimelineRankingService {
       }
     }
 
-    preferred.sort(_compareByPopularity);
-    followed.sort(_compareByPopularity);
-    others.sort(_compareByPopularity);
+    preferred.sort((a, b) => _compareByPopularity(a, b, rankingTime));
+    followed.sort((a, b) => _compareByPopularity(a, b, rankingTime));
+    others.sort((a, b) => _compareByPopularity(a, b, rankingTime));
     return [...preferred, ...followed, ...others];
   }
 
-  static int _compareByPopularity(Post first, Post second) {
-    final scoreComparison = second.reactionScore.compareTo(first.reactionScore);
+  /// Decayed score = existing reaction score / (1 + days since posting / 30).
+  /// Future timestamps are treated as freshly posted to avoid a bonus.
+  static double decayedScore(Post post, DateTime now) {
+    final elapsedMs = now.difference(post.createdAt).inMilliseconds;
+    final elapsedDays = elapsedMs <= 0
+        ? 0.0
+        : elapsedMs / Duration.millisecondsPerDay;
+    return post.reactionScore / (1 + elapsedDays / 30);
+  }
+
+  static int _compareByPopularity(Post first, Post second, DateTime now) {
+    final scoreComparison = decayedScore(second, now)
+        .compareTo(decayedScore(first, now));
     if (scoreComparison != 0) return scoreComparison;
-    return second.createdAt.compareTo(first.createdAt);
+    final dateComparison = second.createdAt.compareTo(first.createdAt);
+    if (dateComparison != 0) return dateComparison;
+    return first.id.compareTo(second.id);
   }
 }

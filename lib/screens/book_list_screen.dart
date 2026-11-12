@@ -1637,7 +1637,27 @@ class _BookListScreenState extends State<BookListScreen> {
             padding: EdgeInsets.only(bottom: 12),
             child: Center(child: CircularProgressIndicator()),
           ),
-        if (results.isEmpty)
+        if (_controller.searchTemporarilyUnavailable && !_controller.isSearching)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Column(
+                children: [
+                  const Text(
+                    '書籍データを取得できませんでした。通信状況を確認して再試行してください。',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _controller.retrySearchBooks,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('検索を再試行'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (results.isEmpty && !_controller.searchTemporarilyUnavailable)
           Container(
             height: 200,
             alignment: Alignment.center,
@@ -1646,7 +1666,7 @@ class _BookListScreenState extends State<BookListScreen> {
               style: TextStyle(color: Colors.grey[500]),
             ),
           )
-        else
+        else if (results.isNotEmpty)
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

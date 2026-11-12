@@ -36,9 +36,14 @@ typedef StagingRakutenKeywordFetcher = Future<List<Book>> Function(
 typedef RakutenBookEnricher = Future<List<Book>> Function(List<Book> books);
 
 class BookSearchBatch {
-  const BookSearchBatch({required this.books, required this.hasMore});
+  const BookSearchBatch({required this.books, required this.hasMore, this.temporarilyUnavailable = false});
   final List<Book> books;
   final bool hasMore;
+  final bool temporarilyUnavailable;
+}
+
+class _CatalogTemporarilyUnavailable implements Exception {
+  const _CatalogTemporarilyUnavailable();
 }
 
 extension BookSearchFieldApiName on BookSearchField {
@@ -628,7 +633,7 @@ class BookRepository {
         if (seenIds.add(book.id)) collected.add(book);
         continue;
       }
-      if (cursor.finished || upstreamRequests >= 4) break;
+      if (cursor.finished || upstreamRequests >= 2) break;
       if (cursor.offset > 480) {
         cursor.nextVariantOrProvider();
         continue;
@@ -642,6 +647,11 @@ class BookRepository {
         cursor, cursor.offset, requestCount,
       );
       upstreamRequests++;
+      // Do not consume an upstream cursor on a 429, 502, 503 or timeout.
+      // Otherwise retries silently skip the relevant search results.
+      if (batch.temporarilyUnavailable) {
+        throw const _CatalogTemporarilyUnavailable();
+      }
       cursor.offset += batch.rawCount;
       cursor.buffer.addAll(batch.books);
       if (!batch.hasMore || batch.rawCount == 0) {
@@ -684,7 +694,9 @@ class BookRepository {
           hasMore: incoming.length >= count && results.isNotEmpty,
         );
       } catch (_) {
-        return const BookSearchBatch(books: [], hasMore: false);
+        return const BookSearchBatch(
+          books: [], hasMore: true, temporarilyUnavailable: true,
+        );
       }
     }
     if (page == 1 || clean != _activeQuery || page != _nextSearchPage) {
@@ -704,7 +716,7 @@ class BookRepository {
       }
       // If one field is exhausted, fill its spare slots from the others.
       var attemptsWithoutProgress = 0;
-      while (candidates.length < count && attemptsWithoutProgress < 3) {
+      while (candidates.length < count && attemptsWithoutProgress < 1) {
         var madeProgress = false;
         for (final cursor in cursors) {
           if (candidates.length >= count) break;
@@ -733,8 +745,14 @@ class BookRepository {
         (cursor) => cursor.buffer.isNotEmpty || !cursor.finished,
       );
       return BookSearchBatch(books: result, hasMore: more);
+    } on _CatalogTemporarilyUnavailable {
+      return const BookSearchBatch(
+        books: [], hasMore: true, temporarilyUnavailable: true,
+      );
     } catch (_) {
-      return const BookSearchBatch(books: [], hasMore: false);
+      return const BookSearchBatch(
+        books: [], hasMore: true, temporarilyUnavailable: true,
+      );
     }
   }
 

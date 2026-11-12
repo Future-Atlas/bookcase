@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 
 /// A star-shaped control for ratings from 0.0 to 5.0 in 0.1 increments.
 ///
-/// The ruler draws every one of the 51 tick positions, including on narrow
-/// mobile layouts where Flutter's built-in Slider may omit crowded ticks.
+/// The slider retains 0.1-step precision without a crowded visual ruler.
 class StarRatingSlider extends StatelessWidget {
   const StarRatingSlider({
     super.key,
@@ -52,7 +51,7 @@ class StarRatingSlider extends StatelessWidget {
               child: Stack(
                 children: [
                   const Positioned.fill(
-                    child: CustomPaint(painter: _RatingRulerPainter()),
+                    child: CustomPaint(painter: _RatingTrackPainter()),
                   ),
                   Positioned.fill(
                     child: SliderTheme(
@@ -107,26 +106,13 @@ class StarRatingSlider extends StatelessWidget {
             );
           },
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(11, (index) {
-              final label = index == 0 ? '0' : (index / 2).toStringAsFixed(1);
-              return Text(
-                label,
-                style: const TextStyle(fontSize: 9, color: Colors.black87),
-              );
-            }),
-          ),
-        ),
       ],
     );
   }
 }
 
-class _RatingRulerPainter extends CustomPainter {
-  const _RatingRulerPainter();
+class _RatingTrackPainter extends CustomPainter {
+  const _RatingTrackPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -141,20 +127,8 @@ class _RatingRulerPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(Offset(margin, y), Offset(size.width - margin, y), trackPaint);
 
-    final tickPaint = Paint()
-      ..color = const Color(0xFF757575)
-      ..strokeWidth = 1;
-    for (var tick = 0; tick <= 50; tick++) {
-      final x = margin + width * tick / 50;
-      final isLabeledTick = tick % 5 == 0;
-      canvas.drawLine(
-        Offset(x, y + 5),
-        Offset(x, y + (isLabeledTick ? 14 : 10)),
-        tickPaint,
-      );
-    }
   }
 
   @override
-  bool shouldRepaint(covariant _RatingRulerPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _RatingTrackPainter oldDelegate) => false;
 }
