@@ -40,13 +40,10 @@ class BookCatalogLookup {
           book.isbn.replaceAll('-', '').toUpperCase() != requestedIsbn) {
         return null;
       }
-      // Retailer thumbnails are not independently licensed for display.
-      // Publisher-verified covers are selected by the existing BookCoverImage.
-      return book.copyWith(
-        coverUrl: book.coverSource == 'openbd' ? book.coverUrl : '',
-        coverAttributionUrl: book.coverSource == 'openbd'
-            ? book.coverAttributionUrl : '',
-      );
+      // Prefer openBD when it has a cover. Otherwise retain the image URL
+      // supplied by the Rakuten Books API for this exact ISBN.
+      final enriched = await (openBdEnricher ?? OpenBdApi.enrich)([book]);
+      return enriched.isEmpty ? book : enriched.first;
     }
 
     final book = await (ndlFetcher ?? NdlApi.fetchBookById)(bookId);
