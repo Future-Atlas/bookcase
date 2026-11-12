@@ -19,10 +19,13 @@ class RakutenCredit extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!_registered) {
       ui_web.platformViewRegistry.registerViewFactory(_viewType, (int viewId) {
-        return html.DivElement()..setInnerHtml(
-          _markup,
-          treeSanitizer: html.NodeTreeSanitizer.trusted,
-        );
+        return html.DivElement()
+          ..style.width = '100%'
+          ..style.textAlign = 'center'
+          ..setInnerHtml(
+            _markup,
+            treeSanitizer: html.NodeTreeSanitizer.trusted,
+          );
       });
       _registered = true;
     }
