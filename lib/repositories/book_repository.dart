@@ -743,7 +743,9 @@ class BookRepository {
       final filtered = _filterForViewer(enriched);
       final result = rankSearchResults(filtered, clean)
           .take(count).toList(growable: false);
-      final more = result.isNotEmpty && cursors.any(
+      // An upstream window can contain many ISBN-less catalog records.
+      // Empty displayable books does not mean the provider has no more pages.
+      final more = cursors.any(
         (cursor) => cursor.buffer.isNotEmpty || !cursor.finished,
       );
       return BookSearchBatch(books: result, hasMore: more);
