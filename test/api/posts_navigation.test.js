@@ -7,23 +7,24 @@ function read(file) {
   return fs.readFileSync(path.join(__dirname, "../..", file), "utf8");
 }
 
-test("public posts are accessible from a persistent, visible header link", () => {
+test("timeline, home and profile are provided by the persistent footer", () => {
   const main = read("lib/main.dart");
-  const link = read("lib/widgets/public_posts_link.dart");
+  const timeline = read("lib/screens/public_post_routes.dart");
+  const footer = read("lib/widgets/primary_bottom_navigation.dart");
 
-  // Do not hide this behind the hamburger menu.
-  assert.match(main, /width: headerSideWidth,\s*child: Row\(/);
-  assert.match(main, /Expanded\(\s*child: PublicPostsLink\(\s*compact: true,/);
-  assert.match(main, /import 'widgets\/public_posts_link.dart';/);
-  assert.match(link, /key: const ValueKey\('header-public-posts-link'\)/);
-  assert.match(link, /child: Text\(\s*'タイムライン',/);
-  assert.match(link, /Navigator\.of\(context\)\.pushNamed\('\/posts'\)/);
+  assert.match(main, /bottomNavigationBar: _currentScreenIndex == 0 \|\| _currentScreenIndex == 1/);
+  assert.match(main, /onTimeline: \(\) => Navigator\.of\(context\)\.pushNamed\('\/posts'\)/);
+  assert.match(timeline, /bottomNavigationBar: PrimaryBottomNavigation\(/);
+  assert.match(footer, /const Text\('▽'/);
+  assert.match(footer, /Icons\.home_outlined/);
+  assert.match(footer, /Icons\.person_outline/);
+  assert.doesNotMatch(main, /child: PublicPostsLink\(/);
 });
 
-test("hamburger menu omits the duplicate timeline destination", () => {
+test("hamburger menu includes the timeline destination", () => {
   const main = read("lib/main.dart");
-  assert.doesNotMatch(main, /_HeaderMenuAction\.posts/);
-  assert.doesNotMatch(main, /value: _HeaderMenuAction\.posts/);
+  assert.match(main, /value: _HeaderMenuAction\.timeline/);
+  assert.match(main, /case _HeaderMenuAction\.timeline:/);
 });
 
 test("home CTA uses タイムラインを見る and routes to the existing public index", () => {
