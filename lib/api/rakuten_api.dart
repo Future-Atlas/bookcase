@@ -165,9 +165,13 @@ class RakutenApi {
     bool keywordSearch = false,
     String? sort,
     String? searchField,
+    bool throwOnSearchFailure = false,
   }) async {
     if (!_canRequestRakuten()) {
       debugPrint('Rakuten proxy is not configured.');
+      if (throwOnSearchFailure) {
+        throw StateError('Rakuten proxy is not configured');
+      }
       return [];
     }
 
@@ -226,6 +230,9 @@ class RakutenApi {
       final response = await _requestRakuten(endpoint, queryParameters);
       if (response == null || response.statusCode != 200) {
         debugPrint('Rakuten request failed: ${response?.statusCode}');
+        if (throwOnSearchFailure) {
+          throw StateError('Rakuten catalog request unavailable');
+        }
         return [];
       }
 
@@ -246,6 +253,7 @@ class RakutenApi {
       return books;
     } catch (e) {
       debugPrint('Rakuten search failed: $e');
+      if (throwOnSearchFailure) rethrow;
       return [];
     }
   }
@@ -355,6 +363,7 @@ class RakutenApi {
           keywordSearch: true,
           searchField: field,
           sort: 'standard',
+          throwOnSearchFailure: true,
         );
         for (final book in books) {
           merged.putIfAbsent(book.id, () => book);
