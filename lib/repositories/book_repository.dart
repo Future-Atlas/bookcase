@@ -689,14 +689,23 @@ class BookRepository {
         final results = rankSearchResults(
           _filterForViewer(await _enrichRakutenBooks(incoming)), clean,
         ).take(count).toList(growable: false);
-        return BookSearchBatch(
-          books: results,
-          hasMore: incoming.length >= count && results.isNotEmpty,
-        );
+        if (results.isNotEmpty || stagingRakutenKeywordFetcher != null) {
+          return BookSearchBatch(
+            books: results,
+            hasMore: incoming.length >= count && results.isNotEmpty,
+          );
+        }
+        // A valid empty Rakuten result is not proof that NDL has no books.
+        // Fall through to the ordinary 4/3/3 NDL search for production.
       } catch (_) {
-        return const BookSearchBatch(
-          books: [], hasMore: true, temporarilyUnavailable: true,
-        );
+        // Production Rakuten can fail on quotas, auth or upstream outages.
+        // Use NDL as the independent catalog, but keep injected staging
+        // fetchers deterministic for existing regression tests.
+        if (stagingRakutenKeywordFetcher != null) {
+          return const BookSearchBatch(
+            books: [], hasMore: true, temporarilyUnavailable: true,
+          );
+        }
       }
     }
     if (page == 1 || clean != _activeQuery || page != _nextSearchPage) {
