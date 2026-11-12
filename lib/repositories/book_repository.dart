@@ -82,6 +82,8 @@ class BookRepository {
   final RakutenBookEnricher? rakutenBookEnricher;
   final bool _stagingRakuten;
   final Map<String, _RakutenStagingCursor> _rakutenStagingCursors = {};
+  _RakutenKeywordCursor? _rakutenKeywordCursor;
+  String _rakutenKeywordQuery = '';
   final Map<String, _HomeCatalogCursor> _homeCatalogCursors = {};
   String _activeQuery = '';
   int _nextSearchPage = 1;
@@ -676,36 +678,91 @@ class BookRepository {
       return const BookSearchBatch(books: [], hasMore: false);
     }
     if (_stagingRakuten) {
-      try {
-        final incoming = stagingRakutenKeywordFetcher != null
-            ? await stagingRakutenKeywordFetcher!(clean, page, count)
-            : await RakutenApi.searchByKeyword(
-                keyword: clean,
-                page: page,
-                count: count,
-                searchFields: searchFieldPriority(clean)
-                    .map((field) => field.apiName).toList(),
-              );
-        final results = rankSearchResults(
-          _filterForViewer(await _enrichRakutenBooks(incoming)), clean,
-        ).take(count).toList(growable: false);
-        if (results.isNotEmpty || stagingRakutenKeywordFetcher != null) {
+      if (stagingRakutenKeywordFetcher != null) {
+        // Preserve injected test semantics independently of production cursor.
+        try {
+          final incoming = await stagingRakutenKeywordFetcher!(clean, page, count);
+          final results = rankSearchResults(
+            _filterForViewer(await _enrichRakutenBooks(incoming)), clean,
+          ).take(count).toList(growable: false);
           return BookSearchBatch(
-            books: results,
-            hasMore: incoming.length >= count && results.isNotEmpty,
+            books: results, hasMore: incoming.length >= count && results.isNotEmpty,
           );
-        }
-        // A valid empty Rakuten result is not proof that NDL has no books.
-        // Fall through to the ordinary 4/3/3 NDL search for production.
-      } catch (_) {
-        // Production Rakuten can fail on quotas, auth or upstream outages.
-        // Use NDL as the independent catalog, but keep injected staging
-        // fetchers deterministic for existing regression tests.
-        if (stagingRakutenKeywordFetcher != null) {
+        } catch (_) {
           return const BookSearchBatch(
             books: [], hasMore: true, temporarilyUnavailable: true,
           );
         }
+      }
+
+      if (page == 1 || clean != _rakutenKeywordQuery ||
+          _rakutenKeywordCursor == null ||
+          page != _rakutenKeywordCursor!.nextPage) {
+        _rakutenKeywordCursor = _RakutenKeywordCursor();
+        _rakutenKeywordQuery = clean;
+      }
+      final cursor = _rakutenKeywordCursor!;
+      var failed = false;
+      try {
+        // Empty/filtered/duplicate-heavy windows may require more than one
+        // upstream page. Cap each click to two network windows.
+        var windows = 0;
+        while (cursor.ready.length < count &&
+            cursor.hasMoreUpstream && windows < 2) {
+          windows++;
+          final batch = await RakutenApi.searchByKeywordPage(
+            keyword: clean,
+            page: cursor.upstreamPage,
+            count: count,
+            searchFields: searchFieldPriority(clean)
+                .map((field) => field.apiName).toList(),
+          );
+          if (!identical(cursor, _rakutenKeywordCursor)) {
+            return const BookSearchBatch(books: [], hasMore: false);
+          }
+          cursor.upstreamPage++;
+          cursor.hasMoreUpstream = batch.hasMore;
+          final enriched = _filterForViewer(
+            await _enrichRakutenBooks(batch.books),
+          );
+          final ordered = rankSearchResults(enriched, clean);
+          for (final book in ordered) {
+            if (cursor.seen.add(book.id)) cursor.ready.add(book);
+          }
+        }
+      } catch (_) {
+        failed = true;
+      }
+      if (!identical(cursor, _rakutenKeywordCursor)) {
+        return const BookSearchBatch(books: [], hasMore: false);
+      }
+      if (cursor.ready.isNotEmpty) {
+        final shown = <Book>[];
+        while (shown.length < count && cursor.ready.isNotEmpty) {
+          shown.add(cursor.ready.removeFirst());
+        }
+        cursor.nextPage = page + 1;
+        return BookSearchBatch(
+          books: shown,
+          hasMore: cursor.ready.isNotEmpty || cursor.hasMoreUpstream,
+          temporarilyUnavailable: false,
+        );
+      }
+      if (failed) {
+        // Do not report an API outage as zero matching books. Reuse the
+        // independent NDL catalog below for the initial lookup.
+        if (page > 1) {
+          return const BookSearchBatch(
+            books: [], hasMore: true, temporarilyUnavailable: true,
+          );
+        }
+      } else if (!cursor.hasMoreUpstream) {
+        // No Rakuten books at all: search the alternative catalog.
+      } else {
+        // Empty window with possible more pages: retain the cursor and let
+        // the user continue rather than claiming the book does not exist.
+        cursor.nextPage = page + 1;
+        return const BookSearchBatch(books: [], hasMore: true);
       }
     }
     if (page == 1 || clean != _activeQuery || page != _nextSearchPage) {
@@ -839,6 +896,16 @@ class _RakutenStagingCursor {
   final Set<String> seenIds = <String>{};
   int upstreamPage = 1;
   bool finished = false;
+}
+
+/// Retains candidates not displayed in the current ten-book result page.
+/// The upstream window is independent of the 4/3/3 UI allocation.
+class _RakutenKeywordCursor {
+  final Queue<Book> ready = Queue<Book>();
+  final Set<String> seen = <String>{};
+  int upstreamPage = 1;
+  bool hasMoreUpstream = true;
+  int nextPage = 1;
 }
 
 class _HomeCatalogSource {
