@@ -25,6 +25,49 @@ Book _book({
 }
 
 void main() {
+
+  test('4/3/3 means display allocation, not an upstream fetch limit', () async {
+    final limits = <String, int>{};
+    final batch = await RakutenApi.searchByKeywordPage(
+      keyword: '芥川',
+      count: 10,
+      searchFields: const ['author', 'title', 'publisherName'],
+      fieldSearch: (field, term, page, limit) async {
+        limits[field] = limit;
+        if (field == 'publisherName') return [];
+        return List.generate(field == 'author' ? 8 : 5, (i) => _book(
+          id: '$field-$i',
+          title: field == 'title' ? '芥川 Book $i' : 'Book $i',
+          author: field == 'author' ? '芥川龍之介' : 'Another Writer',
+          publisher: 'Publisher',
+        ));
+      },
+    );
+    expect(limits, {'author': 10, 'title': 10, 'publisherName': 10});
+    expect(batch.books.length, 13);
+    expect(batch.hasMore, isFalse, reason: 'No field filled its upstream page');
+    final ranked = BookRepository.rankSearchResults(batch.books, '芥川');
+    expect(ranked.take(10).length, 10);
+  });
+
+  test('full author upstream page keeps continuation after only 7 unique matches', () async {
+    final batch = await RakutenApi.searchByKeywordPage(
+      keyword: '芥川',
+      count: 10,
+      searchFields: const ['author', 'title', 'publisherName'],
+      fieldSearch: (field, term, page, limit) async {
+        if (field == 'author') {
+          return List.generate(10, (i) => _book(
+            id: 'author-$i', title: 'Story $i', author: '芥川龍之介',
+            publisher: 'Publisher',
+          ));
+        }
+        return [];
+      },
+    );
+    expect(batch.hasMore, isTrue);
+  });
+
   test('楽天検索は4/3/3件に割り当て、通常は最大3回のリクエスト', () async {
     final calls = <String>[];
     final found = await RakutenApi.searchByKeyword(
