@@ -16,6 +16,66 @@ Book sample(int id, {bool restricted = false, String? title}) => Book(
 );
 
 void main() {
+
+  test('publisher zero is replaced by spare title/author books up to ten', () async {
+    final pages = <int>[];
+    final repo = BookRepository(
+      stagingRakuten: true,
+      rakutenBookEnricher: (books) async => books,
+      rakutenKeywordPageFetcher: (query, upstreamPage, count, fields) async {
+        pages.add(upstreamPage);
+        expect(count, 10);
+        expect(fields, ['author', 'title', 'publisherName']);
+        return RakutenKeywordSearchBatch(
+          books: [
+            ...List.generate(8, (i) => sample(i + 1, title: '芥川 Author $i')),
+            ...List.generate(5, (i) => sample(i + 20, title: '芥川 Title $i')),
+          ],
+          hasMore: false,
+        );
+      },
+    );
+
+    final first = await repo.searchBooksPage('芥川', page: 1, count: 10);
+    expect(first.books.length, 10);
+    expect(first.hasMore, isTrue, reason: 'Three unused candidates are buffered');
+
+    final second = await repo.searchBooksPage('芥川', page: 2, count: 10);
+    expect(second.books.length, 3);
+    expect(second.hasMore, isFalse);
+    expect(pages, [1], reason: 'Already-fetched spare candidates must not be lost');
+    expect([...first.books, ...second.books].map((b) => b.id).toSet().length, 13);
+  });
+
+  test('short raw result windows still allow later upstream pages', () async {
+    final pages = <int>[];
+    final repo = BookRepository(
+      stagingRakuten: true,
+      rakutenBookEnricher: (books) async => books,
+      rakutenKeywordPageFetcher: (query, upstreamPage, count, fields) async {
+        pages.add(upstreamPage);
+        if (upstreamPage == 1) {
+          return RakutenKeywordSearchBatch(
+            books: List.generate(7, (i) => sample(i + 1)),
+            hasMore: true,
+          );
+        }
+        return RakutenKeywordSearchBatch(
+          books: List.generate(8, (i) => sample(i + 8)),
+          hasMore: false,
+        );
+      },
+    );
+    final first = await repo.searchBooksPage('芥川', page: 1, count: 10);
+    expect(first.books.length, 10);
+    expect(first.hasMore, isTrue);
+    final second = await repo.searchBooksPage('芥川', page: 2, count: 10);
+    expect(second.books.length, 5);
+    expect(second.hasMore, isFalse);
+    expect(pages, [1, 2]);
+  });
+
+
   test('staging shows 27 fetched books in three cached nine-card pages', () async {
     final calls = <String>[];
     final repo = BookRepository(
