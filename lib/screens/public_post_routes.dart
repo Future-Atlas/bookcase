@@ -59,7 +59,7 @@ class PublicPostsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accentColor = ProfilePageColors.colorFor(
-      context.watch<SupabaseService>().activePageColorKey,
+      context.watch<SupabaseService?>()?.activePageColorKey,
     );
     return Scaffold(
       bottomNavigationBar: PrimaryBottomNavigation(
