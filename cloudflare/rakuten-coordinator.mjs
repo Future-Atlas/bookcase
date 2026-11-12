@@ -3,6 +3,7 @@
 // upstream quota. No client can invoke this object without the Worker binding.
 const INTERVAL_MS = 1100; // Conservative >1s spacing for 1 request/second.
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const NO_MATCH_TTL_MS = 60 * 1000;
 const MAX_PENDING = 12;
 const MAX_WAIT_MS = 12 * 1000;
 const MAX_CACHED = 120;
@@ -136,8 +137,15 @@ export class RakutenCoordinator {
         type: upstream.headers.get("content-type") || "application/json; charset=utf-8",
         retryAfter: upstream.headers.get("retry-after") || null,
       };
-      if (upstream.ok) {
-        this.cache.set(url, { expiresAt: Date.now() + CACHE_TTL_MS, result });
+      // 404 means a legitimate empty book-search result. Short negative
+      // caching prevents repeated expensive upstream requests for misses.
+      // Never cache quota denials, credentials failures or server errors.
+      if (upstream.ok || upstream.status === 404) {
+        this.cache.set(url, {
+          expiresAt: Date.now() +
+              (upstream.status === 404 ? NO_MATCH_TTL_MS : CACHE_TTL_MS),
+          result,
+        });
         if (this.cache.size > MAX_CACHED) this.cache.delete(this.cache.keys().next().value);
       }
       return result;

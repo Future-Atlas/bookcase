@@ -25,6 +25,72 @@ Book _book({
 }
 
 void main() {
+  test('楽天検索は4/3/3件に割り当て、通常は最大3回のリクエスト', () async {
+    final calls = <String>[];
+    final found = await RakutenApi.searchByKeyword(
+      keyword: '芥川',
+      count: 10,
+      searchFields: const ['author', 'title', 'publisherName'],
+      fieldSearch: (field, term, page, limit) async {
+        calls.add('$field:$term:$limit');
+        return List.generate(limit, (i) => _book(
+          id: '$field-$i',
+          title: term,
+          author: '芥川龍之介',
+          publisher: '出版社',
+        ));
+      },
+    );
+    expect(calls, [
+      'author:芥川:4',
+      'title:芥川:3',
+      'publisherName:芥川:3',
+    ]);
+    expect(found.length, 10);
+  });
+
+  test('楽天検索は途中のフィールドが障害でも取得済みの本を破棄しない', () async {
+    final calls = <String>[];
+    final found = await RakutenApi.searchByKeyword(
+      keyword: '芥川',
+      count: 10,
+      searchFields: const ['author', 'title', 'publisherName'],
+      fieldSearch: (field, term, page, limit) async {
+        calls.add(field);
+        if (field == 'title') throw StateError('upstream unavailable');
+        return [_book(id: '9780000000001', title: '羅生門', author: '芥川龍之介', publisher: '出版社')];
+      },
+    );
+    expect(found.length, 1);
+    expect(found.single.title, '羅生門');
+    expect(calls, ['author', 'title']);
+  });
+
+  test('楽天検索は全フィールド障害時にNDLの代替検索へ例外を返す', () async {
+    await expectLater(
+      RakutenApi.searchByKeyword(
+        keyword: '芥川',
+        fieldSearch: (_, __, ___, ____) async =>
+          throw StateError('upstream unavailable'),
+      ),
+      throwsStateError,
+    );
+  });
+
+  test('楽天検索は表記違いを試しつつ最大5回で打ち切る', () async {
+    final calls = <String>[];
+    await RakutenApi.searchByKeyword(
+      keyword: 'プロジェクト・へイル・メアリー',
+      count: 10,
+      fieldSearch: (field, term, page, limit) async {
+        calls.add('$field:$term');
+        return const [];
+      },
+    );
+    expect(calls.length, lessThanOrEqualTo(5));
+    expect(calls.toSet().length, calls.length);
+  });
+
   test('楽天検索ではスペースと中点を除いた検索語も生成する', () {
     expect(RakutenApi.buildSearchKeywordVariants('プロジェクト・へイル・メアリー'), [
       'プロジェクト・へイル・メアリー',

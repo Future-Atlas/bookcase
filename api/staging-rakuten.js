@@ -101,6 +101,13 @@ function createHandler({ request, env = {} } = {}) {
           ? "https://www.sharemarium.com/"
           : "https://sharemarium-staging.sharemarium.workers.dev/"),
       });
+      // Rakuten Books documents HTTP 404 as a valid zero-hit search.
+      // Do not convert it to 502: that falsely triggers client-wide cooldown
+      // and causes already-collected results to be thrown away.
+      if (upstream.status === 404) {
+        res.setHeader("Cache-Control", "public, max-age=0, s-maxage=60");
+        return res.status(200).json({ Items: [] });
+      }
       if (!upstream.ok) {
         // The coordinator and Rakuten provider have distinct failure modes.
         // Only emit a numeric upstream status and a static, allowlisted code;

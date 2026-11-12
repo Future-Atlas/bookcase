@@ -147,3 +147,27 @@ test("upstream errors safely distinguish quota denial from provider rejection", 
     assert.ok(!JSON.stringify(res.body).includes("MUST_NOT_LEAK"));
   }
 });
+
+test("Rakuten 404 is a normal no-match response, not a 502 failure", async () => {
+  const handler = createHandler({
+    env,
+    request: async () => new Response('{"error":"not_found"}', {status: 404}),
+  });
+  const res = recorder();
+  await handler({method:"GET",query:{endpoint:"book",title:"芥川",hits:"4"}},res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { Items: [] });
+  assert.equal(res.headers["cache-control"], "public, max-age=0, s-maxage=60");
+  assert.ok(!JSON.stringify(res.body).includes("not_found"));
+});
+
+test("Rakuten genuine 429 is still a retryable busy response", async () => {
+  const handler = createHandler({
+    env,
+    request: async () => new Response('{"error":"limited"}', {status:429}),
+  });
+  const res = recorder();
+  await handler({method:"GET",query:{endpoint:"book",title:"芥川"}},res);
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.error, "rakuten_busy");
+});
