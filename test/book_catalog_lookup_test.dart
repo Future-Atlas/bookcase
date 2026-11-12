@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sharemarium/api/book_catalog_lookup.dart';
 import 'package:sharemarium/models/book.dart';
 
-Book sample(String id, {String coverUrl = ''}) => Book(
+Book sample(String id, {String coverUrl = '', String coverSource = ''}) => Book(
   id: id,
   isbn: id,
   title: 'Book $id',
@@ -10,17 +10,22 @@ Book sample(String id, {String coverUrl = ''}) => Book(
   publisher: 'Publisher',
   pubDate: '',
   coverUrl: coverUrl,
+  coverSource: coverSource,
   catalogSource: 'rakuten',
 );
 
 void main() {
-  test('Rakuten detail strips retailer art and uses openBD enrichment', () async {
+  test('Rakuten detail prefers openBD enrichment when available', () async {
     final calls = <String>[];
     final lookup = BookCatalogLookup(
       useRakuten: true,
       rakutenFetcher: (id) async {
         calls.add('rakuten:$id');
-        return sample(id, coverUrl: 'https://thumbnail.image.rakuten.co.jp/x.jpg');
+        return sample(
+          id,
+          coverUrl: 'https://thumbnail.image.rakuten.co.jp/x.jpg',
+          coverSource: 'rakuten',
+        );
       },
       ndlFetcher: (_) async => throw StateError('NDL must not run'),
       openBdEnricher: (books) async => books.map((book) => book.copyWith(
@@ -33,6 +38,21 @@ void main() {
     expect(book?.coverUrl, 'https://cover.openbd.jp/9784000000001.jpg');
     expect(book?.coverSource, 'openbd');
     expect(calls, ['rakuten:9784000000001']);
+  });
+
+  test('Rakuten detail retains its catalog cover when openBD has none', () async {
+    final lookup = BookCatalogLookup(
+      useRakuten: true,
+      rakutenFetcher: (id) async => sample(
+        id,
+        coverUrl: 'https://thumbnail.image.rakuten.co.jp/x.jpg',
+        coverSource: 'rakuten',
+      ),
+      openBdEnricher: (books) async => books,
+    );
+    final book = await lookup.fetchById('9784000000001');
+    expect(book?.coverUrl, 'https://thumbnail.image.rakuten.co.jp/x.jpg');
+    expect(book?.coverSource, 'rakuten');
   });
 
   test('staging rejects a mismatched ISBN response', () async {

@@ -138,6 +138,7 @@ class Book {
       pubDate: pubDate,
       isbn: isbn,
       coverUrl: coverUrl,
+      coverSource: coverUrl.isEmpty ? '' : 'rakuten',
       ratingAvg: ratingAvg,
       rakutenAffiliateUrl: json['affiliateUrl'] as String? ?? '',
       reviewCount: reviewCount,

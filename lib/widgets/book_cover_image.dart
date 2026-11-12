@@ -3,10 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/book.dart';
 import '../api/official_publisher_covers.dart';
 
-/// Render book-introduction covers from openBD or verified publisher sites.
-/// Publisher images are selected by exact publisher-owned ISBN prefixes and
-/// must be shown in full. No arbitrary third-party/retailer image fallbacks.
-/// A URL being reachable on the internet does not establish usage rights.
+/// Render book-introduction covers supplied by the active catalog API, openBD,
+/// or a verified publisher site. Provider URLs require matching provenance.
 class BookCoverImage extends StatelessWidget {
   const BookCoverImage({
     super.key,
@@ -28,24 +26,30 @@ class BookCoverImage extends StatelessWidget {
         !parsed.hasPort;
   }
 
-  /// Prefer a provenance-verified openBD image. If missing or unapproved,
+  /// Prefer a provenance-verified catalog image. If missing or unapproved,
   /// use only the publisher's own deterministic ISBN-specific cover URL.
-  /// Historical Google/Rakuten/Open Library URLs are never requested.
   static String? approvedCoverUrl(Book book) {
     final candidate = book.coverUrl.trim();
     if (isSafeRemoteCover(candidate) &&
-        (book.coverSource.isEmpty || book.coverSource == 'openbd')) {
+        (book.coverSource.isEmpty ||
+            book.coverSource == 'openbd' ||
+            book.coverSource == 'rakuten')) {
       final host = Uri.parse(candidate).host.toLowerCase();
       const excluded = {
         'books.google.com',
         'books.googleusercontent.com',
         'covers.openlibrary.org',
         'images.weserv.nl',
-        'thumbnail.image.rakuten.co.jp',
-        'image.rakuten.co.jp',
       };
+      final approvedRakuten = book.coverSource == 'rakuten' &&
+          const {
+            'thumbnail.image.rakuten.co.jp',
+            'image.rakuten.co.jp',
+          }.contains(host);
       if (!excluded.contains(host) &&
-          (book.coverSource == 'openbd' || host == 'cover.openbd.jp')) {
+          (approvedRakuten ||
+              book.coverSource == 'openbd' ||
+              host == 'cover.openbd.jp')) {
         return candidate;
       }
     }

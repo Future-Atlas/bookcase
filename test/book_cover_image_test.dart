@@ -33,6 +33,16 @@ void main() {
         WebHtmlElementStrategy.prefer);
   });
 
+  test('Rakuten source can provide a Rakuten Books catalog image', () {
+    final rakuten = sample.copyWith(
+      coverUrl: 'https://thumbnail.image.rakuten.co.jp/@0_mall/book/cover.jpg',
+      coverSource: 'rakuten',
+    );
+    expect(BookCoverImage.isApprovedCover(rakuten), true);
+    expect(BookCoverImage.webImageStrategyForBook(rakuten),
+        WebHtmlElementStrategy.prefer);
+  });
+
   test('saved or unlabeled Google, Open Library and retailer URLs are blocked', () {
     for (final url in [
       'https://books.google.com/books/content?id=test',

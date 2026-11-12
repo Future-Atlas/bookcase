@@ -40,20 +40,10 @@ class BookCatalogLookup {
           book.isbn.replaceAll('-', '').toUpperCase() != requestedIsbn) {
         return null;
       }
-      // Never display the retailer thumbnail directly. Use the Rakuten ISBN
-      // to obtain an openBD cover whose use is approved for book promotion.
-      final sanitized = book.copyWith(
-        coverUrl: '',
-        coverSource: '',
-        coverAttributionUrl: '',
-      );
-      final enriched = await (openBdEnricher ?? OpenBdApi.enrich)([sanitized]);
-      final resolved = enriched.isEmpty ? sanitized : enriched.first;
-      return resolved.copyWith(
-        coverUrl: resolved.coverSource == 'openbd' ? resolved.coverUrl : '',
-        coverAttributionUrl: resolved.coverSource == 'openbd'
-            ? resolved.coverAttributionUrl : '',
-      );
+      // Prefer openBD when it has a cover. Otherwise retain the image URL
+      // supplied by the Rakuten Books API for this exact ISBN.
+      final enriched = await (openBdEnricher ?? OpenBdApi.enrich)([book]);
+      return enriched.isEmpty ? book : enriched.first;
     }
 
     final book = await (ndlFetcher ?? NdlApi.fetchBookById)(bookId);
