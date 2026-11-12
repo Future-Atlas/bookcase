@@ -33,6 +33,7 @@ typedef StagingRakutenGenreFetcher = Future<List<Book>> Function(
 typedef StagingRakutenKeywordFetcher = Future<List<Book>> Function(
   String keyword, int upstreamPage, int count,
 );
+typedef RakutenBookEnricher = Future<List<Book>> Function(List<Book> books);
 
 class BookSearchBatch {
   const BookSearchBatch({required this.books, required this.hasMore});
@@ -57,6 +58,7 @@ class BookRepository {
     this.homeFetcher,
     this.stagingRakutenGenreFetcher,
     this.stagingRakutenKeywordFetcher,
+    this.rakutenBookEnricher,
     bool? stagingRakuten,
   }) : _stagingRakuten = stagingRakuten ??
          const bool.fromEnvironment(
@@ -72,6 +74,7 @@ class BookRepository {
   final NdlHomeFetcher? homeFetcher;
   final StagingRakutenGenreFetcher? stagingRakutenGenreFetcher;
   final StagingRakutenKeywordFetcher? stagingRakutenKeywordFetcher;
+  final RakutenBookEnricher? rakutenBookEnricher;
   final bool _stagingRakuten;
   final Map<String, _RakutenStagingCursor> _rakutenStagingCursors = {};
   final Map<String, _HomeCatalogCursor> _homeCatalogCursors = {};
@@ -263,6 +266,11 @@ class BookRepository {
         books, allowAdultContent: allowAdultContent,
       );
 
+  Future<List<Book>> _enrichRakutenBooks(List<Book> books) =>
+      rakutenBookEnricher != null
+          ? rakutenBookEnricher!(books)
+          : OpenBdApi.enrich(books);
+
   /// Preserve the legacy nine-card UI without dropping fetched candidates:
   /// Rakuten retrieved 27 records for nine cards. NDL often provides records
   /// without ISBN or language codes, so successive raw windows may be needed.
@@ -369,7 +377,7 @@ class BookRepository {
               );
         windows++;
         if (incoming.length < 27) cursor.finished = true;
-        final safe = _filterForViewer(incoming);
+        final safe = _filterForViewer(await _enrichRakutenBooks(incoming));
         for (final book in safe) {
           if (cursor.seenIds.add(book.id)) cursor.ready.addLast(book);
         }
@@ -568,7 +576,7 @@ class BookRepository {
             : await RakutenApi.searchBySelectedGenre(
                 selectedGenre: '', page: 1, count: 20,
               );
-        return _filterForViewer(books);
+        return _filterForViewer(await _enrichRakutenBooks(books));
       }
       final books = await NdlApi.search(
         any: '本', provider: NdlApi.national, count: 20,
@@ -669,7 +677,7 @@ class BookRepository {
                     .map((field) => field.apiName).toList(),
               );
         final results = rankSearchResults(
-          _filterForViewer(incoming), clean,
+          _filterForViewer(await _enrichRakutenBooks(incoming)), clean,
         ).take(count).toList(growable: false);
         return BookSearchBatch(
           books: results,

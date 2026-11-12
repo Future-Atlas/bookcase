@@ -20,6 +20,7 @@ void main() {
     final calls = <String>[];
     final repo = BookRepository(
       stagingRakuten: true,
+      rakutenBookEnricher: (books) async => books,
       stagingRakutenGenreFetcher: (genre, upstreamPage, count) async {
         calls.add('$genre:$upstreamPage:$count');
         return List.generate(27, (i) => sample((upstreamPage - 1) * 27 + i));
@@ -43,6 +44,7 @@ void main() {
     final genres = <String>[];
     final repo = BookRepository(
       stagingRakuten: true,
+      rakutenBookEnricher: (books) async => books,
       stagingRakutenGenreFetcher: (genre, upstreamPage, count) async {
         genres.add(genre);
         return List.generate(12, (i) => sample(i + 1));
@@ -65,6 +67,7 @@ void main() {
     final requested = <int>[];
     final repo = BookRepository(
       stagingRakuten: true,
+      rakutenBookEnricher: (books) async => books,
       stagingRakutenGenreFetcher: (_, page, count) async {
         requested.add(page);
         return List.generate(
@@ -88,6 +91,7 @@ void main() {
     final requests = <String>[];
     final repo = BookRepository(
       stagingRakuten: true,
+      rakutenBookEnricher: (books) async => books,
       stagingRakutenKeywordFetcher: (query, page, count) async {
         requests.add('$query:$page:$count');
         return [sample(1, title: 'Japan Story'), sample(2, restricted: true)];
@@ -98,5 +102,19 @@ void main() {
     expect(found.books.length, 1);
     expect(found.books.single.title, 'Japan Story');
     expect(found.hasMore, true);
+  });
+
+  test('Rakuten results receive approved openBD cover enrichment', () async {
+    final repo = BookRepository(
+      stagingRakuten: true,
+      stagingRakutenKeywordFetcher: (_, __, ___) async => [sample(1)],
+      rakutenBookEnricher: (books) async => books.map((book) => book.copyWith(
+        coverUrl: 'https://cover.openbd.jp/${book.isbn}.jpg',
+        coverSource: 'openbd',
+      )).toList(),
+    );
+    final found = await repo.searchBooksPage('Book 1');
+    expect(found.books.single.coverSource, 'openbd');
+    expect(found.books.single.coverUrl, contains('cover.openbd.jp'));
   });
 }
