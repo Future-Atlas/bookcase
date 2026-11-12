@@ -28,11 +28,11 @@ import 'screens/account_suspension_gate.dart';
 import 'screens/reading_timer_resume_gate.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/public_post_routes.dart';
-import 'widgets/public_posts_link.dart';
+import 'widgets/primary_bottom_navigation.dart';
 import 'widgets/bottom_ad_viewport_inset.dart';
 import 'utils/initial_public_route.dart';
 
-enum _HeaderMenuAction { home, myPage, settings, help, moderation, logout }
+enum _HeaderMenuAction { home, myPage, timeline, settings, help, moderation, logout }
 
 final supabaseService = SupabaseService();
 final themeService = ThemeService();
@@ -578,6 +578,9 @@ class _MainNavigationShellState extends State<MainNavigationShell>
       case _HeaderMenuAction.myPage:
         await _goToProfile();
         break;
+      case _HeaderMenuAction.timeline:
+        await Navigator.of(context).pushNamed('/posts');
+        break;
       case _HeaderMenuAction.settings:
         _setCurrentScreenIndex(2);
         break;
@@ -670,6 +673,15 @@ class _MainNavigationShellState extends State<MainNavigationShell>
         }
 
         return Scaffold(
+          bottomNavigationBar: _currentScreenIndex == 0 || _currentScreenIndex == 1
+              ? PrimaryBottomNavigation(
+                  accentColor: ownHeaderColor,
+                  selectedIndex: _currentScreenIndex == 0 ? 1 : 2,
+                  onTimeline: () => Navigator.of(context).pushNamed('/posts'),
+                  onHome: _goToBookList,
+                  onMyPage: () => unawaited(_goToProfile()),
+                )
+              : null,
           body: SafeArea(
             child: Column(
               children: [
@@ -722,6 +734,16 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                     ),
                                   ),
                                   PopupMenuItem(
+                                    value: _HeaderMenuAction.timeline,
+                                    child: Text(
+                                      'タイムライン',
+                                      style: TextStyle(
+                                        fontSize: 28 / 2,
+                                        color: popupMenuTextColor,
+                                      ),
+                                    ),
+                                  ),
+                                  PopupMenuItem(
                                     value: _HeaderMenuAction.settings,
                                     child: Text(
                                       '設定',
@@ -766,13 +788,7 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                 ],
                               ),
                             ),
-                            Expanded(
-                              child: PublicPostsLink(
-                                compact: true,
-                                dense: isPortraitPhone,
-                                foregroundColor: headerColor,
-                              ),
-                            ),
+                            const Expanded(child: SizedBox.shrink()),
                           ],
                         ),
                       ),
@@ -804,48 +820,6 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                   onOpenProfile: _openUserProfile,
                                 ),
                               ),
-                            SizedBox(
-                              width: isPortraitPhone ? 42 : 104,
-                              height: 36,
-                              child: ElevatedButton(
-                                onPressed: _goToProfile,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: isDarkMode
-                                      ? Colors.black
-                                      : Colors.white,
-                                  foregroundColor: ownHeaderColor,
-                                  side: BorderSide(
-                                    color: ownHeaderColor,
-                                    width: 1.5,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                  ),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  elevation: 0,
-                                  shape: const StadiumBorder(),
-                                ),
-                                child: isPortraitPhone
-                                    ? const Icon(Icons.person_outline, size: 18)
-                                    : const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.person_outline, size: 16),
-                                          SizedBox(width: 6),
-                                          Text(
-                                            'マイページ',
-                                            maxLines: 1,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                              ),
-                            ),
                           ],
                         ),
                       ),
