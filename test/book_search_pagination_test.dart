@@ -77,4 +77,33 @@ void main(){
     expect(retried.books, isNotEmpty);
   });
 
+  test('ISBN-less first windows do not claim the whole query has no matches', () async {
+    var received = 0;
+    Future<NdlSearchBatch> sparse(
+      BookSearchField field, String term, String provider, int start, int count,
+    ) async {
+      received++;
+      // A legitimate NDL window can be full but contain no displayable ISBN.
+      if (start <= 61) {
+        return NdlSearchBatch(
+          books: [], rawCount: count, hasMore: true,
+        );
+      }
+      return NdlSearchBatch(
+        books: [candidate(field, start)],
+        rawCount: count, hasMore: true,
+      );
+    }
+    final repo = BookRepository(fieldFetcher: sparse);
+    final first = await repo.searchBooksPage('芥川', page: 1, count: 10);
+    expect(first.books, isEmpty);
+    expect(first.temporarilyUnavailable, isFalse);
+    expect(first.hasMore, isTrue,
+      reason: 'A result page lacking ISBNs must allow further pagination');
+
+    final second = await repo.searchBooksPage('芥川', page: 2, count: 10);
+    expect(second.books, isNotEmpty);
+    expect(received, greaterThan(3));
+  });
+
 }

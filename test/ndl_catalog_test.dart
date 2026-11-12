@@ -72,4 +72,18 @@ void main(){
    expect(result.single.isbn,'9784297136338');
  });
 
+ test('HTML or XML errors are never accepted as legitimate empty search results',(){
+   expect(
+     () => NdlApi.parseSearchPage('<html><body>blocked</body></html>'),
+     throwsFormatException,
+   );
+   expect(
+     () => NdlApi.parseSearchPage('<error>temporarily unavailable</error>'),
+     throwsFormatException,
+   );
+   final empty = NdlApi.parseSearchPage('<rss><channel></channel></rss>');
+   expect(empty.books, isEmpty);
+   expect(empty.rawCount, 0);
+ });
+
 }

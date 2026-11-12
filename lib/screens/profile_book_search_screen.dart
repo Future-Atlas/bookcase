@@ -266,10 +266,24 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
                   ),
                 ],
               )
-            : const Text(
-                '該当する本が見つかりませんでした',
-                style: TextStyle(color: Colors.black54),
-              ),
+            : _hasMore
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        '最初の候補に表示可能な書籍がありません。続きを検索できます。',
+                        textAlign: TextAlign.center,
+                      ),
+                      TextButton(
+                        onPressed: _loadMore,
+                        child: const Text('次の10件を探す'),
+                      ),
+                    ],
+                  )
+                : const Text(
+                    '該当する本が見つかりませんでした',
+                    style: TextStyle(color: Colors.black54),
+                  ),
       );
     }
 

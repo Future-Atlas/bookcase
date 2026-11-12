@@ -35,6 +35,10 @@ test('rating slider retains 51 values but hides ruler ticks and labels', () => {
   assert.doesNotMatch(slider, /tick % 5 == 0/);
   assert.doesNotMatch(slider, /List.generate\(11/);
   assert.match(slider, /Icons.star/);
+  assert.match(slider, /thumbShape: const _InvisibleSliderThumbShape\(\)/);
+  assert.match(slider, /overlayShape: SliderComponentShape\.noOverlay/);
+  assert.doesNotMatch(slider, /RoundSliderThumbShape\(/);
+  assert.doesNotMatch(slider, /RoundSliderOverlayShape\(/);
   assert.match(composer, /StarRatingSlider\(/);
   assert.match(composer, /hasSelectedRating = true/);
   assert.doesNotMatch(composer, /starValue = index \+ 1.0/);
