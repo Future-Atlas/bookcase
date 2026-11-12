@@ -61,15 +61,10 @@ class StarRatingSlider extends StatelessWidget {
                         thumbColor: Colors.transparent,
                         overlayColor: Colors.transparent,
                         trackHeight: 2,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: _thumbDiameter / 2,
-                          disabledThumbRadius: _thumbDiameter / 2,
-                          elevation: 0,
-                          pressedElevation: 0,
-                        ),
-                        overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: 16,
-                        ),
+                        // Keep the 24px layout geometry, but paint no
+                        // circular thumb behind the separate gold star.
+                        thumbShape: const _InvisibleSliderThumbShape(),
+                        overlayShape: SliderComponentShape.noOverlay,
                         tickMarkShape: const RoundSliderTickMarkShape(
                           tickMarkRadius: 0,
                         ),
@@ -111,6 +106,34 @@ class StarRatingSlider extends StatelessWidget {
   }
 }
 
+/// Retains the 24px drag geometry without drawing the Slider's default
+/// circular thumb. The visible gold star is painted separately above it.
+class _InvisibleSliderThumbShape extends SliderComponentShape {
+  const _InvisibleSliderThumbShape();
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
+      const Size(StarRatingSlider._thumbDiameter, StarRatingSlider._thumbDiameter);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    // Deliberately blank: never render a dark circle behind the star.
+  }
+}
+
 class _RatingTrackPainter extends CustomPainter {
   const _RatingTrackPainter();
 
@@ -126,7 +149,6 @@ class _RatingTrackPainter extends CustomPainter {
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(Offset(margin, y), Offset(size.width - margin, y), trackPaint);
-
   }
 
   @override
