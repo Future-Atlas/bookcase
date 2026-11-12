@@ -131,6 +131,7 @@ class _ProfileBookPostsPanelState extends State<_ProfileBookPostsPanel> {
             pubDate: '',
             isbn: post.bookId,
             coverUrl: post.bookCoverUrl,
+            coverSource: post.bookCoverSource,
           ),
           sourcePostId: post.id,
         );
@@ -699,6 +700,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         pubDate: '',
         isbn: post.bookId,
         coverUrl: post.bookCoverUrl,
+        coverSource: post.bookCoverSource,
       ),
       sourcePostId: post.id,
     );
@@ -915,6 +917,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       pubDate: '',
       isbn: post.bookId,
       coverUrl: post.bookCoverUrl,
+      coverSource: post.bookCoverSource,
     );
     final edited = await showPostComposerDialog(
       context: context,
@@ -1579,6 +1582,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           pubDate: '',
           isbn: post.bookId,
           coverUrl: post.bookCoverUrl,
+          coverSource: post.bookCoverSource,
         );
     await _showCanonicalBookDetailDialog(book);
   }

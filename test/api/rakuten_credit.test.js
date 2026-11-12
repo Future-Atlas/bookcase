@@ -4,14 +4,18 @@ const path = require('node:path');
 const test = require('node:test');
 const read = file => fs.readFileSync(path.join(__dirname, '../..', file), 'utf8');
 
-test('Flutter home footer identifies NDL catalog and CC BY license', () => {
+test('Flutter home footer renders the official Rakuten credit in Rakuten builds', () => {
   const source = read('lib/screens/book_list_screen.dart');
   const copyright = source.indexOf('© 2026 Sharemarium. All rights reserved.');
   const credit = source.indexOf('const CatalogCredit()', copyright);
   const powered = source.indexOf('Powered by Supabase', copyright);
   assert.ok(copyright >= 0 && credit > copyright && credit < powered);
-  assert.doesNotMatch(source, /const RakutenCredit\(\)/);
   const widget = read('lib/widgets/catalog_credit.dart');
+  assert.match(widget, /const RakutenCredit\(\)/);
+  assert.match(widget, /楽天ブックス（楽天ウェブサービス）/);
+  const badge = read('lib/widgets/rakuten_credit_web.dart');
+  assert.match(badge, /credit_22121\.gif/);
+  assert.match(badge, /Rakuten Web Services Attribution Snippet/);
   assert.match(widget, /ndlsearch.ndl.go.jp/);
   assert.match(widget, /creativecommons.org\/licenses\/by\/4.0/);
   assert.match(widget, /openbd.jp/);

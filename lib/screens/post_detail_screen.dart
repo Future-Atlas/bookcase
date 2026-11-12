@@ -130,6 +130,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             pubDate: '',
             isbn: post.bookId,
             coverUrl: post.bookCoverUrl,
+            coverSource: post.bookCoverSource,
           ),
           sourcePostId: post.id,
         );

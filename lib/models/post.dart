@@ -16,6 +16,7 @@ class Post {
   final String bookTitle;
   final String bookAuthor;
   final String bookCoverUrl;
+  final String bookCoverSource;
   final bool isAgeRestricted;
   final bool isSpoiler;
   final Map<PostReactionType, int> reactionCounts;
@@ -56,6 +57,7 @@ class Post {
     required this.bookTitle,
     required this.bookAuthor,
     required this.bookCoverUrl,
+    this.bookCoverSource = '',
     this.isAgeRestricted = false,
     this.isSpoiler = false,
     this.reactionCounts = const {},
@@ -88,6 +90,7 @@ class Post {
       bookTitle: json['book_title'] ?? book?['title'] ?? '',
       bookAuthor: json['book_author'] ?? book?['author'] ?? '',
       bookCoverUrl: book?['cover_url'] ?? '',
+      bookCoverSource: book?['cover_source']?.toString() ?? '',
       isAgeRestricted: json['is_age_restricted'] == true,
       isSpoiler:
           json['is_spoiler'] == true ||
@@ -126,6 +129,7 @@ class Post {
     String? bookTitle,
     String? bookAuthor,
     String? bookCoverUrl,
+    String? bookCoverSource,
     bool? isAgeRestricted,
     bool? isSpoiler,
     Map<PostReactionType, int>? reactionCounts,
@@ -148,6 +152,7 @@ class Post {
       bookTitle: bookTitle ?? this.bookTitle,
       bookAuthor: bookAuthor ?? this.bookAuthor,
       bookCoverUrl: bookCoverUrl ?? this.bookCoverUrl,
+      bookCoverSource: bookCoverSource ?? this.bookCoverSource,
       isAgeRestricted: isAgeRestricted ?? this.isAgeRestricted,
       isSpoiler: isSpoiler ?? this.isSpoiler,
       reactionCounts: reactionCounts ?? this.reactionCounts,

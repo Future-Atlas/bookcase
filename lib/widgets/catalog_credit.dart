@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'rakuten_credit.dart';
+
 /// Attribution required for NDL-created CC BY 4.0 bibliographic records.
 class CatalogCredit extends StatelessWidget {
   const CatalogCredit({super.key});
@@ -26,9 +28,17 @@ class CatalogCredit extends StatelessWidget {
     alignment: WrapAlignment.center,
     children: [
       if (_rakutenCatalog)
-        TextButton(
-          onPressed: () => launchUrl(Uri.parse(_rakutenUrl)),
-          child: const Text('書誌情報の一部：楽天ブックス（楽天ウェブサービス）'),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const RakutenCredit(),
+            TextButton(
+              onPressed: () => launchUrl(Uri.parse(_rakutenUrl)),
+              child: const Text(
+                '書籍情報・書影の一部：楽天ブックス（楽天ウェブサービス）',
+              ),
+            ),
+          ],
         ),
       if (!_rakutenCatalog)
         TextButton(

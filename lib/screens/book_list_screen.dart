@@ -127,6 +127,7 @@ class _BookListScreenState extends State<BookListScreen> {
       pubDate: '',
       isbn: post.bookId,
       coverUrl: post.bookCoverUrl,
+      coverSource: post.bookCoverSource,
     );
     final edited = await showPostComposerDialog(
       context: context,
@@ -149,6 +150,7 @@ class _BookListScreenState extends State<BookListScreen> {
           pubDate: '',
           isbn: post.bookId,
           coverUrl: post.bookCoverUrl,
+          coverSource: post.bookCoverSource,
         );
     await _showBookDetailDialog(book);
   }
@@ -220,6 +222,7 @@ class _BookListScreenState extends State<BookListScreen> {
         pubDate: '',
         isbn: post.bookId,
         coverUrl: post.bookCoverUrl,
+        coverSource: post.bookCoverSource,
       ),
       sourcePostId: post.id,
     );
@@ -2044,6 +2047,7 @@ class _BookPostsPanelState extends State<_BookPostsPanel> {
         pubDate: '',
         isbn: post.bookId,
         coverUrl: post.bookCoverUrl,
+        coverSource: post.bookCoverSource,
       ),
       sourcePostId: post.id,
     );

@@ -2804,6 +2804,7 @@ class SupabaseService extends ChangeNotifier {
               ? post.bookAuthor
               : resolved.author,
           bookCoverUrl: resolved.coverUrl,
+          bookCoverSource: resolved.coverSource,
         ),
       );
     }
