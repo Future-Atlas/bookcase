@@ -49,4 +49,32 @@ void main(){
     expect(first.books.map((b)=>b.id).toSet()
       .intersection(second.books.map((b)=>b.id).toSet()),isEmpty);
   });
+  test('temporary NDL outage stays retryable and never counts as no matches', () async {
+    var fail = true;
+    Future<NdlSearchBatch> fake(
+      BookSearchField field, String term, String provider, int start, int count,
+    ) async {
+      if (fail) {
+        return const NdlSearchBatch(
+          books: [], rawCount: 0, hasMore: false,
+          temporarilyUnavailable: true,
+        );
+      }
+      return NdlSearchBatch(
+        books: List.generate(count, (i) => candidate(field, start + i)),
+        rawCount: count, hasMore: true,
+      );
+    }
+    final repo = BookRepository(fieldFetcher: fake);
+    final outage = await repo.searchBooksPage('村上春樹', page: 1);
+    expect(outage.books, isEmpty);
+    expect(outage.temporarilyUnavailable, isTrue);
+    expect(outage.hasMore, isTrue);
+
+    fail = false;
+    final retried = await repo.searchBooksPage('村上春樹', page: 1);
+    expect(retried.temporarilyUnavailable, isFalse);
+    expect(retried.books, isNotEmpty);
+  });
+
 }

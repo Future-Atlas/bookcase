@@ -24,6 +24,7 @@ class BookListController extends ChangeNotifier {
 
   bool isSearching = false;
   bool hasMoreSearch = true;
+  bool searchTemporarilyUnavailable = false;
   int searchPage = 1;
   List<Book> searchResults = [];
   List<UserProfile> userSearchResults = [];
@@ -139,6 +140,7 @@ class BookListController extends ChangeNotifier {
     _searchDebounce?.cancel();
 
     if (searchQuery.isEmpty) {
+      searchTemporarilyUnavailable = false;
       isSearching = false;
       hasMoreSearch = true;
       searchPage = 1;
@@ -149,10 +151,11 @@ class BookListController extends ChangeNotifier {
       return;
     }
 
+    searchTemporarilyUnavailable = false;
     isSearching = true;
     notifyListeners();
 
-    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+    _searchDebounce = Timer(const Duration(milliseconds: 750), () {
       if (userSearchMode) {
         _searchUsers();
       } else {
@@ -167,6 +170,7 @@ class BookListController extends ChangeNotifier {
     _searchDebounce?.cancel();
     isSearching = false;
     hasMoreSearch = true;
+    searchTemporarilyUnavailable = false;
     searchPage = 1;
     searchResults = [];
     userSearchResults = [];
@@ -217,6 +221,7 @@ class BookListController extends ChangeNotifier {
 
     if (reset) {
       hasMoreSearch = true;
+      searchTemporarilyUnavailable = false;
       searchPage = 1;
       searchResults = [];
       _searchResultIds.clear();
@@ -237,6 +242,12 @@ class BookListController extends ChangeNotifier {
 
       // 入力中に別の検索が始まった場合は、古い結果を画面へ反映しない。
       if (userSearchMode || query != searchQuery.trim()) return;
+      if (batch.temporarilyUnavailable) {
+        searchTemporarilyUnavailable = true;
+        hasMoreSearch = false;
+        return;
+      }
+      searchTemporarilyUnavailable = false;
 
       for (final book in batch.books) {
         if (_searchResultIds.add(book.id)) {
@@ -246,12 +257,22 @@ class BookListController extends ChangeNotifier {
 
       searchPage = requestedPage + 1;
       hasMoreSearch = batch.hasMore;
+    } catch (_) {
+      if (!userSearchMode && query == searchQuery.trim()) {
+        searchTemporarilyUnavailable = true;
+        hasMoreSearch = false;
+      }
     } finally {
       if (!userSearchMode && query == searchQuery.trim()) {
         isSearching = false;
         notifyListeners();
       }
     }
+  }
+
+  Future<void> retrySearchBooks() async {
+    if (searchQuery.isEmpty || userSearchMode || isSearching) return;
+    await _searchBooks(reset: true);
   }
 
   Future<void> loadMoreSearchResults() async {

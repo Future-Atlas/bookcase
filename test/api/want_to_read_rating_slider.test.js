@@ -27,13 +27,13 @@ test('want-to-read stays hidden while free favorites remain available', () => {
   assert.match(cards, /FeatureFlags.wantToReadUiEnabled/);
 });
 
-test('rating ruler has 51 tick positions and labels every half point', () => {
+test('rating slider retains 51 values but hides ruler ticks and labels', () => {
   const slider = read('lib/widgets/star_rating_slider.dart');
   const composer = read('lib/widgets/post_composer_dialog.dart');
   assert.match(slider, /divisions: 50/);
-  assert.match(slider, /tick <= 50/);
-  assert.match(slider, /tick % 5 == 0/);
-  assert.match(slider, /List.generate\(11/);
+  assert.doesNotMatch(slider, /tick <= 50/);
+  assert.doesNotMatch(slider, /tick % 5 == 0/);
+  assert.doesNotMatch(slider, /List.generate\(11/);
   assert.match(slider, /Icons.star/);
   assert.match(composer, /StarRatingSlider\(/);
   assert.match(composer, /hasSelectedRating = true/);
