@@ -1659,12 +1659,31 @@ class _BookListScreenState extends State<BookListScreen> {
           ),
         if (results.isEmpty && !_controller.searchTemporarilyUnavailable)
           Container(
-            height: 200,
+            constraints: const BoxConstraints(minHeight: 170),
             alignment: Alignment.center,
-            child: Text(
-              _controller.isSearching ? '検索しています...' : 'お探しの作品が見つかりませんでした。',
-              style: TextStyle(color: Colors.grey[500]),
-            ),
+            child: _controller.isSearching
+                ? const Text('検索しています...')
+                : _controller.canLoadMoreSearchResults
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            '最初の候補には表示可能な書誌がありませんでした。'
+                            '続きの書籍を検索できます。',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: _controller.loadMoreSearchResults,
+                            icon: const Icon(Icons.expand_more),
+                            label: const Text('次の10件を探す'),
+                          ),
+                        ],
+                      )
+                    : Text(
+                        'お探しの作品が見つかりませんでした。',
+                        style: TextStyle(color: Colors.grey[500]),
+                      ),
           )
         else if (results.isNotEmpty)
           Column(
@@ -1680,7 +1699,7 @@ class _BookListScreenState extends State<BookListScreen> {
                     child: OutlinedButton.icon(
                       onPressed: _controller.loadMoreSearchResults,
                       icon: const Icon(Icons.expand_more),
-                      label: const Text('さらに読み込む'),
+                      label: const Text('さらに10件読み込む'),
                     ),
                   ),
                 ),

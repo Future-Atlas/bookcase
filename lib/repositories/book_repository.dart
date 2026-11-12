@@ -246,8 +246,8 @@ class BookRepository {
 
     final output = <Book>[...exact.map((item) => item.book)];
     while (output.length < ranked.length) {
-      final slot = output.length % 20;
-      final preferred = slot < 10 ? 0 : (slot < 15 ? 1 : 2);
+      final slot = output.length % 10;
+      final preferred = slot < 4 ? 0 : (slot < 7 ? 1 : 2);
       final fallbackOrder = switch (preferred) {
         0 => const [0, 1, 2, 3],
         1 => const [1, 2, 0, 3],
@@ -662,10 +662,10 @@ class BookRepository {
   }
 
   /// Stable cursor-based pagination with existing title/author/publisher
-  /// priority and 10/5/5 allocation for a 20-book result page. This avoids
-  /// discarding items #11-20 after fetching 20 upstream records for 10 slots.
+  /// priority and 4/3/3 allocation for a 10-book result page. This avoids
+  /// discarding unused upstream records when fewer slots are requested.
   Future<BookSearchBatch> searchBooksPage(
-    String query, {int page = 1, int count = 20}
+    String query, {int page = 1, int count = 10}
   ) async {
     final clean = query.trim();
     if (clean.isEmpty) {
@@ -689,23 +689,34 @@ class BookRepository {
         final results = rankSearchResults(
           _filterForViewer(await _enrichRakutenBooks(incoming)), clean,
         ).take(count).toList(growable: false);
-        return BookSearchBatch(
-          books: results,
-          hasMore: incoming.length >= count && results.isNotEmpty,
-        );
+        if (results.isNotEmpty || stagingRakutenKeywordFetcher != null) {
+          return BookSearchBatch(
+            books: results,
+            hasMore: incoming.length >= count && results.isNotEmpty,
+          );
+        }
+        // A valid empty Rakuten result is not proof that NDL has no books.
+        // Fall through to the ordinary 4/3/3 NDL search for production.
       } catch (_) {
-        return const BookSearchBatch(
-          books: [], hasMore: true, temporarilyUnavailable: true,
-        );
+        // Production Rakuten can fail on quotas, auth or upstream outages.
+        // Use NDL as the independent catalog, but keep injected staging
+        // fetchers deterministic for existing regression tests.
+        if (stagingRakutenKeywordFetcher != null) {
+          return const BookSearchBatch(
+            books: [], hasMore: true, temporarilyUnavailable: true,
+          );
+        }
       }
     }
     if (page == 1 || clean != _activeQuery || page != _nextSearchPage) {
       _resetSearch(clean);
     }
+    final firstQuota = (count * 0.4).round();
+    final secondQuota = (count * 0.3).round();
     final quotas = <int>[
-      (count * 0.5).ceil(),
-      (count * 0.25).ceil(),
-      count - (count * 0.5).ceil() - (count * 0.25).ceil(),
+      firstQuota,
+      secondQuota,
+      count - firstQuota - secondQuota,
     ];
     final candidates = <Book>[];
     final cursors = _cursors;
@@ -741,7 +752,9 @@ class BookRepository {
       final filtered = _filterForViewer(enriched);
       final result = rankSearchResults(filtered, clean)
           .take(count).toList(growable: false);
-      final more = result.isNotEmpty && cursors.any(
+      // An upstream window can contain many ISBN-less catalog records.
+      // Empty displayable books does not mean the provider has no more pages.
+      final more = cursors.any(
         (cursor) => cursor.buffer.isNotEmpty || !cursor.finished,
       );
       return BookSearchBatch(books: result, hasMore: more);

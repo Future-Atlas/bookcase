@@ -27,6 +27,12 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
   List<Book> _results = [];
   bool _isSearching = false;
   bool _hasSearched = false;
+  bool _isLoadingMore = false;
+  bool _hasMore = false;
+  bool _searchUnavailable = false;
+  int _nextPage = 1;
+  BookRepository? _activeRepository;
+  String _activeQuery = '';
   int _searchGeneration = 0;
   final Map<String, Future<bool>> _readStatusFutures = {};
   final Map<String, Future<bool>> _wantedStatusFutures = {};
@@ -48,12 +54,19 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
 
   void _scheduleSearch() {
     _debounce?.cancel();
+    // Invalidate any outstanding page before the next debounce fires.
+    _searchGeneration++;
     final query = _searchController.text.trim();
     if (query.isEmpty) {
-      _searchGeneration++;
       setState(() {
         _results = [];
         _isSearching = false;
+        _isLoadingMore = false;
+        _hasMore = false;
+        _searchUnavailable = false;
+        _activeRepository = null;
+        _activeQuery = '';
+        _nextPage = 1;
         _hasSearched = false;
       });
       return;
@@ -66,20 +79,71 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
   Future<void> _search(String query) async {
     final generation = ++_searchGeneration;
     setState(() {
+      _results = [];
       _isSearching = true;
+      _isLoadingMore = false;
+      _hasMore = false;
+      _searchUnavailable = false;
+      _nextPage = 1;
+      _activeQuery = query;
       _hasSearched = true;
     });
+    try {
+      final service = Provider.of<SupabaseService>(context, listen: false);
+      final allowAdultContent = await service.canViewAdultContent();
+      if (!mounted || generation != _searchGeneration) return;
+      final repository = BookRepository(allowAdultContent: allowAdultContent);
+      _activeRepository = repository;
+      final batch = await repository.searchBooksPage(query, page: 1, count: 10);
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _results = batch.books;
+        _hasMore = batch.hasMore && !batch.temporarilyUnavailable;
+        _searchUnavailable = batch.temporarilyUnavailable;
+        _nextPage = 2;
+        _isSearching = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _searchUnavailable = true;
+        _hasMore = false;
+        _isSearching = false;
+      });
+    }
+  }
 
-    final service = Provider.of<SupabaseService>(context, listen: false);
-    final allowAdultContent = await service.canViewAdultContent();
-    final books = await BookRepository(
-      allowAdultContent: allowAdultContent,
-    ).searchBooks(query);
-    if (!mounted || generation != _searchGeneration) return;
-    setState(() {
-      _results = books;
-      _isSearching = false;
-    });
+  Future<void> _loadMore() async {
+    final repo = _activeRepository;
+    if (repo == null || !_hasMore || _isSearching || _isLoadingMore) return;
+    final generation = _searchGeneration;
+    final page = _nextPage;
+    setState(() => _isLoadingMore = true);
+    try {
+      final batch = await repo.searchBooksPage(
+        _activeQuery, page: page, count: 10,
+      );
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        if (batch.temporarilyUnavailable) {
+          _searchUnavailable = true;
+          _hasMore = false;
+        } else {
+          final seen = _results.map((book) => book.id).toSet();
+          _results.addAll(batch.books.where((book) => seen.add(book.id)));
+          _hasMore = batch.hasMore;
+          _nextPage = page + 1;
+        }
+        _isLoadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _searchUnavailable = true;
+        _hasMore = false;
+        _isLoadingMore = false;
+      });
+    }
   }
 
   Future<void> _markAsRead(Book book) async {
@@ -190,19 +254,58 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
       );
     }
     if (_results.isEmpty) {
-      return const Center(
-        child: Text(
-          '該当する本が見つかりませんでした',
-          style: TextStyle(color: Colors.black54),
-        ),
+      return Center(
+        child: _searchUnavailable
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('書籍の取得に失敗しました。再試行してください。'),
+                  TextButton(
+                    onPressed: () => _search(_searchController.text.trim()),
+                    child: const Text('再試行'),
+                  ),
+                ],
+              )
+            : _hasMore
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        '最初の候補に表示可能な書籍がありません。続きを検索できます。',
+                        textAlign: TextAlign.center,
+                      ),
+                      TextButton(
+                        onPressed: _loadMore,
+                        child: const Text('次の10件を探す'),
+                      ),
+                    ],
+                  )
+                : const Text(
+                    '該当する本が見つかりませんでした',
+                    style: TextStyle(color: Colors.black54),
+                  ),
       );
     }
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-      itemCount: _results.length,
+      itemCount: _results.length + (_hasMore || _isLoadingMore || _searchUnavailable ? 1 : 0),
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
+        if (index == _results.length) {
+          if (_isLoadingMore) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return Center(
+            child: OutlinedButton.icon(
+              onPressed: _searchUnavailable
+                  ? () => _search(_searchController.text.trim())
+                  : _loadMore,
+              icon: Icon(_searchUnavailable ? Icons.refresh : Icons.expand_more),
+              label: Text(_searchUnavailable ? '再試行' : 'さらに10件読み込む'),
+            ),
+          );
+        }
         final book = _results[index];
         return Material(
           color: const Color(0xFFF3F3F3),

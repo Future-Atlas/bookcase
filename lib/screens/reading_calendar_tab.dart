@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../utils/reading_calendar_border.dart';
+import '../utils/reading_day_book_summary.dart';
 
 import '../models/reading_session.dart';
 import '../models/social_models.dart';
@@ -464,7 +465,9 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        for (final session in _sessionsFor(day))
+                        for (final summary in summarizeReadingDayBooks(
+                          _sessionsFor(day), day,
+                        ))
                           Padding(
                             padding: const EdgeInsets.only(top: 10),
                             child: Row(
@@ -473,10 +476,10 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
                                   width: 74,
                                   child: Column(
                                     children: [
-                                      _roundCover(session),
+                                      _roundCover(summary.session),
                                       const SizedBox(height: 3),
                                       Text(
-                                        session.bookTitle,
+                                        summary.session.bookTitle,
                                         textAlign: TextAlign.center,
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 2,
@@ -491,7 +494,7 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
                                     alignment: Alignment.centerRight,
                                     child: Text(
                                       ReadingSession.durationLabel(
-                                        session.durationOnDay(day),
+                                        summary.total,
                                       ),
                                     ),
                                   ),

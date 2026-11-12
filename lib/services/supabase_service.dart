@@ -78,7 +78,7 @@ extension WantToReadToggleResultLabel on WantToReadToggleResult {
       case WantToReadToggleResult.alreadyRead:
         return 'この本はすでに読了済みです。';
       case WantToReadToggleResult.subscriptionRequired:
-        return '「読みたい！」は限定コンテンツです。';
+        return '「読みたい！」をご利用いただけません。再度お試しください。';
       case WantToReadToggleResult.failed:
         return '「読みたい！」を更新できませんでした。';
     }

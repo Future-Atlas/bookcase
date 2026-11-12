@@ -13,7 +13,7 @@ Book candidate(BookSearchField field,int i){
 }
 
 void main(){
-  test('existing 10/5/5 ranking retains unused raw page results',() async{
+  test('4/3/3 ranking retains unused raw page results',() async{
     final calls=<String>[];
     Future<NdlSearchBatch> fake(BookSearchField field,String term,String provider,int start,int count) async{
       calls.add(field.name+':'+start.toString());
@@ -22,10 +22,10 @@ void main(){
     }
     final repo=BookRepository(fieldFetcher:fake);
     final first=await repo.searchBooksPage('村上春樹',page:1);
-    expect(first.books.length,20);expect(first.hasMore,isTrue);
-    expect(first.books.take(10).every((b)=>b.author=='村上春樹'),isTrue);
+    expect(first.books.length,10);expect(first.hasMore,isTrue);
+    expect(first.books.take(4).every((b)=>b.author=='村上春樹'),isTrue);
     final second=await repo.searchBooksPage('村上春樹',page:2);
-    expect(second.books.length,20);
+    expect(second.books.length,10);
     final ids1=first.books.map((b)=>b.id).toSet();
     final ids2=second.books.map((b)=>b.id).toSet();
     expect(ids1.intersection(ids2),isEmpty);
@@ -75,6 +75,35 @@ void main(){
     final retried = await repo.searchBooksPage('村上春樹', page: 1);
     expect(retried.temporarilyUnavailable, isFalse);
     expect(retried.books, isNotEmpty);
+  });
+
+  test('ISBN-less first windows do not claim the whole query has no matches', () async {
+    var received = 0;
+    Future<NdlSearchBatch> sparse(
+      BookSearchField field, String term, String provider, int start, int count,
+    ) async {
+      received++;
+      // A legitimate NDL window can be full but contain no displayable ISBN.
+      if (start <= 61) {
+        return NdlSearchBatch(
+          books: [], rawCount: count, hasMore: true,
+        );
+      }
+      return NdlSearchBatch(
+        books: [candidate(field, start)],
+        rawCount: count, hasMore: true,
+      );
+    }
+    final repo = BookRepository(fieldFetcher: sparse);
+    final first = await repo.searchBooksPage('芥川', page: 1, count: 10);
+    expect(first.books, isEmpty);
+    expect(first.temporarilyUnavailable, isFalse);
+    expect(first.hasMore, isTrue,
+      reason: 'A result page lacking ISBNs must allow further pagination');
+
+    final second = await repo.searchBooksPage('芥川', page: 2, count: 10);
+    expect(second.books, isNotEmpty);
+    expect(received, greaterThan(3));
   });
 
 }
