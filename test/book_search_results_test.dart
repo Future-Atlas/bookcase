@@ -5,7 +5,7 @@ import 'package:sharemarium/widgets/book_search_results.dart';
 import 'package:sharemarium/widgets/timeline_ad_slot.dart';
 
 void main() {
-  testWidgets('40 books have two separate 20-book batches and two ad slots', (
+  testWidgets('40 books render four ten-book grids and two ad slots', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 1600);
