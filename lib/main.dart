@@ -172,7 +172,8 @@ class MyApp extends StatelessWidget {
         '/contact': (context) => const ContactScreen(),
         '/about': (context) => const OperatorInfoScreen(),
       },
-      onUnknownRoute: (_) => MaterialPageRoute<void>(
+      onUnknownRoute: (settings) => MaterialPageRoute<void>(
+        settings: settings,
         builder: (_) => const AccountSuspensionGate(
           child: LegalConsentGate(
             child: ProfileOnboardingGate(
