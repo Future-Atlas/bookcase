@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/profile_page_color.dart';
+import '../services/supabase_service.dart';
+import '../widgets/primary_bottom_navigation.dart';
 
 import 'account_suspension_gate.dart';
 import 'legal_consent_screen.dart';
@@ -54,7 +58,19 @@ class PublicPostsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accentColor = ProfilePageColors.colorFor(
+      context.watch<SupabaseService>().activePageColorKey,
+    );
     return Scaffold(
+      bottomNavigationBar: PrimaryBottomNavigation(
+        accentColor: accentColor,
+        selectedIndex: 0,
+        onTimeline: () {},
+        onHome: () => Navigator.of(context)
+            .pushNamedAndRemoveUntil('/', (route) => false),
+        onMyPage: () => Navigator.of(context)
+            .pushNamedAndRemoveUntil('/mypage', (route) => false),
+      ),
       appBar: AppBar(
         title: const Text('タイムライン'),
         actions: [
