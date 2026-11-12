@@ -177,7 +177,7 @@ void main() {
     expect(ranked.first.id, 'match');
   });
 
-  test('20冊を優先度1に10冊、優先度2に5冊、優先度3に5冊配分する', () {
+  test('最初の10冊を優先度1に4冊、優先度2に3冊、優先度3に3冊配分する', () {
     final books = <Book>[
       for (var i = 0; i < 12; i++)
         _book(
@@ -208,20 +208,20 @@ void main() {
     final ranked = BookRepository.rankSearchResults(books, '村上春樹');
 
     expect(
-      ranked.take(10).every((book) => book.id.startsWith('author-')),
+      ranked.take(4).every((book) => book.id.startsWith('author-')),
       isTrue,
     );
     expect(
-      ranked.skip(10).take(5).every((book) => book.id.startsWith('title-')),
+      ranked.skip(4).take(3).every((book) => book.id.startsWith('title-')),
       isTrue,
     );
     expect(
-      ranked.skip(15).take(5).every((book) => book.id.startsWith('publisher-')),
+      ranked.skip(7).take(3).every((book) => book.id.startsWith('publisher-')),
       isTrue,
     );
   });
 
-  test('優先度3の候補がない場合は優先度2の残りで4行目を補う', () {
+  test('優先度3の候補がない場合は優先度2で枠を補う', () {
     final books = <Book>[
       for (var i = 0; i < 10; i++)
         _book(
@@ -241,7 +241,7 @@ void main() {
 
     final ranked = BookRepository.rankSearchResults(books, '村上春樹');
     expect(
-      ranked.skip(15).take(5).every((book) => book.id.startsWith('title-')),
+      ranked.skip(4).take(6).every((book) => book.id.startsWith('title-')),
       isTrue,
     );
   });
