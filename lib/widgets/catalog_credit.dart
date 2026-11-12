@@ -22,46 +22,55 @@ class CatalogCredit extends StatelessWidget {
   static const _googleBooksUrl = 'https://books.google.com/';
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 4,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    alignment: WrapAlignment.center,
-    children: [
-      if (_rakutenCatalog)
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const RakutenCredit(),
-            TextButton(
-              onPressed: () => launchUrl(Uri.parse(_rakutenUrl)),
-              child: const Text(
-                '書籍情報・書影の一部：楽天ブックス（楽天ウェブサービス）',
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_rakutenCatalog)
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Center(child: RakutenCredit()),
+              TextButton(
+                onPressed: () => launchUrl(Uri.parse(_rakutenUrl)),
+                child: const Text(
+                  '書籍情報・書影の一部：楽天ブックス（楽天ウェブサービス）',
+                ),
               ),
+            ],
+          ),
+        Wrap(
+          spacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          alignment: WrapAlignment.center,
+          children: [
+            if (!_rakutenCatalog)
+              TextButton(
+                onPressed: () => launchUrl(Uri.parse(_sourceUrl)),
+                child: const Text('書誌情報：国立国会図書館サーチ（国立国会図書館）'),
+              ),
+            if (!_rakutenCatalog)
+              TextButton(
+                onPressed: () => launchUrl(Uri.parse(_licenseUrl)),
+                child: const Text('CC BY 4.0'),
+              ),
+            TextButton(
+              onPressed: () => launchUrl(Uri.parse(_openBdUrl)),
+              child: const Text('書影等の一部：openBD'),
+            ),
+            TextButton(
+              onPressed: () => launchUrl(Uri.parse(_openLibraryUrl)),
+              child: const Text('書誌情報の一部：Open Library'),
+            ),
+            TextButton(
+              onPressed: () => launchUrl(Uri.parse(_googleBooksUrl)),
+              child: const Text('書影の一部：Google ブックス'),
             ),
           ],
         ),
-      if (!_rakutenCatalog)
-        TextButton(
-          onPressed: () => launchUrl(Uri.parse(_sourceUrl)),
-          child: const Text('書誌情報：国立国会図書館サーチ（国立国会図書館）'),
-        ),
-      if (!_rakutenCatalog)
-        TextButton(
-          onPressed: () => launchUrl(Uri.parse(_licenseUrl)),
-          child: const Text('CC BY 4.0'),
-        ),
-      TextButton(
-        onPressed: () => launchUrl(Uri.parse(_openBdUrl)),
-        child: const Text('書影等の一部：openBD'),
-      ),
-      TextButton(
-        onPressed: () => launchUrl(Uri.parse(_openLibraryUrl)),
-        child: const Text('書誌情報の一部：Open Library'),
-      ),
-      TextButton(
-        onPressed: () => launchUrl(Uri.parse(_googleBooksUrl)),
-        child: const Text('書影の一部：Google ブックス'),
-      ),
-    ],
+      ],
+    ),
   );
 }
