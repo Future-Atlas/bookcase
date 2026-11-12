@@ -633,7 +633,7 @@ class BookRepository {
         if (seenIds.add(book.id)) collected.add(book);
         continue;
       }
-      if (cursor.finished || upstreamRequests >= 4) break;
+      if (cursor.finished || upstreamRequests >= 2) break;
       if (cursor.offset > 480) {
         cursor.nextVariantOrProvider();
         continue;
@@ -694,7 +694,9 @@ class BookRepository {
           hasMore: incoming.length >= count && results.isNotEmpty,
         );
       } catch (_) {
-        return const BookSearchBatch(books: [], hasMore: false);
+        return const BookSearchBatch(
+          books: [], hasMore: true, temporarilyUnavailable: true,
+        );
       }
     }
     if (page == 1 || clean != _activeQuery || page != _nextSearchPage) {
@@ -714,7 +716,7 @@ class BookRepository {
       }
       // If one field is exhausted, fill its spare slots from the others.
       var attemptsWithoutProgress = 0;
-      while (candidates.length < count && attemptsWithoutProgress < 3) {
+      while (candidates.length < count && attemptsWithoutProgress < 1) {
         var madeProgress = false;
         for (final cursor in cursors) {
           if (candidates.length >= count) break;
