@@ -40,16 +40,17 @@ class BookCoverImage extends StatelessWidget {
         'books.googleusercontent.com',
         'covers.openlibrary.org',
         'images.weserv.nl',
+        'thumbnail.image.rakuten.co.jp',
+        'image.rakuten.co.jp',
       };
       final approvedRakuten = book.coverSource == 'rakuten' &&
           const {
             'thumbnail.image.rakuten.co.jp',
             'image.rakuten.co.jp',
           }.contains(host);
-      if (!excluded.contains(host) &&
-          (approvedRakuten ||
-              book.coverSource == 'openbd' ||
-              host == 'cover.openbd.jp')) {
+      if (approvedRakuten ||
+          (!excluded.contains(host) &&
+              (book.coverSource == 'openbd' || host == 'cover.openbd.jp'))) {
         return candidate;
       }
     }
