@@ -49,7 +49,7 @@ class _FeaturedBooksAdminPanelState extends State<FeaturedBooksAdminPanel> {
     final query = _searchController.text.trim();
     if (query.isEmpty || _searching) return;
     setState(() => _searching = true);
-    final results = await BookRepository().searchBooks(query, page: 1, count: 20);
+    final results = await BookRepository().searchBooks(query, page: 1, count: 10);
     if (!mounted) return;
     setState(() {
       _results = results;
