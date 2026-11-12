@@ -237,7 +237,7 @@ class BookListController extends ChangeNotifier {
       final batch = await _repository.searchBooksPage(
         query,
         page: requestedPage,
-        count: 20,
+        count: 10,
       );
 
       // 入力中に別の検索が始まった場合は、古い結果を画面へ反映しない。

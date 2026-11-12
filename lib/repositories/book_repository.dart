@@ -246,8 +246,8 @@ class BookRepository {
 
     final output = <Book>[...exact.map((item) => item.book)];
     while (output.length < ranked.length) {
-      final slot = output.length % 20;
-      final preferred = slot < 10 ? 0 : (slot < 15 ? 1 : 2);
+      final slot = output.length % 10;
+      final preferred = slot < 4 ? 0 : (slot < 7 ? 1 : 2);
       final fallbackOrder = switch (preferred) {
         0 => const [0, 1, 2, 3],
         1 => const [1, 2, 0, 3],
@@ -662,10 +662,10 @@ class BookRepository {
   }
 
   /// Stable cursor-based pagination with existing title/author/publisher
-  /// priority and 10/5/5 allocation for a 20-book result page. This avoids
-  /// discarding items #11-20 after fetching 20 upstream records for 10 slots.
+  /// priority and 4/3/3 allocation for a 10-book result page. This avoids
+  /// discarding unused upstream records when fewer slots are requested.
   Future<BookSearchBatch> searchBooksPage(
-    String query, {int page = 1, int count = 20}
+    String query, {int page = 1, int count = 10}
   ) async {
     final clean = query.trim();
     if (clean.isEmpty) {
@@ -702,10 +702,12 @@ class BookRepository {
     if (page == 1 || clean != _activeQuery || page != _nextSearchPage) {
       _resetSearch(clean);
     }
+    final firstQuota = (count * 0.4).round();
+    final secondQuota = (count * 0.3).round();
     final quotas = <int>[
-      (count * 0.5).ceil(),
-      (count * 0.25).ceil(),
-      count - (count * 0.5).ceil() - (count * 0.25).ceil(),
+      firstQuota,
+      secondQuota,
+      count - firstQuota - secondQuota,
     ];
     final candidates = <Book>[];
     final cursors = _cursors;

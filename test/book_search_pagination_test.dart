@@ -13,7 +13,7 @@ Book candidate(BookSearchField field,int i){
 }
 
 void main(){
-  test('existing 10/5/5 ranking retains unused raw page results',() async{
+  test('4/3/3 ranking retains unused raw page results',() async{
     final calls=<String>[];
     Future<NdlSearchBatch> fake(BookSearchField field,String term,String provider,int start,int count) async{
       calls.add(field.name+':'+start.toString());
@@ -22,10 +22,10 @@ void main(){
     }
     final repo=BookRepository(fieldFetcher:fake);
     final first=await repo.searchBooksPage('村上春樹',page:1);
-    expect(first.books.length,20);expect(first.hasMore,isTrue);
-    expect(first.books.take(10).every((b)=>b.author=='村上春樹'),isTrue);
+    expect(first.books.length,10);expect(first.hasMore,isTrue);
+    expect(first.books.take(4).every((b)=>b.author=='村上春樹'),isTrue);
     final second=await repo.searchBooksPage('村上春樹',page:2);
-    expect(second.books.length,20);
+    expect(second.books.length,10);
     final ids1=first.books.map((b)=>b.id).toSet();
     final ids2=second.books.map((b)=>b.id).toSet();
     expect(ids1.intersection(ids2),isEmpty);

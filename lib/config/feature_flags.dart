@@ -4,11 +4,9 @@ abstract final class FeatureFlags {
   // tests in place so the feature can be re-enabled with a single flag.
   static const bool subscriptionUiEnabled = false;
 
-  // Favorites are available on the free plan with the existing three-book
-  // limit. Paid-plan UI remains disabled independently.
-  static const bool favoritesUiEnabled = true;
+  // Keep existing favorite records, but do not display favorite entry points.
+  static const bool favoritesUiEnabled = false;
 
-  // Want-to-read also launches alongside subscriptions. Preserve existing
-  // records while the user-facing entry points remain hidden.
-  static const bool wantToReadUiEnabled = subscriptionUiEnabled;
+  // Want-to-read is a standard, free reading-list feature.
+  static const bool wantToReadUiEnabled = true;
 }

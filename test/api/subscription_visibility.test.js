@@ -13,7 +13,7 @@ test('subscription UI remains disabled until legal terms are ready', () => {
   )
 })
 
-test('favorites UI remains available while subscription UI is disabled', () => {
+test('favorites UI is hidden and want-to-read is free with subscription UI disabled', () => {
   const flags = read('lib/config/feature_flags.dart')
   const bookList = read('lib/screens/book_list_screen.dart')
   const profile = read('lib/screens/user_profile_screen.dart')
@@ -21,8 +21,9 @@ test('favorites UI remains available while subscription UI is disabled', () => {
 
   assert.match(
     flags,
-    /static const bool favoritesUiEnabled = true;/,
+    /static const bool favoritesUiEnabled = false;/,
   )
+  assert.match(flags, /static const bool wantToReadUiEnabled = true;/)
   assert.match(bookList, /if \(FeatureFlags\.favoritesUiEnabled\)/)
   assert.match(
     bookList,

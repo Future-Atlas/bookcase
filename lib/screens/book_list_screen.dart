@@ -1680,7 +1680,7 @@ class _BookListScreenState extends State<BookListScreen> {
                     child: OutlinedButton.icon(
                       onPressed: _controller.loadMoreSearchResults,
                       icon: const Icon(Icons.expand_more),
-                      label: const Text('さらに読み込む'),
+                      label: const Text('さらに10件読み込む'),
                     ),
                   ),
                 ),
