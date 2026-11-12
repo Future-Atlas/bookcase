@@ -4,6 +4,32 @@ import 'package:sharemarium/services/timeline_ranking_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('30-day decay halves the reaction score after 30 days', () {
+    final now = DateTime.utc(2026, 11, 12);
+    final post = _post('old', 'other', likes: 10, createdAt: now.subtract(const Duration(days: 30)));
+    expect(TimelineRankingService.decayedScore(post, now), 5.0);
+    expect(TimelineRankingService.decayedScore(_post('new', 'other', likes: 10, createdAt: now), now), 10.0);
+  });
+
+  test('newer post can outrank older post with more raw reactions', () {
+    final now = DateTime.utc(2026, 11, 12);
+    final arranged = TimelineRankingService.arrange(
+      posts: [
+        _post('older', 'other', likes: 15, createdAt: now.subtract(const Duration(days: 60))),
+        _post('newer', 'other', likes: 10, createdAt: now),
+      ],
+      followedProfileIds: const {},
+      now: now,
+    );
+    expect(arranged.map((post) => post.id), ['newer', 'older']);
+  });
+
+  test('future timestamps do not receive a ranking bonus', () {
+    final now = DateTime.utc(2026, 11, 12);
+    final future = _post('future', 'other', likes: 10, createdAt: now.add(const Duration(days: 1)));
+    expect(TimelineRankingService.decayedScore(future, now), 10.0);
+  });
+
   test('followed and popular posts alternate starting with followed', () {
     final arranged = TimelineRankingService.arrange(
       posts: [
@@ -83,6 +109,7 @@ Post _post(
   int likes = 0,
   int loves = 0,
   int sad = 0,
+  DateTime? createdAt,
 }) {
   return Post(
     id: id,
@@ -90,7 +117,7 @@ Post _post(
     bookId: 'book-$id',
     rating: 4,
     comment: 'review',
-    createdAt: DateTime.utc(2026, 8, 27),
+    createdAt: createdAt ?? DateTime.utc(2026, 8, 27),
     username: profileId,
     userAvatarUrl: '',
     bookTitle: id,
