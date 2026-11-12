@@ -9,8 +9,12 @@ class CatalogCredit extends StatelessWidget {
   static const _licenseUrl = 'https://creativecommons.org/licenses/by/4.0/deed.ja';
   static const _openBdUrl = 'https://openbd.jp/';
   static const _rakutenUrl = 'https://webservice.rakuten.co.jp/';
-  static const _stagingRakuten = bool.fromEnvironment(
-    'STAGING_RAKUTEN_CATALOG', defaultValue: false,
+  static const _rakutenCatalog = bool.fromEnvironment(
+    'RAKUTEN_CATALOG',
+    defaultValue: bool.fromEnvironment(
+      'STAGING_RAKUTEN_CATALOG',
+      defaultValue: false,
+    ),
   );
   static const _openLibraryUrl = 'https://openlibrary.org/';
   static const _googleBooksUrl = 'https://books.google.com/';
@@ -21,19 +25,21 @@ class CatalogCredit extends StatelessWidget {
     crossAxisAlignment: WrapCrossAlignment.center,
     alignment: WrapAlignment.center,
     children: [
-      if (_stagingRakuten)
+      if (_rakutenCatalog)
         TextButton(
           onPressed: () => launchUrl(Uri.parse(_rakutenUrl)),
           child: const Text('書誌情報の一部：楽天ブックス（楽天ウェブサービス）'),
         ),
-      TextButton(
-        onPressed: () => launchUrl(Uri.parse(_sourceUrl)),
-        child: const Text('書誌情報：国立国会図書館サーチ（国立国会図書館）'),
-      ),
-      TextButton(
-        onPressed: () => launchUrl(Uri.parse(_licenseUrl)),
-        child: const Text('CC BY 4.0'),
-      ),
+      if (!_rakutenCatalog)
+        TextButton(
+          onPressed: () => launchUrl(Uri.parse(_sourceUrl)),
+          child: const Text('書誌情報：国立国会図書館サーチ（国立国会図書館）'),
+        ),
+      if (!_rakutenCatalog)
+        TextButton(
+          onPressed: () => launchUrl(Uri.parse(_licenseUrl)),
+          child: const Text('CC BY 4.0'),
+        ),
       TextButton(
         onPressed: () => launchUrl(Uri.parse(_openBdUrl)),
         child: const Text('書影等の一部：openBD'),

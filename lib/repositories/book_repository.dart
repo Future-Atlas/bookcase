@@ -26,7 +26,7 @@ typedef NdlHomeFetcher = Future<NdlSearchBatch> Function({
   required int count,
 });
 
-/// Injection points keep the staging-only Rakuten transport/paging testable.
+/// Injection points keep the Rakuten transport/paging testable without network.
 typedef StagingRakutenGenreFetcher = Future<List<Book>> Function(
   String genre, int upstreamPage, int count,
 );
@@ -59,7 +59,13 @@ class BookRepository {
     this.stagingRakutenKeywordFetcher,
     bool? stagingRakuten,
   }) : _stagingRakuten = stagingRakuten ??
-         const bool.fromEnvironment('STAGING_RAKUTEN_CATALOG', defaultValue: false);
+         const bool.fromEnvironment(
+           'RAKUTEN_CATALOG',
+           defaultValue: bool.fromEnvironment(
+             'STAGING_RAKUTEN_CATALOG',
+             defaultValue: false,
+           ),
+         );
 
   final bool allowAdultContent;
   final NdlFieldFetcher? fieldFetcher;
@@ -263,8 +269,8 @@ class BookRepository {
   Future<List<Book>> fetchBooksByGenre(String genre, {int page = 1}) async {
     if (page < 1 || page > 50) return const <Book>[];
     try {
-      // Only the staging build enables Rakuten; all other builds preserve
-      // their existing NDL/Open Library catalog and Supabase popular ranking.
+      // Production and staging Cloudflare builds explicitly enable Rakuten.
+      // Other builds preserve the NDL/Open Library rollback path.
       if (_stagingRakuten) {
         return await _fetchStagingRakutenSection(genre, page: page);
       }

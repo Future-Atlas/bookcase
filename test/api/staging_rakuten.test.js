@@ -84,10 +84,10 @@ test("retailer metadata endpoint has strict query allowlist and pagination caps"
   assert.equal(upstreamCalls, 0);
 });
 
-test("fail-closed on bad method, wrong environment, missing credentials or missing quota", async () => {
+test("production is approved while bad methods, unknown environments and missing credentials fail closed", async () => {
   const configurations = [
     [{ ...env }, "POST", 405],
-    [{ ...env, APP_ENV: "production" }, "GET", 410],
+    [{ ...env, APP_ENV: "preview" }, "GET", 410],
     [{ ...env, RAKUTEN_ACCESS_KEY: "" }, "GET", 503],
   ];
   for (const [candidate, method, expected] of configurations) {
@@ -103,6 +103,13 @@ test("fail-closed on bad method, wrong environment, missing credentials or missi
     method: "GET", query: { booksGenreId: "001" },
   }, res);
   assert.equal(res.statusCode, 503);
+
+  const production = recorder();
+  await createHandler({
+    env: { ...env, APP_ENV: "production" },
+    request: async () => Response.json({ Items: [] }),
+  })({ method: "GET", query: { booksGenreId: "001" } }, production);
+  assert.equal(production.statusCode, 200);
 });
 
 test("upstream errors and queue limits are uncached and do not leak secrets", async () => {
