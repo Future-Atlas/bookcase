@@ -81,10 +81,11 @@ class NdlApi {
         provider: provider, start: start, count: count,
       )).timeout(const Duration(seconds: 22));
       if (response.statusCode != 200) {
-        return NdlSearchBatch(
-          books: const [], rawCount: 0, hasMore: false,
-          temporarilyUnavailable: response.statusCode == 429 ||
-              response.statusCode >= 500,
+        // A proxy or catalog HTTP error is never proof that no books match.
+        // In particular, 400/403 responses must not be shown as empty data.
+        return const NdlSearchBatch(
+          books: [], rawCount: 0, hasMore: false,
+          temporarilyUnavailable: true,
         );
       }
       return parseSearchPage(utf8.decode(response.bodyBytes),
@@ -213,6 +214,12 @@ class NdlApi {
     String genre = '',
   }) {
     final document = XmlDocument.parse(xml);
+    // Cloudflare/NDL can return a 200 HTML error page or a valid XML error
+    // body. Neither is a legitimate empty OpenSearch response.
+    if (document.findAllElements('rss').isEmpty ||
+        document.findAllElements('channel').isEmpty) {
+      throw const FormatException('Expected an NDL RSS OpenSearch response');
+    }
     final items = document.findAllElements('item').toList(growable: false);
     final result = <Book>[];
     final seen = <String>{};
