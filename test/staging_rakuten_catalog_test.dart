@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sharemarium/models/book.dart';
+import 'package:sharemarium/api/rakuten_api.dart';
 import 'package:sharemarium/repositories/book_repository.dart';
 
 Book sample(int id, {bool restricted = false, String? title}) => Book(
