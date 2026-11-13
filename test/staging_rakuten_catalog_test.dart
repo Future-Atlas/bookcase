@@ -77,6 +77,42 @@ void main() {
   });
 
 
+  test('partial upstream failure preserves books and retries the same raw page', () async {
+    final requested = <int>[];
+    var failOnce = true;
+    final repo = BookRepository(
+      stagingRakuten: true,
+      rakutenBookEnricher: (books) async => books,
+      rakutenKeywordPageFetcher: (query, upstreamPage, count, fields) async {
+        requested.add(upstreamPage);
+        if (failOnce) {
+          failOnce = false;
+          return RakutenKeywordSearchBatch(
+            books: List.generate(7, (i) => sample(i + 1, title: '芥川 $i')),
+            hasMore: true,
+            temporarilyUnavailable: true,
+          );
+        }
+        if (upstreamPage == 1) {
+          return RakutenKeywordSearchBatch(
+            books: List.generate(13, (i) => sample(i + 1, title: '芥川 $i')),
+            hasMore: false,
+          );
+        }
+        fail('A partial response should retry upstream page 1');
+      },
+    );
+    final first = await repo.searchBooksPage('芥川', page: 1, count: 10);
+    expect(first.books.length, 7);
+    expect(first.hasMore, true);
+    expect(first.temporarilyUnavailable, false);
+    final second = await repo.searchBooksPage('芥川', page: 2, count: 10);
+    expect(second.books.length, 6);
+    expect(second.hasMore, false);
+    expect([...first.books, ...second.books].map((b) => b.id).toSet().length, 13);
+    expect(requested, [1, 1], reason: 'Do not skip an incomplete upstream page');
+  });
+
   test('staging shows 27 fetched books in three cached nine-card pages', () async {
     final calls = <String>[];
     final repo = BookRepository(
