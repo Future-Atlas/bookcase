@@ -119,8 +119,10 @@ class _PostComposerPageState extends State<_PostComposerPage> {
               comment: review,
               isSpoiler: isSpoiler,
             );
-    } catch (_) {
+    } catch (e) {
       success = false;
+      // Errors from preflight checks must never be left opaque.
+      widget.service.lastPostSaveError ??= '保存処理中に予期しないエラーが発生しました。';
     }
     if (!mounted) return;
     if (success) {
@@ -128,7 +130,13 @@ class _PostComposerPageState extends State<_PostComposerPage> {
     } else {
       setState(() => isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('保存できませんでした。もう一度お試しください。')),
+        SnackBar(
+          content: Text(
+            widget.service.lastPostSaveError ??
+                '保存できませんでした。通信状態を確認してもう一度お試しください。',
+          ),
+          duration: const Duration(seconds: 6),
+        ),
       );
     }
   }
