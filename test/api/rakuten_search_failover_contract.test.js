@@ -14,8 +14,10 @@ test('production Rakuten API errors propagate rather than masquerade as no match
 
 test('search continues with NDL when production Rakuten returns no usable books', () => {
   const repo = read('lib/repositories/book_repository.dart');
-  assert.match(repo, /if \(results\.isNotEmpty \|\| stagingRakutenKeywordFetcher != null\)/);
-  assert.match(repo, /Fall through to the ordinary 4\/3\/3 NDL search/);
+  assert.match(repo, /else if \(!cursor\.hasMoreUpstream\)/);
+  assert.match(repo, /No Rakuten books at all: search the alternative catalog/);
+  assert.match(repo, /final batch = rakutenKeywordPageFetcher != null/);
+  assert.match(repo, /cursor\.ready\.isNotEmpty \|\| cursor\.hasMoreUpstream/);
   assert.match(repo, /final firstQuota = \(count \* 0\.4\)\.round\(\)/);
   assert.match(repo, /temporarilyUnavailable: true/);
 });
