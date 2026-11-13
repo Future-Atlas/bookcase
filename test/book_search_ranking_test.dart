@@ -109,6 +109,22 @@ void main() {
     expect(calls, ['author', 'title']);
   });
 
+  test('一部フィールドが失敗したページは継続可能で失敗情報を維持する', () async {
+    final batch = await RakutenApi.searchByKeywordPage(
+      keyword: '芥川',
+      count: 10,
+      searchFields: const ['author', 'title', 'publisherName'],
+      fieldSearch: (field, term, page, limit) async {
+        if (field == 'title') throw StateError('temporary outage');
+        return [_book(id: 'one', title: '羅生門', author: '芥川龍之介',
+            publisher: '出版社')];
+      },
+    );
+    expect(batch.books.length, 1);
+    expect(batch.temporarilyUnavailable, true);
+    expect(batch.hasMore, true, reason: 'Incomplete search is not exhausted');
+  });
+
   test('楽天検索は全フィールド障害時にNDLの代替検索へ例外を返す', () async {
     await expectLater(
       RakutenApi.searchByKeyword(
