@@ -146,6 +146,20 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
     }
   }
 
+  void _retryFailedPage() {
+    if (!_searchUnavailable || _isSearching || _isLoadingMore) return;
+    if (_results.isEmpty) {
+      _search(_searchController.text.trim());
+      return;
+    }
+    // Keep the existing results and repeat the page that did not load.
+    setState(() {
+      _hasMore = true;
+      _searchUnavailable = false;
+    });
+    _loadMore();
+  }
+
   Future<void> _markAsRead(Book book) async {
     final service = Provider.of<SupabaseService>(context, listen: false);
     if (await service.isBookReadByCurrentUser(bookId: book.id)) return;
@@ -299,7 +313,7 @@ class _ProfileBookSearchScreenState extends State<ProfileBookSearchScreen> {
           return Center(
             child: OutlinedButton.icon(
               onPressed: _searchUnavailable
-                  ? () => _search(_searchController.text.trim())
+                  ? _retryFailedPage
                   : _loadMore,
               icon: Icon(_searchUnavailable ? Icons.refresh : Icons.expand_more),
               label: Text(_searchUnavailable ? '再試行' : 'さらに10件読み込む'),

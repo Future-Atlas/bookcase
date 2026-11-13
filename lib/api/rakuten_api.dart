@@ -17,10 +17,14 @@ class RakutenKeywordSearchBatch {
   const RakutenKeywordSearchBatch({
     required this.books,
     required this.hasMore,
+    this.temporarilyUnavailable = false,
   });
 
   final List<Book> books;
   final bool hasMore;
+  /// Some fields failed. Keep successful candidates and retry this upstream
+  /// window later instead of treating incomplete results as exhaustive.
+  final bool temporarilyUnavailable;
 }
 
 class RakutenApi {
@@ -460,7 +464,8 @@ class RakutenApi {
     if (!succeeded && failure != null) throw failure!;
     return RakutenKeywordSearchBatch(
       books: merged.values.toList(growable: false),
-      hasMore: potentiallyMore && page < 100,
+      hasMore: (potentiallyMore || failure != null) && page < 100,
+      temporarilyUnavailable: failure != null,
     );
   }
 

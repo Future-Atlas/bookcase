@@ -23,6 +23,9 @@ class BookListController extends ChangeNotifier {
   bool isLoadingTimeline = true;
 
   bool isSearching = false;
+  // Invalidate in-flight searches as soon as input changes, even if the
+  // user changes from A to B and back to A before the first request finishes.
+  int _searchGeneration = 0;
   bool hasMoreSearch = true;
   bool searchTemporarilyUnavailable = false;
   int searchPage = 1;
@@ -136,6 +139,7 @@ class BookListController extends ChangeNotifier {
   }
 
   void _onSearchChanged() {
+    _searchGeneration++;
     searchQuery = searchController.text.trim();
     _searchDebounce?.cancel();
 
@@ -166,6 +170,7 @@ class BookListController extends ChangeNotifier {
 
   void setUserSearchMode(bool enabled) {
     if (userSearchMode == enabled) return;
+    _searchGeneration++;
     userSearchMode = enabled;
     _searchDebounce?.cancel();
     isSearching = false;
@@ -212,6 +217,7 @@ class BookListController extends ChangeNotifier {
   }
 
   Future<void> _searchBooks({required bool reset}) async {
+    final generation = _searchGeneration;
     final query = searchQuery.trim();
     if (query.isEmpty || userSearchMode) {
       isSearching = false;
@@ -241,10 +247,12 @@ class BookListController extends ChangeNotifier {
       );
 
       // 入力中に別の検索が始まった場合は、古い結果を画面へ反映しない。
-      if (userSearchMode || query != searchQuery.trim()) return;
+      if (generation != _searchGeneration ||
+          userSearchMode || query != searchQuery.trim()) return;
       if (batch.temporarilyUnavailable) {
         searchTemporarilyUnavailable = true;
-        hasMoreSearch = false;
+        // Keep the last successful page and permit retrying the failed page.
+        hasMoreSearch = true;
         return;
       }
       searchTemporarilyUnavailable = false;
@@ -258,12 +266,14 @@ class BookListController extends ChangeNotifier {
       searchPage = requestedPage + 1;
       hasMoreSearch = batch.hasMore;
     } catch (_) {
-      if (!userSearchMode && query == searchQuery.trim()) {
+      if (generation == _searchGeneration &&
+          !userSearchMode && query == searchQuery.trim()) {
         searchTemporarilyUnavailable = true;
-        hasMoreSearch = false;
+        hasMoreSearch = true;
       }
     } finally {
-      if (!userSearchMode && query == searchQuery.trim()) {
+      if (generation == _searchGeneration &&
+          !userSearchMode && query == searchQuery.trim()) {
         isSearching = false;
         notifyListeners();
       }
@@ -272,7 +282,8 @@ class BookListController extends ChangeNotifier {
 
   Future<void> retrySearchBooks() async {
     if (searchQuery.isEmpty || userSearchMode || isSearching) return;
-    await _searchBooks(reset: true);
+    // A failed load-more should NOT throw away the already displayed books.
+    await _searchBooks(reset: searchResults.isEmpty);
   }
 
   Future<void> loadMoreSearchResults() async {
