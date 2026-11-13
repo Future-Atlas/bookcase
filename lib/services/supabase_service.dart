@@ -150,6 +150,29 @@ class SupabaseService extends ChangeNotifier {
   factory SupabaseService() => _instance;
   SupabaseService._internal();
 
+  /// Short, user-safe reason for the latest post-save failure. Never expose
+  /// raw database details, credentials or free-form server messages in UI.
+  String? lastPostSaveError;
+
+  String _postSaveErrorFromException(Object error) {
+    if (error is PostgrestException) {
+      switch (error.code) {
+        case '23505':
+          return 'この書籍はすでに投稿済みです。マイページから既存の投稿を確認してください。';
+        case '23514':
+          return '評価または投稿内容がデータベースの条件に一致しません。管理者は本番DBの制約・マイグレーションを確認してください。';
+        case '42501':
+          return '投稿する権限を確認できませんでした。再ログイン後も続く場合はお問い合わせください。';
+        case '42703':
+        case 'PGRST204':
+          return '本番データベースの投稿用カラムが更新されていない可能性があります。管理者にお問い合わせください。';
+        case '23503':
+          return 'アカウントのプロフィール情報を確認できませんでした。再ログインしてお試しください。';
+      }
+    }
+    return '通信または保存処理でエラーが発生しました。通信状態を確認して再試行してください。';
+  }
+
   bool _isInitialized = false;
   SupabaseClient? _client;
   StreamSubscription<AuthState>? _authStateSubscription;
@@ -3761,14 +3784,14 @@ class SupabaseService extends ChangeNotifier {
     required String comment,
     required bool isSpoiler,
   }) async {
+    lastPostSaveError = null;
     final profileId = activeProfileId;
-    if (profileId.isEmpty) {
-      debugPrint('Cannot create post: no authenticated user.');
+    if (profileId.isEmpty || !_isInitialized || _client == null) {
+      lastPostSaveError = 'ログイン状態を確認できませんでした。再ログインしてお試しください。';
       return false;
     }
-    if (!_isValidPostRating(rating)) return false;
-    if (await isBookReadByCurrentUser(bookId: book.id)) {
-      debugPrint('Cannot create post: this user already posted this book.');
+    if (!_isValidPostRating(rating)) {
+      lastPostSaveError = '評価は0.0〜5.0の範囲で0.1刻みにしてください。';
       return false;
     }
     final commentError = InputSecurityService.validateSafeText(
@@ -3778,7 +3801,7 @@ class SupabaseService extends ChangeNotifier {
       maxLength: 1000,
     );
     if (commentError != null) {
-      debugPrint(commentError);
+      lastPostSaveError = commentError;
       return false;
     }
 
@@ -3787,47 +3810,60 @@ class SupabaseService extends ChangeNotifier {
       allowNewLines: true,
       maxLength: 1000,
     );
-
+    if (normalizedComment.isEmpty) {
+      lastPostSaveError = '感想を入力してください。';
+      return false;
+    }
     final isAgeRestricted =
         ContentSafetyService.isAdultBook(book) ||
         ContentSafetyService.containsAdultContentTerms([normalizedComment]);
     if (isAgeRestricted && !await canViewAdultContent()) {
-      debugPrint('Cannot create an age-restricted post for a minor.');
+      lastPostSaveError = 'この投稿は年齢制限により登録できません。';
       return false;
     }
-    if (_isInitialized && _client != null) {
-      try {
-        await _client!.from('posts').insert({
-          'profile_id': profileId,
-          'book_id': book.id,
-          'book_title': book.title,
-          'book_author': book.author,
-          'book_publisher': book.publisher,
-          // Product descriptions can be Rakuten-owned API data. Do not create
-          // new permanent copies in public posts; the user-authored comment
-          // and book ISBN/title/author remain intact.
-          'book_description': '',
-          'book_metadata_source': book.catalogSource,
-          'book_metadata_observed_at': book.catalogFetchedAt
-              ?.toUtc()
-              .toIso8601String(),
-          'is_age_restricted': isAgeRestricted,
-          'rating': rating,
-          'comment': normalizedComment,
-          'is_spoiler': isSpoiler,
-        });
 
-        // Any completed post is also tracked in collections as 'read'.
-        await _upsertReadCollection(profileId: profileId, bookId: book.id);
-
-        notifyListeners();
-        return true;
-      } catch (e) {
-        debugPrint('Error inserting post in Supabase: $e');
+    try {
+      // A separate read-collection record is not proof that a review was
+      // posted; only an existing post should block creating a first review.
+      final previous = await _client!
+          .from('posts')
+          .select('id')
+          .eq('profile_id', profileId)
+          .eq('book_id', book.id)
+          .limit(1);
+      if ((previous as List<dynamic>).isNotEmpty) {
+        lastPostSaveError = 'この書籍はすでに投稿済みです。マイページから既存の投稿を確認してください。';
+        return false;
       }
+      await _client!.from('posts').insert({
+        'profile_id': profileId,
+        'book_id': book.id,
+        'book_title': book.title,
+        'book_author': book.author,
+        'book_publisher': book.publisher,
+        // Product descriptions can be Rakuten-owned API data. Do not create
+        // new permanent copies in public posts.
+        'book_description': '',
+        'book_metadata_source': book.catalogSource,
+        'book_metadata_observed_at': book.catalogFetchedAt
+            ?.toUtc()
+            .toIso8601String(),
+        'is_age_restricted': isAgeRestricted,
+        'rating': rating,
+        'comment': normalizedComment,
+        'is_spoiler': isSpoiler,
+      });
+
+      // The database AFTER INSERT trigger synchronizes 'read' collections.
+      // Do not write the same collection a second time: if that extra write
+      // fails, a successfully published review would be shown as a failure.
+      notifyListeners();
+      return true;
+    } catch (e) {
+      lastPostSaveError = _postSaveErrorFromException(e);
+      debugPrint('Error inserting post in Supabase: $e');
+      return false;
     }
-    debugPrint('Supabase not initialized – post not created.');
-    return false;
   }
 
   Future<bool> deleteOwnPost(String postId) async {
@@ -3856,11 +3892,13 @@ class SupabaseService extends ChangeNotifier {
     required String comment,
     required bool isSpoiler,
   }) async {
+    lastPostSaveError = null;
     final profileId = activeProfileId;
     if (profileId.isEmpty ||
         post.profileId != profileId ||
         !_isInitialized ||
         _client == null) {
+      lastPostSaveError = 'ログイン状態または編集対象の投稿を確認できませんでした。';
       return false;
     }
 
@@ -3870,19 +3908,28 @@ class SupabaseService extends ChangeNotifier {
       allowNewLines: true,
       maxLength: 1000,
     );
-    if (commentError != null) return false;
+    if (commentError != null) {
+      lastPostSaveError = commentError;
+      return false;
+    }
 
     final trimmedComment = InputSecurityService.normalizeText(
       comment,
       allowNewLines: true,
       maxLength: 1000,
     );
-    if (trimmedComment.isEmpty || !_isValidPostRating(rating)) return false;
+    if (trimmedComment.isEmpty || !_isValidPostRating(rating)) {
+      lastPostSaveError = '感想と評価を確認してください。';
+      return false;
+    }
 
     final isAgeRestricted =
         post.isAgeRestricted ||
         ContentSafetyService.containsAdultContentTerms([trimmedComment]);
-    if (isAgeRestricted && !await canViewAdultContent()) return false;
+    if (isAgeRestricted && !await canViewAdultContent()) {
+      lastPostSaveError = 'この投稿は年齢制限により更新できません。';
+      return false;
+    }
 
     try {
       final editedAt = DateTime.now().toUtc().toIso8601String();
@@ -3899,9 +3946,14 @@ class SupabaseService extends ChangeNotifier {
           .eq('profile_id', profileId)
           .select('id');
       final updated = (updatedRows as List<dynamic>).isNotEmpty;
-      if (updated) notifyListeners();
+      if (updated) {
+        notifyListeners();
+      } else {
+        lastPostSaveError = '投稿が見つからないか、編集権限がありません。';
+      }
       return updated;
     } catch (e) {
+      lastPostSaveError = _postSaveErrorFromException(e);
       debugPrint('Error updating own post in Supabase: $e');
       return false;
     }
