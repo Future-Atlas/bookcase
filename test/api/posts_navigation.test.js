@@ -12,7 +12,9 @@ test("timeline, home and profile are provided by the persistent footer", () => {
   const timeline = read("lib/screens/public_post_routes.dart");
   const footer = read("lib/widgets/primary_bottom_navigation.dart");
 
-  assert.match(main, /bottomNavigationBar: _currentScreenIndex == 0 \|\| _currentScreenIndex == 1/);
+  assert.match(main, /bottomNavigationBar: _currentScreenIndex == 0 \|\|\s*_currentScreenIndex == 1/);
+  assert.match(main, /_currentScreenIndex == 5 && _viewedProfileId != null/);
+  assert.match(main, /accentColor: headerColor/);
   assert.match(main, /onTimeline: \(\) => Navigator\.of\(context\)\.pushNamed\('\/posts'\)/);
   assert.match(timeline, /bottomNavigationBar: PrimaryBottomNavigation\(/);
   assert.match(footer, /const Text\('▽'/);
@@ -47,4 +49,19 @@ test("home CTA uses タイムラインを見る and routes to the existing publi
   assert.match(home, /if \(!embedded\) \{\s*return SizedBox\(/);
   // No extra login or authentication requirement is introduced by the shortcut.
   assert.doesNotMatch(link, /isAuthenticated|login|token|authGate/);
+});
+
+test("other users retain the footer in both main shell and standalone profile routes", () => {
+  const main = read("lib/main.dart");
+  const profile = read("lib/screens/user_profile_screen.dart");
+  const footer = read("lib/widgets/primary_bottom_navigation.dart");
+
+  assert.match(main, /_currentScreenIndex == 5 && _viewedProfileId != null/);
+  assert.match(main, /_currentScreenIndex == 1 \? 2 : -1/);
+  assert.match(profile, /bottomNavigationBar: widget\.showAppBar && widget\.profileId != null/);
+  assert.match(profile, /selectedIndex: -1/);
+  assert.match(profile, /accentColor: profileHeaderColor/);
+  assert.match(profile, /pushNamedAndRemoveUntil\('\/posts'/);
+  assert.match(profile, /pushNamedAndRemoveUntil\('\/mypage'/);
+  assert.match(footer, /height: 64/);
 });
