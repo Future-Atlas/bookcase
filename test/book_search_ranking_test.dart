@@ -376,7 +376,7 @@ void main() {
       _book(
         id: 'weak-author',
         title: '別の作品',
-        author: '羅生門という言葉の歴史と研究',
+        author: '日本における羅生門という言葉の歴史と研究',
         publisher: '出版社',
         reviewCount: 999,
       ),
@@ -390,7 +390,7 @@ void main() {
         id: 'weak-publisher',
         title: '別の作品集',
         author: '別の著者',
-        publisher: '羅生門研究会の出版社',
+        publisher: '日本羅生門研究会の出版社',
         reviewCount: 1000,
       ),
     ], '羅生門');
