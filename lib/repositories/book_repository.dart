@@ -741,7 +741,14 @@ class BookRepository {
           if (!identical(cursor, _rakutenKeywordCursor)) {
             return const BookSearchBatch(books: [], hasMore: false);
           }
-          cursor.upstreamPage++;
+          // Only advance once every field for this upstream page completed.
+          // A partial failure must be retried at the SAME upstream page:
+          // otherwise a strong title/author result can be skipped forever.
+          if (!batch.temporarilyUnavailable) {
+            cursor.upstreamPage++;
+          } else {
+            failed = true;
+          }
           cursor.hasMoreUpstream = batch.hasMore;
           final enriched = _filterForViewer(
             await _enrichRakutenBooks(batch.books),
@@ -750,6 +757,7 @@ class BookRepository {
           for (final book in ordered) {
             if (cursor.seen.add(book.id)) cursor.ready.add(book);
           }
+          if (batch.temporarilyUnavailable) break;
         }
       } catch (_) {
         failed = true;
