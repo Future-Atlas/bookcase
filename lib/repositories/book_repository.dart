@@ -187,7 +187,7 @@ class BookRepository {
       return _RankedBook(book: book, priorityIndex: 3, quality: 0);
     }
     final tokens = rawQuery
-        .split(RegExp(r'[\\s\\u3000・･]+'))
+        .split(RegExp(r'[\s\u3000・･]+'))
         .map(_normalizeForSearch)
         .where((token) => token.isNotEmpty)
         .toList();
