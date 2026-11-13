@@ -11,6 +11,18 @@ void debugPrint(String? message, {int? wrapWidth}) {
   debugLog(message, wrapWidth: wrapWidth);
 }
 
+/// Raw candidate window for a keyword search. There may be more results
+/// even when the merged, deduplicated count is below the display page size.
+class RakutenKeywordSearchBatch {
+  const RakutenKeywordSearchBatch({
+    required this.books,
+    required this.hasMore,
+  });
+
+  final List<Book> books;
+  final bool hasMore;
+}
+
 class RakutenApi {
   static const String _proxyBaseUrl = String.fromEnvironment(
     'RAKUTEN_PROXY_BASE_URL',
@@ -347,7 +359,30 @@ class RakutenApi {
   ///
   /// A no-match field or one failing upstream must never erase books obtained
   /// from other fields. If all attempts fail, rethrow so NDL can take over.
+  /// Compatibility API; the page-aware repository uses searchByKeywordPage.
   static Future<List<Book>> searchByKeyword({
+    required String keyword,
+    int page = 1,
+    int count = 10,
+    List<String>? searchFields,
+    Future<List<Book>> Function(
+      String field, String variant, int page, int count
+    )? fieldSearch,
+  }) async => (await searchByKeywordPage(
+    keyword: keyword,
+    page: page,
+    count: count,
+    searchFields: searchFields,
+    fieldSearch: fieldSearch,
+  )).books;
+
+  /// Fetch full upstream windows for each field, not 4/3/3 individual API
+  /// limits. 4/3/3 is the DISPLAY allocation; if publisher returns nothing,
+  /// other matching title/author candidates must fill the vacant slots.
+  ///
+  /// With 10 hits per field, an individual full field window means another
+  /// upstream page may exist even when deduplication/filtering yields <10.
+  static Future<RakutenKeywordSearchBatch> searchByKeywordPage({
     required String keyword,
     int page = 1,
     int count = 10,
@@ -365,62 +400,68 @@ class RakutenApi {
       fields.addAll(const ['title', 'author', 'publisherName']);
     }
     final variants = buildSearchKeywordVariants(keyword);
-    if (variants.isEmpty) return const <Book>[];
-    final result = <String, Book>{};
-    final quota = <int>[
-      (count * 0.4).round(),
-      (count * 0.3).round(),
-      count - (count * 0.4).round() - (count * 0.3).round(),
-    ];
+    if (variants.isEmpty) {
+      return const RakutenKeywordSearchBatch(books: [], hasMore: false);
+    }
+
+    final merged = <String, Book>{};
     var requests = 0;
-    Object? failure;
     var succeeded = false;
-    Future<bool> queryField(String field, String variant, int limit) async {
+    var potentiallyMore = false;
+    Object? failure;
+
+    Future<bool> queryField(String field, String term) async {
       if (requests >= 5) return false;
       requests++;
       try {
         final books = fieldSearch != null
-            ? await fieldSearch(field, variant, page, limit)
+            ? await fieldSearch(field, term, page, count)
             : await searchBySelectedGenre(
-                selectedGenre: variant,
+                selectedGenre: term,
                 page: page,
-                count: limit,
+                count: count,
                 keywordSearch: true,
                 searchField: field,
                 sort: 'standard',
                 throwOnSearchFailure: true,
               );
         succeeded = true;
+        // Look at each raw field response before deduplication. A page with
+        // 10 author results and 0 publisher results can still continue.
+        if (books.length >= count) potentiallyMore = true;
         for (final book in books) {
-          result.putIfAbsent(book.id, () => book);
+          merged.putIfAbsent(book.id, () => book);
         }
         return true;
       } catch (e) {
         failure = e;
-        // Further calls within the same browser are likely suppressed by the
-        // global cooldown; preserve any successful field results instead.
         return false;
       }
     }
 
-    for (var i = 0; i < fields.length && requests < 5; i++) {
-      final limit = i < quota.length ? quota[i] : 1;
-      if (limit <= 0) continue;
-      if (!await queryField(fields[i], variants.first, limit)) break;
-    }
-
-    // Try a maximum of two spelling fallbacks, never an unbounded
-    // fields x variants Cartesian product.
-    if (failure == null && result.length < count && variants.length > 1) {
-      for (final alternate in variants.skip(1)) {
-        if (requests >= 5 || result.length >= count) break;
-        if (!await queryField(fields.first, alternate, count - result.length)) {
-          break;
-        }
+    for (final field in fields) {
+      if (requests >= 5) break;
+      if (!await queryField(field, variants.first)) {
+        // A quota failure implies further requests from this browser are
+        // likely suppressed. Keep any successful field results.
+        break;
       }
     }
+
+    // Try at most two spelling variants only when insufficient candidates.
+    // Do not issue the full 3 fields x N variants Cartesian product.
+    if (failure == null && merged.length < count && variants.length > 1) {
+      for (final alternate in variants.skip(1)) {
+        if (requests >= 5 || merged.length >= count) break;
+        if (!await queryField(fields.first, alternate)) break;
+      }
+    }
+
     if (!succeeded && failure != null) throw failure!;
-    return result.values.toList(growable: false);
+    return RakutenKeywordSearchBatch(
+      books: merged.values.toList(growable: false),
+      hasMore: potentiallyMore && page < 100,
+    );
   }
 
 }
