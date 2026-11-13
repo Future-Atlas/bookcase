@@ -178,64 +178,69 @@ class BookRepository {
         BookSearchField.publisher => book.publisher,
       };
 
+  /// Rank relevance independently of the field query order. Input-script
+  /// heuristics are useful for deciding which API field to fetch first, but
+  /// they must not demote an exact/prefix title behind a weak author match.
   static _RankedBook _rankedBook(Book book, String rawQuery) {
     final query = _normalizeForSearch(rawQuery);
     if (query.isEmpty) {
       return _RankedBook(book: book, priorityIndex: 3, quality: 0);
     }
     final tokens = rawQuery
-        .split(RegExp(r'[\s\u3000・･]+'))
+        .split(RegExp(r'[\\s\\u3000・･]+'))
         .map(_normalizeForSearch)
         .where((token) => token.isNotEmpty)
         .toList();
     final priorities = searchFieldPriority(rawQuery);
-    final qualities = <int>[];
-    for (final field in priorities) {
-      qualities.add(
+    final qualities = [
+      for (final field in priorities)
         _matchQuality(
           _normalizeForSearch(_fieldValue(book, field)),
           query,
           tokens,
         ),
-      );
-    }
+    ];
 
-    // 指定どおり、スペースと中点だけを除いた完全一致は入力分類より常に優先する。
+    // A full-field match wins regardless of input-script heuristics.
     final exactQuery = _normalizeForExact(rawQuery);
-    for (var index = 0; index < qualities.length; index++) {
+    for (var index = 0; index < priorities.length; index++) {
       if (_normalizeForExact(_fieldValue(book, priorities[index])) ==
           exactQuery) {
         return _RankedBook(
-          book: book,
-          priorityIndex: index,
-          quality: qualities[index],
-          isExact: true,
+          book: book, priorityIndex: index, quality: 4, isExact: true,
         );
       }
     }
+
+    // For non-exact matches, choose the strongest matching field.
+    // Query classification is only a tie-break, not an absolute override.
+    var bestQuality = 0;
+    var bestPriority = 3;
     for (var index = 0; index < qualities.length; index++) {
-      if (qualities[index] > 0) {
-        return _RankedBook(
-          book: book,
-          priorityIndex: index,
-          quality: qualities[index],
-        );
+      if (qualities[index] > bestQuality) {
+        bestQuality = qualities[index];
+        bestPriority = index;
       }
     }
-    return _RankedBook(book: book, priorityIndex: 3, quality: 0);
+    return _RankedBook(
+      book: book, priorityIndex: bestPriority, quality: bestQuality,
+    );
   }
 
+  /// Order by match quality first, then use 4/3/3 as a soft diversity target
+  /// among EQUAL-quality candidates. Never fill a publisher slot with a weak
+  /// match ahead of a stronger author/title match.
   static List<Book> rankSearchResults(Iterable<Book> source, String query) {
     final ranked = source.map((book) => _rankedBook(book, query)).toList();
 
     int compareMatches(_RankedBook a, _RankedBook b) {
-      final quality = b.quality.compareTo(a.quality);
-      if (quality != 0) return quality;
       final reviews = b.book.reviewCount.compareTo(a.book.reviewCount);
       if (reviews != 0) return reviews;
       final rating = b.book.ratingAvg.compareTo(a.book.ratingAvg);
       if (rating != 0) return rating;
-      return a.book.title.compareTo(b.book.title);
+      final title = a.book.title.compareTo(b.book.title);
+      if (title != 0) return title;
+      return a.book.id.compareTo(b.book.id);
     }
 
     final exact = ranked.where((item) => item.isExact).toList()
@@ -243,32 +248,38 @@ class BookRepository {
         final priority = a.priorityIndex.compareTo(b.priorityIndex);
         return priority != 0 ? priority : compareMatches(a, b);
       });
-    final buckets = List.generate(4, (index) {
-      final values = ranked
-          .where((item) => !item.isExact && item.priorityIndex == index)
-          .toList();
-      values.sort(compareMatches);
-      return values;
-    });
-
     final output = <Book>[...exact.map((item) => item.book)];
-    while (output.length < ranked.length) {
-      final slot = output.length % 10;
-      final preferred = slot < 4 ? 0 : (slot < 7 ? 1 : 2);
-      final fallbackOrder = switch (preferred) {
-        0 => const [0, 1, 2, 3],
-        1 => const [1, 2, 0, 3],
-        _ => const [2, 1, 0, 3],
-      };
-      _RankedBook? next;
-      for (final bucketIndex in fallbackOrder) {
-        if (buckets[bucketIndex].isNotEmpty) {
-          next = buckets[bucketIndex].removeAt(0);
-          break;
+
+    for (final quality in const [3, 2, 1, 0]) {
+      final buckets = List.generate(4, (index) {
+        final values = ranked
+            .where((item) =>
+                !item.isExact &&
+                item.quality == quality &&
+                item.priorityIndex == index)
+            .toList();
+        values.sort(compareMatches);
+        return values;
+      });
+
+      while (buckets.any((bucket) => bucket.isNotEmpty)) {
+        final slot = output.length % 10;
+        final preferred = slot < 4 ? 0 : (slot < 7 ? 1 : 2);
+        final fallbackOrder = switch (preferred) {
+          0 => const [0, 1, 2, 3],
+          1 => const [1, 2, 0, 3],
+          _ => const [2, 1, 0, 3],
+        };
+        _RankedBook? next;
+        for (final bucketIndex in fallbackOrder) {
+          if (buckets[bucketIndex].isNotEmpty) {
+            next = buckets[bucketIndex].removeAt(0);
+            break;
+          }
         }
+        if (next == null) break;
+        output.add(next.book);
       }
-      if (next == null) break;
-      output.add(next.book);
     }
     return output;
   }
