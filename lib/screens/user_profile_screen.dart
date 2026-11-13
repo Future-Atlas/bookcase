@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/primary_bottom_navigation.dart';
 import '../services/avatar_url_policy.dart';
 import 'package:provider/provider.dart';
 import '../config/feature_flags.dart';
@@ -1004,6 +1005,21 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       _profile?.pageColorKey,
     );
     return Scaffold(
+      // The main app shell owns its footer when showAppBar is false. Standalone
+      // profiles opened from posts, notifications or follower lists need their
+      // own matching footer without stacking two navigation bars.
+      bottomNavigationBar: widget.showAppBar && widget.profileId != null
+          ? PrimaryBottomNavigation(
+              accentColor: profileHeaderColor,
+              selectedIndex: -1,
+              onTimeline: () => Navigator.of(context)
+                  .pushNamedAndRemoveUntil('/posts', (route) => false),
+              onHome: () => Navigator.of(context)
+                  .pushNamedAndRemoveUntil('/', (route) => false),
+              onMyPage: () => Navigator.of(context)
+                  .pushNamedAndRemoveUntil('/mypage', (route) => false),
+            )
+          : null,
       appBar: widget.showAppBar
           ? AppBar(
               backgroundColor: isDarkMode ? Colors.black : Colors.white,

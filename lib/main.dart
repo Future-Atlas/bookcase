@@ -674,10 +674,17 @@ class _MainNavigationShellState extends State<MainNavigationShell>
         }
 
         return Scaffold(
-          bottomNavigationBar: _currentScreenIndex == 0 || _currentScreenIndex == 1
+          // Keep primary navigation visible on other users' profiles, too.
+          // Index 5 is a viewed profile (not My Page), so leave all three
+          // destinations unselected and match that profile's header color.
+          bottomNavigationBar: _currentScreenIndex == 0 ||
+                  _currentScreenIndex == 1 ||
+                  (_currentScreenIndex == 5 && _viewedProfileId != null)
               ? PrimaryBottomNavigation(
-                  accentColor: ownHeaderColor,
-                  selectedIndex: _currentScreenIndex == 0 ? 1 : 2,
+                  accentColor: headerColor,
+                  selectedIndex: _currentScreenIndex == 0
+                      ? 1
+                      : _currentScreenIndex == 1 ? 2 : -1,
                   onTimeline: () => Navigator.of(context).pushNamed('/posts'),
                   onHome: _goToBookList,
                   onMyPage: () => unawaited(_goToProfile()),
