@@ -355,6 +355,73 @@ void main() {
     );
   });
 
+  test('強い書名一致は弱い著者・出版社一致より上位', () {
+    final ranked = BookRepository.rankSearchResults([
+      _book(
+        id: 'weak-author',
+        title: '別の作品',
+        author: '羅生門という言葉の歴史と研究',
+        publisher: '出版社',
+        reviewCount: 999,
+      ),
+      _book(
+        id: 'strong-title',
+        title: '羅生門を読む',
+        author: '芥川龍之介',
+        publisher: '出版社',
+      ),
+      _book(
+        id: 'weak-publisher',
+        title: '別の作品集',
+        author: '別の著者',
+        publisher: '羅生門研究会の出版社',
+        reviewCount: 1000,
+      ),
+    ], '羅生門');
+    expect(ranked.first.id, 'strong-title',
+        reason: 'A weak field must not occupy a 4/3/3 slot ahead of a prefix title');
+  });
+
+  test('漢字のみの書名は著者名推定にかかわらず強い書名一致を優先', () {
+    final ranked = BookRepository.rankSearchResults([
+      _book(
+        id: 'author-substring',
+        title: '別の本',
+        author: '日本羅生門研究会',
+        publisher: '架空出版',
+      ),
+      _book(
+        id: 'title-prefix',
+        title: '羅生門考',
+        author: '芥川龍之介',
+        publisher: '架空出版',
+      ),
+    ], '羅生門');
+    expect(ranked.first.id, 'title-prefix');
+  });
+
+  test('同程度の関連度なら従来の4/3/3を柔軟な表示目標にできる', () {
+    final books = [
+      for (var i = 0; i < 5; i++)
+        _book(
+          id: 'author-$i', title: '作品$i',
+          author: '芥川関連$i', publisher: '一般出版',
+        ),
+      for (var i = 0; i < 5; i++)
+        _book(
+          id: 'title-$i', title: '芥川関連の本$i',
+          author: '別の著者', publisher: '一般出版',
+        ),
+    ];
+    final ranked = BookRepository.rankSearchResults(books, '芥川');
+    expect(ranked.length, 10);
+    expect(ranked.map((book) => book.id).toSet().length, 10);
+    expect(ranked.take(4).every((book) => book.id.startsWith('author-')), true);
+    expect(ranked.skip(4).take(5).where(
+      (book) => book.id.startsWith('title-'),
+    ).isNotEmpty, true);
+  });
+
   test('同じ優先度と一致度では楽天レビュー件数が多い本を優先する', () {
     final ranked = BookRepository.rankSearchResults([
       _book(
