@@ -18,6 +18,9 @@ class ReadingCoverArt extends StatelessWidget {
     return Image.network(
       url,
       fit: BoxFit.contain,
+      // Show image via an HTML element on Flutter Web when the source does not
+      // send CORS headers, matching the search card's rendering approach.
+      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
       errorBuilder: (context, error, stackTrace) =>
           const Center(child: Icon(Icons.menu_book_outlined, size: 32)),
     );
