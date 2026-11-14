@@ -80,19 +80,41 @@ class UsageGuideScreen extends StatelessWidget {
                   childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
                   expandedCrossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('使い方',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 5),
-                    Text(entries[i].instructions,
-                      style: const TextStyle(height: 1.65)),
-                    const SizedBox(height: 15),
-                    Text('制限・注意点',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 5),
-                    Text(entries[i].limitations,
-                      style: const TextStyle(height: 1.65)),
+                    Text(
+                      '使い方',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      entries[i].instructions,
+                      style: const TextStyle(fontSize: 16, height: 1.75),
+                    ),
+                    const SizedBox(height: 22),
+                    Text(
+                      '制限・注意点',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Keep every existing note, but put each sentence on its
+                    // own line with ※ so restrictions are easy to scan.
+                    for (final sentence in entries[i].limitations.split('。'))
+                      if (sentence.trim().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 7),
+                          child: Text(
+                            '※ ${sentence.trim()}。',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              height: 1.6,
+                            ),
+                          ),
+                        ),
                   ],
                 ),
               ),
