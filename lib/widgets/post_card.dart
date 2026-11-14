@@ -1312,8 +1312,9 @@ class _PostCardState extends State<PostCard> {
 
   Widget _buildWantToReadButton(Color inactiveColor) {
     // The same user's one-book selection drives every post about that book.
-    final sharedState = Provider.of<SupabaseService>(context)
-        .wantToReadStateFor(post.bookId);
+    // PostCard is also rendered standalone in widget tests and previews.
+    final sharedState = Provider.of<SupabaseService?>(context)
+        ?.wantToReadStateFor(post.bookId);
     final selected = sharedState?.selected ?? post.wantedByCurrentUser;
     final wantedCount = sharedState?.count ?? post.wantToReadCount;
     void showUsers() => widget.onWantToReadUsers?.call();
