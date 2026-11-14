@@ -227,7 +227,10 @@ class _BookDetailDialogState extends State<BookDetailDialog> {
                                   child: FutureBuilder<bool>(
                                     future: _isWantedFuture,
                                     builder: (context, snapshot) {
-                                      final wanted = snapshot.data ?? false;
+                                      // A post tap updates this shared book state too.
+                                      final service = Provider.of<SupabaseService>(context);
+                                      final wanted = service.wantToReadStateFor(book.id)?.selected ??
+                                          snapshot.data ?? false;
                                       final checking =
                                           snapshot.connectionState ==
                                           ConnectionState.waiting;
