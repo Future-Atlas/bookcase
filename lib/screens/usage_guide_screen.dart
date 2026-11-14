@@ -86,6 +86,8 @@ class UsageGuideScreen extends StatelessWidget {
                   initiallyExpanded: false,
                   iconColor: accentColor,
                   collapsedIconColor: accentColor,
+                  backgroundColor: accentColor.withValues(alpha: 0.08),
+                  collapsedBackgroundColor: accentColor.withValues(alpha: 0.08),
                   leading: Icon(entries[i].icon, color: accentColor),
                   title: Text(entries[i].heading,
                     style: const TextStyle(fontWeight: FontWeight.w700)),
