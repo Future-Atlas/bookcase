@@ -184,6 +184,41 @@ class SupabaseService extends ChangeNotifier {
   String _activePageColorKey = ProfilePageColors.defaultKey;
   Timer? _sessionGuardTimer;
   Future<bool>? _canUseWantToReadFuture;
+  // Shared book-level state for all post cards and book detail surfaces.
+  final Map<String, ({int count, bool selected})> _wantToReadBookStates = {};
+
+  ({int count, bool selected})? wantToReadStateFor(String bookId) =>
+      _wantToReadBookStates[bookId];
+
+  Future<void> _refreshWantToReadBookStates(Iterable<String> bookIds) async {
+    final ids = bookIds.map((id) => id.trim())
+        .where((id) => id.isNotEmpty).toSet().toList(growable: false);
+    if (ids.isEmpty || !_isInitialized || _client == null) return;
+    try {
+      // Batch lookup uses the shelf's RLS: a user can count at most once per book.
+      final response = await _client!.rpc(
+        'get_book_want_to_read_states',
+        params: {'target_book_ids': ids},
+      );
+      final rows = response is List ? response : const [];
+      final next = <String, ({int count, bool selected})>{
+        for (final id in ids) id: (count: 0, selected: false),
+      };
+      for (final raw in rows) {
+        if (raw is! Map) continue;
+        final id = raw['book_id']?.toString() ?? '';
+        if (!next.containsKey(id)) continue;
+        next[id] = (
+          count: (raw['want_to_read_count'] as num?)?.toInt() ?? 0,
+          selected: raw['wanted_by_current_user'] == true,
+        );
+      }
+      _wantToReadBookStates.addAll(next);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error refreshing book-level want-to-read state: $e');
+    }
+  }
   bool _privacyRecoveryTotpVerified = false;
   final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
@@ -2967,34 +3002,20 @@ class SupabaseService extends ChangeNotifier {
             ),
           )
           .toList();
-      try {
-        final wantResponse = await _client!
-            .from('post_want_to_reads')
-            .select('post_id, profile_id')
-            .inFilter('post_id', postIds);
-        final wantCounts = <String, int>{};
-        final wantedPostIds = <String>{};
-        for (final raw in wantResponse as List<dynamic>) {
-          final row = raw as Map<String, dynamic>;
-          final postId = row['post_id']?.toString() ?? '';
-          if (postId.isEmpty) continue;
-          wantCounts[postId] = (wantCounts[postId] ?? 0) + 1;
-          if (row['profile_id']?.toString() == currentProfileId) {
-            wantedPostIds.add(postId);
-          }
-        }
-        enrichedPosts = enrichedPosts
-            .map(
-              (post) => post.copyWith(
-                wantToReadCount: wantCounts[post.id] ?? 0,
-                wantedByCurrentUser: wantedPostIds.contains(post.id),
-              ),
-            )
-            .toList();
-      } catch (e) {
-        // Keep ordinary reactions available while a new migration is pending.
-        debugPrint('Error attaching want-to-read state: $e');
-      }
+      // One relationship per (profile, book) drives every post's button.
+      // Historical post_want_to_reads rows remain notification attribution only.
+      await _refreshWantToReadBookStates(
+        posts.map((post) => post.bookId),
+      );
+      enrichedPosts = enrichedPosts
+          .map((post) {
+            final state = _wantToReadBookStates[post.bookId];
+            return state == null ? post : post.copyWith(
+              wantToReadCount: state.count,
+              wantedByCurrentUser: state.selected,
+            );
+          })
+          .toList();
       return enrichedPosts;
     } catch (e) {
       debugPrint('Error attaching reaction state: $e');
@@ -3101,6 +3122,10 @@ class SupabaseService extends ChangeNotifier {
           'source_post_id': sourcePostId,
         },
       );
+      if (result?.toString() == 'added' ||
+          result?.toString() == 'removed') {
+        await _refreshWantToReadBookStates([book.id]);
+      }
       notifyListeners();
       switch (result?.toString()) {
         case 'added':
@@ -3184,10 +3209,18 @@ class SupabaseService extends ChangeNotifier {
     try {
       final List<dynamic> rows;
       if (wantToRead) {
+        // The visible count is unique *book* subscribers, not post attribution.
+        final source = await _client!
+            .from('posts')
+            .select('book_id')
+            .eq('id', postId)
+            .maybeSingle();
+        final bookId = source?['book_id']?.toString() ?? '';
+        if (bookId.isEmpty) return [];
         rows = await _client!
-            .from('post_want_to_reads')
+            .from('want_to_read_books')
             .select('profile_id, created_at')
-            .eq('post_id', postId)
+            .eq('book_id', bookId)
             .order('created_at', ascending: false);
       } else {
         if (reaction == null) return [];
