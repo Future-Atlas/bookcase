@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../utils/reading_calendar_border.dart';
+import '../utils/reading_calendar_month.dart';
 import '../utils/reading_day_book_summary.dart';
 
 import '../models/reading_session.dart';
@@ -317,13 +318,72 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
     );
   }
 
+  /// Reuse the monthly list's circular book artwork at a smaller size.
+  /// A busy day uses a +N overflow badge instead of clipping into another date.
+  Widget _dayBookBadges(
+    List<ReadingDayBookSummary> books,
+    BoxConstraints bounds,
+  ) {
+    if (books.isEmpty || bounds.maxWidth <= 0 || bounds.maxHeight <= 0) {
+      return const SizedBox.shrink();
+    }
+
+    const gap = 1.0;
+    var side = math.min(20.0, math.min(bounds.maxWidth, bounds.maxHeight));
+
+    int capacity(double iconSide) {
+      if (iconSide <= 0) return 0;
+      final columns = ((bounds.maxWidth + gap) / (iconSide + gap)).floor();
+      final rows = ((bounds.maxHeight + gap) / (iconSide + gap)).floor();
+      return math.max(0, columns) * math.max(0, rows);
+    }
+
+    while (side > 8 && capacity(side) < books.length) {
+      side -= 1;
+    }
+    final slots = capacity(side);
+    if (slots <= 0) return const SizedBox.shrink();
+    final visibleCount = books.length > slots
+        ? math.max(0, slots - 1)
+        : books.length;
+    final remaining = books.length - visibleCount;
+
+    return Center(
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        runAlignment: WrapAlignment.center,
+        spacing: gap,
+        runSpacing: gap,
+        children: [
+          for (final book in books.take(visibleCount))
+            Tooltip(
+              message: book.session.bookTitle,
+              child: KeyedSubtree(
+                key: ValueKey('reading-calendar-book-${book.session.bookId}'),
+                child: _roundCover(book.session, size: side),
+              ),
+            ),
+          if (remaining > 0)
+            SizedBox.square(
+              dimension: side,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('+$remaining', style: const TextStyle(fontSize: 10)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _dayCell(int index, int leading, int daysInMonth) {
     final number = index - leading + 1;
     if (number < 1 || number > daysInMonth) {
       return const SizedBox.shrink();
     }
     final day = DateTime(_month.year, _month.month, number);
-    final hasRecords = _sessionsFor(day).isNotEmpty;
+    // The same book is only represented once regardless of session count.
+    final books = summarizeReadingDayBooks(_sessionsFor(day), day);
     final today = DateTime.now();
     final isToday =
         day.year == today.year &&
@@ -347,13 +407,20 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
             ),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('$number'),
-              if (hasRecords)
-                Icon(Icons.circle, size: 10, color: widget.accentColor),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('$number', style: const TextStyle(fontSize: 12, height: 1)),
+                if (books.isNotEmpty)
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, bounds) => _dayBookBadges(books, bounds),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -363,7 +430,7 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
   @override
   Widget build(BuildContext context) {
     final daysInMonth = DateTime(_month.year, _month.month + 1, 0).day;
-    final weekday = DateTime(_month.year, _month.month, 1).weekday - 1;
+    final weekday = sundayFirstCalendarOffset(_month);
     final count = ((weekday + daysInMonth + 6) ~/ 7) * 7;
     final active = _active;
     final daysWithReading = List.generate(
@@ -426,7 +493,7 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
           else ...[
             Row(
               children: [
-                for (final label in ['月', '火', '水', '木', '金', '土', '日'])
+                for (final label in ['日', '月', '火', '水', '木', '金', '土'])
                   Expanded(child: Center(child: Text(label))),
               ],
             ),
@@ -442,7 +509,36 @@ class _ReadingCalendarTabState extends State<ReadingCalendarTab> {
                   _dayCell(index, weekday, daysInMonth),
             ),
             const SizedBox(height: 20),
-            Text('この月の読書記録', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              '※ 過去の記録を追加・編集することはできません。',
+              key: const ValueKey('reading-calendar-no-history-edit-note'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 6,
+              children: [
+                Text(
+                  'この月の読書記録',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Text(
+                  'この月の合計読書時間：'
+                  '${ReadingSession.durationLabel(totalReadingDurationInMonth(_sessions, _month))}',
+                  key: const ValueKey('reading-calendar-month-total'),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: widget.accentColor,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
             if (daysWithReading.isEmpty)
               const Padding(
