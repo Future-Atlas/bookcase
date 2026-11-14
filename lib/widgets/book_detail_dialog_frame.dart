@@ -19,7 +19,7 @@ class BookDetailDialogFrame extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 22, right: 22),
+            padding: const EdgeInsets.only(top: 22, left: 22),
             child: Material(
               color: const Color(0xFFE6E6E6),
               clipBehavior: Clip.antiAlias,
@@ -31,7 +31,7 @@ class BookDetailDialogFrame extends StatelessWidget {
           ),
           Positioned(
             top: 0,
-            right: 0,
+            left: 0,
             child: Material(
               color: Theme.of(context).scaffoldBackgroundColor,
               shape: CircleBorder(
