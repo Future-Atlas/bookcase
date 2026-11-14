@@ -9,9 +9,9 @@ const home = read('lib/screens/book_list_screen.dart');
 const nav = read('lib/widgets/primary_bottom_navigation.dart');
 const guide = read('lib/screens/usage_guide_screen.dart');
 
-test('timeline icon is a thick upward outlined triangle', () => {
-  assert.match(nav, /timeline-triangle-up/);
-  assert.match(nav, /_TimelineTrianglePainter/);
+test('timeline icon uses the same-weight downward double arrow ⇓', () => {
+  assert.match(nav, /timeline-double-arrow-down/);
+  assert.match(nav, /_TimelineDoubleArrowDownPainter/);
   assert.match(nav, /PaintingStyle\.stroke/);
   assert.match(nav, /strokeWidth = 2\.4/);
   assert.doesNotMatch(nav, /Text\('▽'/);
@@ -61,11 +61,10 @@ test('usage guide emphasizes instructions and renders small per-line notes', () 
 });
 
 
-test('guide uses the signed-in page color for visual highlights', () => {
-  assert.match(guide, /context\.watch<SupabaseService>\(\)\.activePageColorKey/);
-  assert.match(guide, /ProfilePageColors\.colorFor\(/);
-  assert.match(guide, /BorderSide\(color: accentColor, width: 2\)/);
-  assert.match(guide, /leading: Icon\(entries\[i\]\.icon, color: accentColor\)/);
-  assert.match(guide, /collapsedBackgroundColor: accentColor\.withValues\(alpha: 0\.08\)/);
+test('only the hamburger usage guide option uses the user-selected page color', () => {
+  assert.match(main, /key: const ValueKey\('menu-usage-guide-highlight'\)/);
+  assert.match(main, /color: ownHeaderColor,/);
+  assert.match(main, /ThemeData\.estimateBrightnessForColor\(/);
+  assert.doesNotMatch(guide, /context\.watch<SupabaseService>/);
   assert.match(guide, /initiallyExpanded: false/);
 });
