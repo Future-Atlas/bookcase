@@ -171,4 +171,40 @@ void main(){
       .intersection(second.books.map((b) => b.id).toSet()), isEmpty);
   });
 
+  test('ストーリーの解剖学 is discoverable when Rakuten has empty display windows', () async {
+    var rakutenCalls = 0;
+    Future<NdlSearchBatch> ndl(
+      BookSearchField field, String term, String provider, int start, int count,
+    ) async {
+      if (field != BookSearchField.title || start > 1) {
+        return const NdlSearchBatch(books: [], rawCount: 0, hasMore: false);
+      }
+      expect(term, 'ストーリーの解剖学');
+      return NdlSearchBatch(books: const [
+        Book(
+          id: '9784845916146',
+          isbn: '9784845916146',
+          title: 'ストーリーの解剖学',
+          author: 'ジョン・トゥルービー',
+          publisher: 'フィルムアート社',
+          pubDate: '2017-07-25',
+          coverUrl: '',
+        ),
+      ], rawCount: 1, hasMore: false);
+    }
+    final repo = BookRepository(
+      stagingRakuten: true,
+      fieldFetcher: ndl,
+      rakutenKeywordPageFetcher: (keyword, page, count, fields) async {
+        expect(keyword, 'ストーリーの解剖学');
+        rakutenCalls++;
+        return const RakutenKeywordSearchBatch(books: [], hasMore: true);
+      },
+    );
+    final first = await repo.searchBooksPage('ストーリーの解剖学', page: 1);
+    expect(rakutenCalls, 2);
+    expect(first.books.map((book) => book.id), contains('9784845916146'));
+    expect(first.temporarilyUnavailable, isFalse);
+  });
+
 }
