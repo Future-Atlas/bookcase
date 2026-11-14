@@ -37,10 +37,13 @@ class PrimaryBottomNavigation extends StatelessWidget {
           children: [
             _item(
               0, 'タイムライン', onTimeline,
-              CustomPaint(
-                key: const ValueKey('timeline-triangle-up'),
-                size: const Size(25, 25),
-                painter: _TimelineTrianglePainter(color: accentColor),
+              Semantics(
+                label: '⇓',
+                child: CustomPaint(
+                  key: const ValueKey('timeline-double-arrow-down'),
+                  size: const Size(25, 25),
+                  painter: _TimelineDoubleArrowDownPainter(color: accentColor),
+                ),
               ),
             ),
             _item(1, 'ホーム', onHome, const Icon(Icons.home_outlined, size: 25)),
@@ -86,10 +89,9 @@ class PrimaryBottomNavigation extends StatelessWidget {
   }
 }
 
-/// Upward outline triangle; stroke visually matches the 25px outlined
-/// Home/Profile icons instead of relying on a font-dependent thin △ glyph.
-class _TimelineTrianglePainter extends CustomPainter {
-  const _TimelineTrianglePainter({required this.color});
+/// Downward double arrow (⇓), keeping the previous 2.4px outline weight.
+class _TimelineDoubleArrowDownPainter extends CustomPainter {
+  const _TimelineDoubleArrowDownPainter({required this.color});
 
   final Color color;
 
@@ -101,15 +103,25 @@ class _TimelineTrianglePainter extends CustomPainter {
       ..strokeWidth = 2.4
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
-    final triangle = Path()
-      ..moveTo(size.width / 2, 3)
-      ..lineTo(size.width - 3, size.height - 4)
-      ..lineTo(3, size.height - 4)
-      ..close();
-    canvas.drawPath(triangle, pen);
+    final middle = size.width / 2;
+    canvas.drawLine(
+      Offset(middle - 3.5, 3),
+      Offset(middle - 3.5, size.height - 11),
+      pen,
+    );
+    canvas.drawLine(
+      Offset(middle + 3.5, 3),
+      Offset(middle + 3.5, size.height - 11),
+      pen,
+    );
+    final arrowhead = Path()
+      ..moveTo(3, size.height - 12)
+      ..lineTo(middle, size.height - 3)
+      ..lineTo(size.width - 3, size.height - 12);
+    canvas.drawPath(arrowhead, pen);
   }
 
   @override
-  bool shouldRepaint(covariant _TimelineTrianglePainter oldDelegate) =>
+  bool shouldRepaint(covariant _TimelineDoubleArrowDownPainter oldDelegate) =>
       oldDelegate.color != color;
 }
