@@ -89,6 +89,9 @@ class BookRepository {
   final Map<String, _RakutenStagingCursor> _rakutenStagingCursors = {};
   _RakutenKeywordCursor? _rakutenKeywordCursor;
   String _rakutenKeywordQuery = '';
+  // Once a first-page Rakuten search falls back to NDL, keep that catalog
+  // for the whole pagination session rather than re-querying Rakuten on page 2.
+  String? _ndlFallbackQuery;
   final Map<String, _HomeCatalogCursor> _homeCatalogCursors = {};
   String _activeQuery = '';
   int _nextSearchPage = 1;
@@ -693,7 +696,10 @@ class BookRepository {
         ContentSafetyService.isAdultSearchQuery(clean)) {
       return const BookSearchBatch(books: [], hasMore: false);
     }
-    if (_stagingRakuten) {
+    // A new first-page search is allowed to try Rakuten again. Subsequent
+    // NDL pages must not switch providers halfway through the result list.
+    if (page == 1) _ndlFallbackQuery = null;
+    if (_stagingRakuten && _ndlFallbackQuery != clean) {
       if (stagingRakutenKeywordFetcher != null) {
         // Preserve injected test semantics independently of production cursor.
         try {
@@ -785,11 +791,23 @@ class BookRepository {
             books: [], hasMore: true, temporarilyUnavailable: true,
           );
         }
+        _ndlFallbackQuery = clean;
       } else if (!cursor.hasMoreUpstream) {
-        // No Rakuten books at all: search the alternative catalog.
+        // Only the first page may choose NDL. Never mix Rakuten page 1
+        // with NDL page 2 if Rakuten's last window was exhausted.
+        if (page > 1) {
+          return const BookSearchBatch(books: [], hasMore: false);
+        }
+        _ndlFallbackQuery = clean;
+      } else if (page == 1) {
+        // Bounded Rakuten windows may all be filtered or contain duplicates
+        // even though the provider reports more raw results. Do not show an
+        // empty initial screen: try the independent NDL catalog and keep the
+        // choice stable on subsequent pages.
+        _ndlFallbackQuery = clean;
       } else {
-        // Empty window with possible more pages: retain the cursor and let
-        // the user continue rather than claiming the book does not exist.
+        // A later Rakuten page can be empty without ending the source.
+        // Continue this cursor rather than mixing catalogs mid-session.
         cursor.nextPage = page + 1;
         return const BookSearchBatch(books: [], hasMore: true);
       }
