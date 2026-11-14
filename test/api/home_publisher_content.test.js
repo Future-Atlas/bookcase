@@ -22,7 +22,7 @@ test("home screen explains Sharemarium's original value to human users", () => {
   assert.match(source, /「読みたい！」/);
   assert.match(source, /次に読む本を見つける/);
   assert.match(source, /あなたの感想や交流が、Sharemariumを作ります。/);
-  assert.match(source, /読んだ本を評価するだけでなく/);
+  assert.match(source, /読んだ本の感想や評価を記録して/);
   assert.doesNotMatch(source, /ネタバレを含む投稿は明示して公開できます/);
 });
 
@@ -31,7 +31,7 @@ test("home service introduction links to public posts and operator information",
   assert.match(link, /pushNamed\('\/posts'\)/);
   assert.match(link, /タイムラインを見る/);
   assert.match(source, /pushNamed\('\/about'\)/);
-  assert.match(source, /他ユーザーのレビューやリアクションを通じて/);
+  assert.match(source, /他の読者のレビューやリアクションを通じて/);
   assert.match(source, /サービス・運営方針について/);
 });
 
