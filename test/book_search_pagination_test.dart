@@ -134,4 +134,41 @@ void main(){
         .intersection(second.books.map((book) => book.id).toSet()), isEmpty);
   });
 
+
+  test('short author query falls back when Rakuten windows are empty but nonexhausted', () async {
+    var rakutenCalls = 0;
+    Future<NdlSearchBatch> ndl(
+      BookSearchField field, String term, String provider, int start, int count,
+    ) async {
+      // NDL has a usable short-name match when Rakuten yielded no displayable books.
+      final books = List.generate(count, (i) => Book(
+        id: '${field.name}-$start-$i',
+        isbn: '9780000000001',
+        title: '羅生門 ${field.name} $i',
+        author: '芥川龍之介',
+        publisher: '出版社',
+        pubDate: '',
+        coverUrl: '',
+      ));
+      return NdlSearchBatch(books: books, rawCount: count, hasMore: true);
+    }
+    final repo = BookRepository(
+      stagingRakuten: true,
+      fieldFetcher: ndl,
+      rakutenKeywordPageFetcher: (keyword, page, count, fields) async {
+        rakutenCalls++;
+        expect(keyword, '芥川');
+        return const RakutenKeywordSearchBatch(books: [], hasMore: true);
+      },
+    );
+    final first = await repo.searchBooksPage('芥川', page: 1);
+    expect(rakutenCalls, 2, reason: 'Search at most two Rakuten windows');
+    expect(first.books, isNotEmpty, reason: 'Use NDL rather than returning an empty first page');
+    final second = await repo.searchBooksPage('芥川', page: 2);
+    expect(second.books, isNotEmpty);
+    expect(rakutenCalls, 2, reason: 'Keep NDL fallback sticky across pages');
+    expect(first.books.map((b) => b.id).toSet()
+      .intersection(second.books.map((b) => b.id).toSet()), isEmpty);
+  });
+
 }
