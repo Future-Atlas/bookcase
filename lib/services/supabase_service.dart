@@ -186,6 +186,7 @@ class SupabaseService extends ChangeNotifier {
   Future<bool>? _canUseWantToReadFuture;
   // Shared book-level state for all post cards and book detail surfaces.
   final Map<String, ({int count, bool selected})> _wantToReadBookStates = {};
+  String _wantToReadStateProfileId = '';
 
   ({int count, bool selected})? wantToReadStateFor(String bookId) =>
       _wantToReadBookStates[bookId];
@@ -194,6 +195,7 @@ class SupabaseService extends ChangeNotifier {
     final ids = bookIds.map((id) => id.trim())
         .where((id) => id.isNotEmpty).toSet().toList(growable: false);
     if (ids.isEmpty || !_isInitialized || _client == null) return;
+    final requestingProfile = activeProfileId;
     try {
       // Batch lookup uses the shelf's RLS: a user can count at most once per book.
       final response = await _client!.rpc(
@@ -213,6 +215,7 @@ class SupabaseService extends ChangeNotifier {
           selected: raw['wanted_by_current_user'] == true,
         );
       }
+      if (requestingProfile != activeProfileId) return;
       _wantToReadBookStates.addAll(next);
       notifyListeners();
     } catch (e) {
@@ -245,6 +248,10 @@ class SupabaseService extends ChangeNotifier {
         _authStateSubscription = _client!.auth.onAuthStateChange.listen((evt) {
           final user = evt.session?.user;
           _canUseWantToReadFuture = null;
+          if (_wantToReadStateProfileId != (user?.id ?? '')) {
+            _wantToReadStateProfileId = user?.id ?? '';
+            _wantToReadBookStates.clear();
+          }
           if (_cachedConsentUserId != user?.id) {
             _cachedConsentUserId = user?.id;
             _hasCurrentLegalConsentCache = null;
