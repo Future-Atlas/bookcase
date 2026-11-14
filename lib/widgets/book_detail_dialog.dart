@@ -10,6 +10,7 @@ import '../screens/post_engagement_users_screen.dart';
 import '../services/supabase_service.dart';
 import 'book_action_label.dart';
 import 'book_cover_image.dart';
+import 'book_detail_dialog_frame.dart';
 import 'favorite_replacement_dialog.dart';
 import 'post_card.dart';
 import 'post_reply_dialog.dart';
@@ -139,9 +140,7 @@ class _BookDetailDialogState extends State<BookDetailDialog> {
   @override
   Widget build(BuildContext context) {
     final book = widget.book;
-    return Dialog(
-      backgroundColor: const Color(0xFFE6E6E6),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+    return BookDetailDialogFrame(
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: 920,
