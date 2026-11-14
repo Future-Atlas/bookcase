@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../models/profile_page_color.dart';
+import '../services/supabase_service.dart';
 
 /// In-app guide for current Sharemarium features. Keep limitations in sync
 /// with the actual product rather than promising planned functionality.
@@ -8,6 +12,9 @@ class UsageGuideScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accentColor = ProfilePageColors.colorFor(
+      context.watch<SupabaseService>().activePageColorKey,
+    );
     const entries = <_GuideSection>[
       _GuideSection(
         '読了（投稿機能）',
@@ -70,11 +77,16 @@ class UsageGuideScreen extends StatelessWidget {
               Card(
                 margin: EdgeInsets.zero,
                 clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: accentColor, width: 2),
+                ),
                 child: ExpansionTile(
                   key: ValueKey('usage-guide-section-$i'),
                   initiallyExpanded: false,
-                  leading: Icon(entries[i].icon,
-                    color: theme.colorScheme.primary),
+                  iconColor: accentColor,
+                  collapsedIconColor: accentColor,
+                  leading: Icon(entries[i].icon, color: accentColor),
                   title: Text(entries[i].heading,
                     style: const TextStyle(fontWeight: FontWeight.w700)),
                   childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
