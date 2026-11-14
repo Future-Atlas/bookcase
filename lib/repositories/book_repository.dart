@@ -799,9 +799,15 @@ class BookRepository {
           return const BookSearchBatch(books: [], hasMore: false);
         }
         _ndlFallbackQuery = clean;
+      } else if (page == 1) {
+        // Bounded Rakuten windows may all be filtered or contain duplicates
+        // even though the provider reports more raw results. Do not show an
+        // empty initial screen: try the independent NDL catalog and keep the
+        // choice stable on subsequent pages.
+        _ndlFallbackQuery = clean;
       } else {
-        // Empty window with possible more pages: retain the cursor and let
-        // the user continue rather than claiming the book does not exist.
+        // A later Rakuten page can be empty without ending the source.
+        // Continue this cursor rather than mixing catalogs mid-session.
         cursor.nextPage = page + 1;
         return const BookSearchBatch(books: [], hasMore: true);
       }
