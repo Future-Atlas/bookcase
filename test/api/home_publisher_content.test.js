@@ -16,10 +16,13 @@ const link = fs.readFileSync(
 test("home screen explains Sharemarium's original value to human users", () => {
   assert.match(source, /Sharemariumでできること/);
   assert.match(source, /読書体験をレビューとして残す/);
-  assert.match(source, /他の読者の感想に触れる/);
+  assert.match(source, /他の読者のレビューやリアクション/);
+  assert.match(source, /読書カレンダー/);
+  assert.match(source, /読書タイマー/);
+  assert.match(source, /「読みたい！」/);
   assert.match(source, /次に読む本を見つける/);
   assert.match(source, /あなたの感想や交流が、Sharemariumを作ります。/);
-  assert.match(source, /読んだ本を評価するだけでなく/);
+  assert.match(source, /読んだ本の感想や評価を記録して/);
   assert.doesNotMatch(source, /ネタバレを含む投稿は明示して公開できます/);
 });
 
@@ -28,14 +31,14 @@ test("home service introduction links to public posts and operator information",
   assert.match(link, /pushNamed\('\/posts'\)/);
   assert.match(link, /タイムラインを見る/);
   assert.match(source, /pushNamed\('\/about'\)/);
-  assert.match(source, /他ユーザーのレビューやリアクションを通じて/);
+  assert.match(source, /他の読者のレビューやリアクションを通じて/);
   assert.match(source, /サービス・運営方針について/);
 });
 
 test("service introduction is limited to the real home screen", () => {
   assert.match(
     source,
-    /if \(widget\.initialGenre == null &&\s+_controller\.searchQuery\.isEmpty\)\s+_buildServiceIntroduction\(\)/,
+    /if \(!context\.watch<SupabaseService>\(\)\.isAuthenticated &&\s+widget\.initialGenre == null &&\s+_controller\.searchQuery\.isEmpty\)\s+_buildServiceIntroduction\(\)/,
   );
 });
 
@@ -45,4 +48,11 @@ test("service introduction starts collapsed and can be expanded or collapsed", (
   assert.match(source, /Icons\.keyboard_arrow_down/);
   assert.match(source, /Icons\.keyboard_arrow_up/);
   assert.match(source, /if \(_isServiceIntroductionExpanded\) \.\.\.\[/);
+});
+
+test("authenticated home removes only logo hero and introduction", () => {
+  assert.match(source, /if \(!context\.watch<SupabaseService>\(\)\.isAuthenticated\)\s+_buildTopHeroImage\(\)/);
+  assert.match(source, /if \(!context\.watch<SupabaseService>\(\)\.isAuthenticated &&[\s\S]*?_buildServiceIntroduction\(\)/);
+  assert.match(source, /_buildSearchBar\(\)/);
+  assert.match(source, /_buildFeaturedBooksSection\(\)/);
 });

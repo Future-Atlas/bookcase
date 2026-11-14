@@ -37,7 +37,11 @@ class PrimaryBottomNavigation extends StatelessWidget {
           children: [
             _item(
               0, 'タイムライン', onTimeline,
-              const Text('▽', style: TextStyle(fontSize: 28, height: 1)),
+              CustomPaint(
+                key: const ValueKey('timeline-triangle-up'),
+                size: const Size(25, 25),
+                painter: _TimelineTrianglePainter(color: accentColor),
+              ),
             ),
             _item(1, 'ホーム', onHome, const Icon(Icons.home_outlined, size: 25)),
             _item(2, 'マイページ', onMyPage,
@@ -80,4 +84,32 @@ class PrimaryBottomNavigation extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Upward outline triangle; stroke visually matches the 25px outlined
+/// Home/Profile icons instead of relying on a font-dependent thin △ glyph.
+class _TimelineTrianglePainter extends CustomPainter {
+  const _TimelineTrianglePainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final pen = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.4
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final triangle = Path()
+      ..moveTo(size.width / 2, 3)
+      ..lineTo(size.width - 3, size.height - 4)
+      ..lineTo(3, size.height - 4)
+      ..close();
+    canvas.drawPath(triangle, pen);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TimelineTrianglePainter oldDelegate) =>
+      oldDelegate.color != color;
 }
