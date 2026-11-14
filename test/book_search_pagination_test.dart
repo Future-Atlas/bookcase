@@ -176,10 +176,12 @@ void main(){
     Future<NdlSearchBatch> ndl(
       BookSearchField field, String term, String provider, int start, int count,
     ) async {
-      if (field != BookSearchField.title || start > 1) {
+      // The search may try shortened variants after an upstream window.
+      // The exact title should be returned only for the full title term.
+      if (field != BookSearchField.title ||
+          term != 'ストーリーの解剖学' || start > 1) {
         return const NdlSearchBatch(books: [], rawCount: 0, hasMore: false);
       }
-      expect(term, 'ストーリーの解剖学');
       return NdlSearchBatch(books: const [
         Book(
           id: '9784845916146',
