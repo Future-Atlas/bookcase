@@ -50,7 +50,9 @@ void main() {
     final finder = find.byKey(const ValueKey('book-detail-close-button'));
     expect(finder, findsOneWidget);
     expect(tester.widget<IconButton>(finder).color, Colors.black);
-    final dialogBody = find.byType(Material).last;
-    expect(tester.getTopLeft(finder).dx, lessThan(tester.getCenter(dialogBody).dx));
+    expect(
+      tester.getCenter(finder).dx,
+      lessThan(tester.getSize(find.byType(MaterialApp)).width / 2),
+    );
   });
 }
