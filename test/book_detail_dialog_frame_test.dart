@@ -52,7 +52,7 @@ void main() {
     expect(tester.widget<IconButton>(finder).color, Colors.black);
     expect(
       tester.getCenter(finder).dx,
-      lessThan(tester.getSize(find.byType(MaterialApp)).width / 2),
+      lessThan(tester.getSize(find.byType(Overlay).first).width / 2),
     );
   });
 }
