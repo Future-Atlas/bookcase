@@ -45,6 +45,7 @@ test('guide covers six current features with actions and limitations', () => {
     'フォロワー', 'ダークモード', 'ページカラー', '投稿10・25・50・100件',
   ]) assert.ok(guide.includes(rule), rule);
   assert.match(guide, /ExpansionTile\(/);
+  assert.match(guide, /initiallyExpanded: false/);
   assert.match(guide, /'使い方'/);
   assert.match(guide, /'制限・注意点'/);
 });
