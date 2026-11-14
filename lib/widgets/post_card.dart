@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/supabase_service.dart';
 import '../services/avatar_url_policy.dart';
 import 'package:flutter/rendering.dart';
 import '../config/feature_flags.dart';
@@ -1309,7 +1311,11 @@ class _PostCardState extends State<PostCard> {
   }
 
   Widget _buildWantToReadButton(Color inactiveColor) {
-    final selected = post.wantedByCurrentUser;
+    // The same user's one-book selection drives every post about that book.
+    final sharedState = Provider.of<SupabaseService>(context)
+        .wantToReadStateFor(post.bookId);
+    final selected = sharedState?.selected ?? post.wantedByCurrentUser;
+    final wantedCount = sharedState?.count ?? post.wantToReadCount;
     void showUsers() => widget.onWantToReadUsers?.call();
     return InkWell(
       onTap: onWantToRead != null
@@ -1349,10 +1355,10 @@ class _PostCardState extends State<PostCard> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            if (post.wantToReadCount > 0) ...[
+            if (wantedCount > 0) ...[
               const SizedBox(width: 5),
               Text(
-                '${post.wantToReadCount}',
+                '$wantedCount',
                 style: const TextStyle(
                   color: Colors.amber,
                   fontSize: 11,
