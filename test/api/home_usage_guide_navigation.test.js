@@ -59,3 +59,13 @@ test('usage guide emphasizes instructions and renders small per-line notes', () 
   assert.match(guide, /fontSize: 12/);
   assert.match(guide, /EdgeInsets\.only\(bottom: 7\)/);
 });
+
+
+test('guide uses the signed-in page color for visual highlights', () => {
+  assert.match(guide, /context\.watch<SupabaseService>\(\)\.activePageColorKey/);
+  assert.match(guide, /ProfilePageColors\.colorFor\(/);
+  assert.match(guide, /BorderSide\(color: accentColor, width: 2\)/);
+  assert.match(guide, /leading: Icon\(entries\[i\]\.icon, color: accentColor\)/);
+  assert.match(guide, /collapsedBackgroundColor: accentColor\.withValues\(alpha: 0\.08\)/);
+  assert.match(guide, /initiallyExpanded: false/);
+});
