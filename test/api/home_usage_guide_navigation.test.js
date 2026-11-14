@@ -48,3 +48,13 @@ test('guide covers six current features with actions and limitations', () => {
   assert.match(guide, /'使い方'/);
   assert.match(guide, /'制限・注意点'/);
 });
+
+test('usage guide emphasizes instructions and renders small per-line notes', () => {
+  assert.match(guide, /fontSize: 18/);
+  assert.match(guide, /fontSize: 16, height: 1\.75/);
+  assert.match(guide, /entries\[i\]\.limitations\.split\('。'\)/);
+  assert.match(guide, /sentence\.trim\(\)\.isNotEmpty/);
+  assert.match(guide, /'※ \$\{sentence\.trim\(\)\}。'/);
+  assert.match(guide, /fontSize: 12/);
+  assert.match(guide, /EdgeInsets\.only\(bottom: 7\)/);
+});
