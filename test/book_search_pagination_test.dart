@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sharemarium/api/ndl_api.dart';
+import 'package:sharemarium/api/rakuten_api.dart';
 import 'package:sharemarium/models/book.dart';
 import 'package:sharemarium/repositories/book_repository.dart';
 
@@ -104,6 +105,33 @@ void main(){
     final second = await repo.searchBooksPage('芥川', page: 2, count: 10);
     expect(second.books, isNotEmpty);
     expect(received, greaterThan(3));
+  });
+
+
+  test('Rakuten no-match fallback remains on NDL when loading the next page', () async {
+    var rakutenCalls = 0;
+    Future<NdlSearchBatch> ndl(
+      BookSearchField field, String term, String provider, int start, int count,
+    ) async {
+      final rows = List.generate(count, (i) => candidate(field, start + i));
+      return NdlSearchBatch(books: rows, rawCount: count, hasMore: true);
+    }
+    final repo = BookRepository(
+      stagingRakuten: true,
+      fieldFetcher: ndl,
+      rakutenKeywordPageFetcher: (keyword, page, count, fields) async {
+        rakutenCalls++;
+        return const RakutenKeywordSearchBatch(books: [], hasMore: false);
+      },
+    );
+    final first = await repo.searchBooksPage('村上春樹', page: 1);
+    expect(first.books.length, 10);
+    expect(rakutenCalls, 1);
+    final second = await repo.searchBooksPage('村上春樹', page: 2);
+    expect(second.books.length, 10);
+    expect(rakutenCalls, 1, reason: 'Do not re-query Rakuten after choosing NDL');
+    expect(first.books.map((book) => book.id).toSet()
+        .intersection(second.books.map((book) => book.id).toSet()), isEmpty);
   });
 
 }
