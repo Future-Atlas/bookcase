@@ -614,6 +614,32 @@ class BookListController extends ChangeNotifier {
     }
   }
 
+  /// Let readers retry a transient Rakuten bestseller failure without
+  /// reloading the entire Home or discarding a previously successful page.
+  Future<void> retryPopular() async {
+    if (isLoadingPopular || isLoadingMorePopular) return;
+    isLoadingPopular = true;
+    notifyListeners();
+    try {
+      _repository.resetHomeBooks('ベストセラー');
+      final books = await _repository.fetchBooksByGenre('ベストセラー', page: 1);
+      if (books.isNotEmpty || popularBooks.isEmpty) {
+        popularBooks = books;
+        popularPage = 1;
+        _popularPageCache
+          ..clear()
+          ..[1] = books;
+        _popularReachedEnd = books.isEmpty;
+        hasMorePopular = !_popularReachedEnd;
+      }
+    } catch (_) {
+      if (popularBooks.isEmpty) hasMorePopular = false;
+    } finally {
+      isLoadingPopular = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> loadMoreRecommended() async {
     if (isLoadingMoreRecommended || !hasMoreRecommended) return;
     final nextPage = recommendedPage + 1;
