@@ -72,7 +72,7 @@ class UsageGuideScreen extends StatelessWidget {
                 clipBehavior: Clip.antiAlias,
                 child: ExpansionTile(
                   key: ValueKey('usage-guide-section-$i'),
-                  initiallyExpanded: i == 0,
+                  initiallyExpanded: false,
                   leading: Icon(entries[i].icon,
                     color: theme.colorScheme.primary),
                   title: Text(entries[i].heading,

@@ -9,9 +9,9 @@ const home = read('lib/screens/book_list_screen.dart');
 const nav = read('lib/widgets/primary_bottom_navigation.dart');
 const guide = read('lib/screens/usage_guide_screen.dart');
 
-test('timeline icon is a thick upward outlined triangle', () => {
-  assert.match(nav, /timeline-triangle-up/);
-  assert.match(nav, /_TimelineTrianglePainter/);
+test('timeline icon uses the same-weight downward double arrow ⇓', () => {
+  assert.match(nav, /timeline-double-arrow-down/);
+  assert.match(nav, /_TimelineDoubleArrowDownPainter/);
   assert.match(nav, /PaintingStyle\.stroke/);
   assert.match(nav, /strokeWidth = 2\.4/);
   assert.doesNotMatch(nav, /Text\('▽'/);
@@ -45,6 +45,7 @@ test('guide covers six current features with actions and limitations', () => {
     'フォロワー', 'ダークモード', 'ページカラー', '投稿10・25・50・100件',
   ]) assert.ok(guide.includes(rule), rule);
   assert.match(guide, /ExpansionTile\(/);
+  assert.match(guide, /initiallyExpanded: false/);
   assert.match(guide, /'使い方'/);
   assert.match(guide, /'制限・注意点'/);
 });
@@ -57,4 +58,13 @@ test('usage guide emphasizes instructions and renders small per-line notes', () 
   assert.match(guide, /'※ \$\{sentence\.trim\(\)\}。'/);
   assert.match(guide, /fontSize: 12/);
   assert.match(guide, /EdgeInsets\.only\(bottom: 7\)/);
+});
+
+
+test('only the hamburger usage guide option uses the user-selected page color', () => {
+  assert.match(main, /key: const ValueKey\('menu-usage-guide-highlight'\)/);
+  assert.match(main, /color: ownHeaderColor,/);
+  assert.match(main, /ThemeData\.estimateBrightnessForColor\(/);
+  assert.doesNotMatch(guide, /context\.watch<SupabaseService>/);
+  assert.match(guide, /initiallyExpanded: false/);
 });
