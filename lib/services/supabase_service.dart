@@ -11,6 +11,7 @@ import '../models/book.dart';
 import 'legal_document_versions.dart';
 import '../models/user_profile.dart';
 import '../models/post.dart';
+import 'post_book_metadata_resolver.dart';
 import '../models/post_reply.dart';
 import '../models/social_models.dart';
 import '../models/moderation_models.dart';
@@ -147,6 +148,7 @@ class SupabaseService extends ChangeNotifier {
   static const Duration _privacyRecoveryIntentLifetime = Duration(minutes: 15);
 
   static final SupabaseService _instance = SupabaseService._internal();
+  final PostBookMetadataResolver _postBookMetadata = PostBookMetadataResolver();
   factory SupabaseService() => _instance;
   SupabaseService._internal();
 
@@ -2799,38 +2801,7 @@ class SupabaseService extends ChangeNotifier {
   }
 
   Future<List<Post>> _enrichPostsWithBookMetadata(List<Post> posts) async {
-    if (posts.isEmpty) return posts;
-
-    final cache = <String, Book?>{};
-
-    Future<Book?> getBook(String bookId) async {
-      if (cache.containsKey(bookId)) return cache[bookId];
-      final found = await const BookCatalogLookup().fetchById(bookId);
-      cache[bookId] = found;
-      return found;
-    }
-
-    final enriched = <Post>[];
-    for (final post in posts) {
-      final resolved = await getBook(post.bookId);
-      if (resolved == null) {
-        enriched.add(post);
-        continue;
-      }
-
-      enriched.add(
-        post.copyWith(
-          bookTitle: post.bookTitle.trim().isNotEmpty
-              ? post.bookTitle
-              : resolved.title,
-          bookAuthor: post.bookAuthor.trim().isNotEmpty
-              ? post.bookAuthor
-              : resolved.author,
-          bookCoverUrl: resolved.coverUrl,
-          bookCoverSource: resolved.coverSource,
-        ),
-      );
-    }
+    final enriched = await _postBookMetadata.enrich(posts);
     return _attachReactionState(enriched);
   }
 
