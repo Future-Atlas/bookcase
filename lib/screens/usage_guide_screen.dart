@@ -40,7 +40,7 @@ class UsageGuideScreen extends StatelessWidget {
         'リアクションなどの操作にはログインが必要です。自分の投稿に自分でリアクションすることはできません。非公開アカウントやブロック関係、年齢制限によって閲覧できない投稿があります。一般ユーザーによる返信機能は現在利用できません。',
       ),
       _GuideSection(
-        'カーラー設定',
+        'カラー設定',
         Icons.palette_outlined,
         '左上のハンバーガーメニューから「設定」を開きます。「ダークモード」のスイッチで明るい表示と暗い表示を切り替えられます。自分のページの色を変更するときは「アカウント設定」→「ページカラー」で好きな利用可能色を選択し、「保存する」を押してください。',
         'ページカラーには最初から使える標準色と、投稿実績によって解禁される色があります。解禁の節目は投稿10・25・50・100件、その後50件ごとです。解禁した色は恒久的に使えますが、特典で解禁した色の取り消し・変更はできません。ダークモードは自分の表示設定、ページカラーは他のユーザーにも見える外枠などの色です。',
@@ -72,7 +72,7 @@ class UsageGuideScreen extends StatelessWidget {
                 clipBehavior: Clip.antiAlias,
                 child: ExpansionTile(
                   key: ValueKey('usage-guide-section-$i'),
-                  initiallyExpanded: i == 0,
+                  initiallyExpanded: false,
                   leading: Icon(entries[i].icon,
                     color: theme.colorScheme.primary),
                   title: Text(entries[i].heading,

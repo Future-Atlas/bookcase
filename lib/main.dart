@@ -763,11 +763,29 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                   ),
                                   PopupMenuItem(
                                     value: _HeaderMenuAction.usageGuide,
-                                    child: Text(
-                                      '使い方ガイド',
-                                      style: TextStyle(
-                                        fontSize: 28 / 2,
-                                        color: popupMenuTextColor,
+                                    child: Container(
+                                      key: const ValueKey('menu-usage-guide-highlight'),
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: ownHeaderColor,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '使い方ガイド',
+                                        style: TextStyle(
+                                          fontSize: 28 / 2,
+                                          fontWeight: FontWeight.bold,
+                                          color: ThemeData.estimateBrightnessForColor(
+                                                    ownHeaderColor,
+                                                  ) ==
+                                                  Brightness.dark
+                                              ? Colors.white
+                                              : Colors.black,
+                                        ),
                                       ),
                                     ),
                                   ),
