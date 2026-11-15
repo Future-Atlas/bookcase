@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/book.dart';
 import '../models/reading_session.dart';
 import '../services/reading_session_service.dart';
-import '../widgets/reading_cover_art.dart';
+import '../widgets/book_cover_image.dart';
 
 class ReadingTimerScreen extends StatefulWidget {
   const ReadingTimerScreen({
@@ -143,6 +143,7 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
           pubDate: '',
           isbn: session.bookIsbn,
           coverUrl: session.bookCoverUrl,
+          coverSource: session.bookCoverSource,
         );
 
     return Scaffold(
@@ -168,7 +169,9 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
                       color: Colors.black12,
                       child: Padding(
                         padding: const EdgeInsets.all(18),
-                        child: ReadingCoverArt(url: book.coverUrl),
+                        // Reuse the search-results image renderer. On Flutter
+                        // Web, ordinary image requests can be blocked by CORS.
+                        child: BookCoverImage(book: book),
                       ),
                     ),
                   ),
