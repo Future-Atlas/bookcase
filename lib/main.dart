@@ -30,7 +30,7 @@ import 'screens/reading_timer_resume_gate.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/public_post_routes.dart';
 import 'widgets/primary_bottom_navigation.dart';
-import 'widgets/home_guide_navigation_stack.dart';
+import 'widgets/persistent_home_navigation_stack.dart';
 import 'widgets/bottom_ad_viewport_inset.dart';
 import 'utils/initial_public_route.dart';
 
@@ -858,25 +858,27 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                   ),
                 ),
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: _currentScreenIndex == 0 ||
-                            _currentScreenIndex == 13
-                        ? HomeGuideNavigationStack(
-                            key: const ValueKey('HomeGuideNavigationStack'),
-                            showGuide: _currentScreenIndex == 13,
-                            home: BookListScreen(
-                              key: const ValueKey('BookListScreen'),
-                              onOpenUserProfile: _openUserProfile,
-                              initialGenre: _genreFromPath(
-                                _currentAppPathFromUri(Uri.base),
-                              ),
-                            ),
-                            guide: const UsageGuideScreen(
-                              key: ValueKey('UsageGuideScreen'),
-                            ),
-                          )
-                        : _currentScreenIndex == 1
+                  child: PersistentHomeNavigationStack(
+                    key: const ValueKey('PersistentHomeNavigationStack'),
+                    showHome: _currentScreenIndex == 0 ||
+                        _currentScreenIndex == 13,
+                    showGuide: _currentScreenIndex == 13,
+                    cacheKey: service.isAuthenticated
+                        ? 'signed-in-${service.activeProfileId}'
+                        : 'guest',
+                    home: BookListScreen(
+                      key: const ValueKey('BookListScreen'),
+                      onOpenUserProfile: _openUserProfile,
+                      initialGenre: _genreFromPath(
+                        _currentAppPathFromUri(Uri.base),
+                      ),
+                    ),
+                    guide: const UsageGuideScreen(
+                      key: ValueKey('UsageGuideScreen'),
+                    ),
+                    other: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      child: _currentScreenIndex == 1
                         ? UserProfileScreen(
                             key: const ValueKey('UserProfileScreen'),
                             onBack: _goToBookList,
@@ -951,6 +953,7 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                         : const ModerationScreen(
                             key: ValueKey('ModerationScreen'),
                           ),
+                    ),
                   ),
                 ),
               ],

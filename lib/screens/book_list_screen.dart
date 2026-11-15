@@ -950,6 +950,7 @@ class _BookListScreenState extends State<BookListScreen> {
                                       hasMore: _controller.hasMorePopular,
                                       isLoadingInitial:
                                           _controller.isLoadingPopular,
+                                      onRetry: () => unawaited(_controller.retryPopular()),
                                     ),
                                   // Only place the genre ad between real book rows.
                                   if (kIsWeb &&
