@@ -33,7 +33,8 @@ test('hamburger menu places a routable usage guide between timeline and settings
   assert.match(main, /case 13:\s+return '\/guide'/);
   assert.match(main, /case _HeaderMenuAction\.usageGuide:[\s\S]*?_setCurrentScreenIndex\(13\)/);
   assert.match(main, /_currentScreenIndex == 0 \|\|\s+_currentScreenIndex == 13/);
-  assert.match(main, /HomeGuideNavigationStack\(/);
+  assert.match(main, /PersistentHomeNavigationStack\(/);
+  assert.match(main, /showHome: _currentScreenIndex == 0 \|\|\s+_currentScreenIndex == 13/);
   assert.match(main, /showGuide: _currentScreenIndex == 13/);
   assert.match(main, /guide: const UsageGuideScreen/);
 });
@@ -74,9 +75,13 @@ test('only the hamburger usage guide option uses the user-selected page color', 
   assert.match(guide, /initiallyExpanded: false/);
 });
 
-test('revisiting the guide does not recreate the Home API-loading widget', () => {
-  const stack = read('lib/widgets/home_guide_navigation_stack.dart');
-  assert.match(stack, /IndexedStack\(/);
-  assert.match(stack, /home,\s+if \(showGuide\) guide else const SizedBox\.shrink\(\)/);
-  assert.match(main, /HomeGuideNavigationStack\(/);
+test('revisiting any app screen retains Home without catalog requests', () => {
+  const guideStack = read('lib/widgets/home_guide_navigation_stack.dart');
+  const shell = read('lib/widgets/persistent_home_navigation_stack.dart');
+  assert.match(guideStack, /IndexedStack\(/);
+  assert.match(guideStack, /home,\s+if \(showGuide\) guide else const SizedBox\.shrink\(\)/);
+  assert.match(shell, /HomeGuideNavigationStack\(/);
+  assert.match(shell, /if \(_hasOpenedHome\)/);
+  assert.match(shell, /key: ValueKey\(widget\.cacheKey\)/);
+  assert.match(main, /PersistentHomeNavigationStack\(/);
 });
