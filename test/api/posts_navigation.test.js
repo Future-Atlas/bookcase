@@ -17,7 +17,8 @@ test("timeline, home and profile are provided by the persistent footer", () => {
   assert.match(main, /accentColor: headerColor/);
   assert.match(main, /onTimeline: \(\) => Navigator\.of\(context\)\.pushNamed\('\/posts'\)/);
   assert.match(timeline, /bottomNavigationBar: PrimaryBottomNavigation\(/);
-  assert.match(footer, /const Text\('▽'/);
+  assert.match(footer, /ValueKey\('timeline-triangle-up'\)/);
+  assert.match(footer, /_TimelineTrianglePainter/);
   assert.match(footer, /Icons\.home_outlined/);
   assert.match(footer, /Icons\.person_outline/);
   assert.doesNotMatch(main, /child: PublicPostsLink\(/);

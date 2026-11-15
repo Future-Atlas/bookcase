@@ -20,6 +20,7 @@ import 'screens/infringement_policy_screen.dart';
 import 'screens/external_transmission_screen.dart';
 import 'screens/legal_consent_screen.dart';
 import 'screens/account_settings_screen.dart';
+import 'screens/usage_guide_screen.dart';
 import 'screens/contact_screen.dart';
 import 'screens/operator_info_screen.dart';
 import 'screens/profile_onboarding_screen.dart';
@@ -32,7 +33,7 @@ import 'widgets/primary_bottom_navigation.dart';
 import 'widgets/bottom_ad_viewport_inset.dart';
 import 'utils/initial_public_route.dart';
 
-enum _HeaderMenuAction { home, myPage, timeline, settings, help, moderation, logout }
+enum _HeaderMenuAction { home, myPage, timeline, usageGuide, settings, help, moderation, logout }
 
 final supabaseService = SupabaseService();
 final themeService = ThemeService();
@@ -312,6 +313,8 @@ class _MainNavigationShellState extends State<MainNavigationShell>
         return 2;
       case '/help':
         return 3;
+      case '/guide':
+        return 13;
       case '/moderation':
         return 4;
       case '/terms':
@@ -341,6 +344,8 @@ class _MainNavigationShellState extends State<MainNavigationShell>
         return '/settings';
       case 3:
         return '/help';
+      case 13:
+        return '/guide';
       case 4:
         return '/moderation';
       case 5:
@@ -582,6 +587,9 @@ class _MainNavigationShellState extends State<MainNavigationShell>
       case _HeaderMenuAction.timeline:
         await Navigator.of(context).pushNamed('/posts');
         break;
+      case _HeaderMenuAction.usageGuide:
+        _setCurrentScreenIndex(13);
+        break;
       case _HeaderMenuAction.settings:
         _setCurrentScreenIndex(2);
         break;
@@ -611,6 +619,8 @@ class _MainNavigationShellState extends State<MainNavigationShell>
         return '設定';
       case 3:
         return 'ヘルプ';
+      case 13:
+        return '使い方ガイド';
       case 4:
         return '管理';
       case 5:
@@ -752,6 +762,16 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                     ),
                                   ),
                                   PopupMenuItem(
+                                    value: _HeaderMenuAction.usageGuide,
+                                    child: Text(
+                                      '使い方ガイド',
+                                      style: TextStyle(
+                                        fontSize: 28 / 2,
+                                        color: popupMenuTextColor,
+                                      ),
+                                    ),
+                                  ),
+                                  PopupMenuItem(
                                     value: _HeaderMenuAction.settings,
                                     child: Text(
                                       '設定',
@@ -866,6 +886,10 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                 () => _openPrivacyPasswordRecovery = false,
                               );
                             },
+                          )
+                        : _currentScreenIndex == 13
+                        ? const UsageGuideScreen(
+                            key: ValueKey('UsageGuideScreen'),
                           )
                         : _currentScreenIndex == 3
                         ? _HelpScreen(

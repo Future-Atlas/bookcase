@@ -20,7 +20,8 @@ void main() {
       ),
     );
 
-    expect(find.text('▽'), findsOneWidget);
+    expect(find.byKey(const ValueKey('timeline-triangle-up')), findsOneWidget);
+    expect(find.text('▽'), findsNothing);
     expect(find.byIcon(Icons.home_outlined), findsOneWidget);
     expect(find.byIcon(Icons.person_outline), findsOneWidget);
     final timeline = find.byKey(const ValueKey('primary-footer-timeline'));
