@@ -38,7 +38,7 @@ test('hamburger menu places a routable usage guide between timeline and settings
 test('guide covers six current features with actions and limitations', () => {
   for (const section of [
     '読了（投稿機能）', 'My 本棚', '読書カレンダー',
-    '読みたい！', 'タイムライン', 'カーラー設定',
+    '読みたい！', 'タイムライン', 'カラー設定',
   ]) assert.ok(guide.includes(section), section);
   for (const rule of [
     '1,000文字', '同じ書籍', '24時間', '読了済み',
