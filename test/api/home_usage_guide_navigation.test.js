@@ -32,7 +32,10 @@ test('hamburger menu places a routable usage guide between timeline and settings
   assert.match(main, /case '\/guide':\s+return 13/);
   assert.match(main, /case 13:\s+return '\/guide'/);
   assert.match(main, /case _HeaderMenuAction\.usageGuide:[\s\S]*?_setCurrentScreenIndex\(13\)/);
-  assert.match(main, /_currentScreenIndex == 13\s+\? const UsageGuideScreen/);
+  assert.match(main, /_currentScreenIndex == 0 \|\|\s+_currentScreenIndex == 13/);
+  assert.match(main, /HomeGuideNavigationStack\(/);
+  assert.match(main, /showGuide: _currentScreenIndex == 13/);
+  assert.match(main, /guide: const UsageGuideScreen/);
 });
 
 test('guide covers six current features with actions and limitations', () => {
@@ -64,7 +67,16 @@ test('usage guide emphasizes instructions and renders small per-line notes', () 
 test('only the hamburger usage guide option uses the user-selected page color', () => {
   assert.match(main, /key: const ValueKey\('menu-usage-guide-highlight'\)/);
   assert.match(main, /color: ownHeaderColor,/);
-  assert.match(main, /ThemeData\.estimateBrightnessForColor\(/);
+  assert.match(main, /child: Text\(\s*'使い方ガイド',[\s\S]*?color: ownHeaderColor,/);
+  assert.doesNotMatch(main, /color: ThemeData\.estimateBrightnessForColor\(/);
+  assert.doesNotMatch(main, /decoration: BoxDecoration\(\s*color: ownHeaderColor,/);
   assert.doesNotMatch(guide, /context\.watch<SupabaseService>/);
   assert.match(guide, /initiallyExpanded: false/);
+});
+
+test('revisiting the guide does not recreate the Home API-loading widget', () => {
+  const stack = read('lib/widgets/home_guide_navigation_stack.dart');
+  assert.match(stack, /IndexedStack\(/);
+  assert.match(stack, /home,\s+if \(showGuide\) guide else const SizedBox\.shrink\(\)/);
+  assert.match(main, /HomeGuideNavigationStack\(/);
 });
