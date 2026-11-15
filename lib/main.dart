@@ -30,6 +30,7 @@ import 'screens/reading_timer_resume_gate.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/public_post_routes.dart';
 import 'widgets/primary_bottom_navigation.dart';
+import 'widgets/home_guide_navigation_stack.dart';
 import 'widgets/bottom_ad_viewport_inset.dart';
 import 'utils/initial_public_route.dart';
 
@@ -763,29 +764,13 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                   ),
                                   PopupMenuItem(
                                     value: _HeaderMenuAction.usageGuide,
-                                    child: Container(
+                                    child: Text(
+                                      '使い方ガイド',
                                       key: const ValueKey('menu-usage-guide-highlight'),
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 8,
-                                      ),
-                                      decoration: BoxDecoration(
+                                      style: TextStyle(
+                                        fontSize: 28 / 2,
+                                        fontWeight: FontWeight.bold,
                                         color: ownHeaderColor,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        '使い方ガイド',
-                                        style: TextStyle(
-                                          fontSize: 28 / 2,
-                                          fontWeight: FontWeight.bold,
-                                          color: ThemeData.estimateBrightnessForColor(
-                                                    ownHeaderColor,
-                                                  ) ==
-                                                  Brightness.dark
-                                              ? Colors.white
-                                              : Colors.black,
-                                        ),
                                       ),
                                     ),
                                   ),
@@ -875,12 +860,20 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                 Expanded(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
-                    child: _currentScreenIndex == 0
-                        ? BookListScreen(
-                            key: const ValueKey('BookListScreen'),
-                            onOpenUserProfile: _openUserProfile,
-                            initialGenre: _genreFromPath(
-                              _currentAppPathFromUri(Uri.base),
+                    child: _currentScreenIndex == 0 ||
+                            _currentScreenIndex == 13
+                        ? HomeGuideNavigationStack(
+                            key: const ValueKey('HomeGuideNavigationStack'),
+                            showGuide: _currentScreenIndex == 13,
+                            home: BookListScreen(
+                              key: const ValueKey('BookListScreen'),
+                              onOpenUserProfile: _openUserProfile,
+                              initialGenre: _genreFromPath(
+                                _currentAppPathFromUri(Uri.base),
+                              ),
+                            ),
+                            guide: const UsageGuideScreen(
+                              key: ValueKey('UsageGuideScreen'),
                             ),
                           )
                         : _currentScreenIndex == 1
@@ -904,10 +897,6 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                                 () => _openPrivacyPasswordRecovery = false,
                               );
                             },
-                          )
-                        : _currentScreenIndex == 13
-                        ? const UsageGuideScreen(
-                            key: ValueKey('UsageGuideScreen'),
                           )
                         : _currentScreenIndex == 3
                         ? _HelpScreen(
