@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/book.dart';
 import '../models/reading_session.dart';
 import '../services/reading_session_service.dart';
-import '../widgets/reading_cover_art.dart';
+import '../widgets/book_cover_image.dart';
 
 class ReadingTimerScreen extends StatefulWidget {
   const ReadingTimerScreen({
@@ -143,6 +143,7 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
           pubDate: '',
           isbn: session.bookIsbn,
           coverUrl: session.bookCoverUrl,
+          coverSource: session.bookCoverSource,
         );
 
     return Scaffold(
@@ -168,7 +169,9 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
                       color: Colors.black12,
                       child: Padding(
                         padding: const EdgeInsets.all(18),
-                        child: ReadingCoverArt(url: book.coverUrl),
+                        // Reuse the search-results image renderer. On Flutter
+                        // Web, ordinary image requests can be blocked by CORS.
+                        child: BookCoverImage(book: book),
                       ),
                     ),
                   ),
@@ -213,8 +216,6 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
               ),
               const SizedBox(height: 24),
               const Text(
-                '計測開始・終了時刻はサーバーで記録されます。\n'
-                '過去の記録を追加・編集することはできません。\n'
                 '1回の計測は最大24時間です。\n'
                 '画面を閉じても、計測中の記録はカレンダーから再開できます。',
                 textAlign: TextAlign.center,

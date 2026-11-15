@@ -37,7 +37,14 @@ class PrimaryBottomNavigation extends StatelessWidget {
           children: [
             _item(
               0, 'タイムライン', onTimeline,
-              const Text('▽', style: TextStyle(fontSize: 28, height: 1)),
+              Semantics(
+                label: '⇓',
+                child: CustomPaint(
+                  key: const ValueKey('timeline-double-arrow-down'),
+                  size: const Size(25, 25),
+                  painter: _TimelineDoubleArrowDownPainter(color: accentColor),
+                ),
+              ),
             ),
             _item(1, 'ホーム', onHome, const Icon(Icons.home_outlined, size: 25)),
             _item(2, 'マイページ', onMyPage,
@@ -80,4 +87,41 @@ class PrimaryBottomNavigation extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Downward double arrow (⇓), keeping the previous 2.4px outline weight.
+class _TimelineDoubleArrowDownPainter extends CustomPainter {
+  const _TimelineDoubleArrowDownPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final pen = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.4
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final middle = size.width / 2;
+    canvas.drawLine(
+      Offset(middle - 3.5, 3),
+      Offset(middle - 3.5, size.height - 11),
+      pen,
+    );
+    canvas.drawLine(
+      Offset(middle + 3.5, 3),
+      Offset(middle + 3.5, size.height - 11),
+      pen,
+    );
+    final arrowhead = Path()
+      ..moveTo(3, size.height - 12)
+      ..lineTo(middle, size.height - 3)
+      ..lineTo(size.width - 3, size.height - 12);
+    canvas.drawPath(arrowhead, pen);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TimelineDoubleArrowDownPainter oldDelegate) =>
+      oldDelegate.color != color;
 }

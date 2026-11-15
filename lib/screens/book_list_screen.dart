@@ -912,13 +912,15 @@ class _BookListScreenState extends State<BookListScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildTopHeroImage(),
+                          if (!context.watch<SupabaseService>().isAuthenticated)
+                            _buildTopHeroImage(),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (widget.initialGenre == null &&
+                                if (!context.watch<SupabaseService>().isAuthenticated &&
+                                    widget.initialGenre == null &&
                                     _controller.searchQuery.isEmpty)
                                   _buildServiceIntroduction(),
                                 if (_controller.searchQuery.isNotEmpty)
@@ -1236,19 +1238,19 @@ class _BookListScreenState extends State<BookListScreen> {
                   icon: Icons.rate_review_outlined,
                   title: '読書体験をレビューとして残す',
                   description:
-                      '読んだ本を評価するだけでなく、印象に残った点や読後の考えを文章で記録できます。読んだ本を記録して、あなただけの本棚を作りましょう！',
+                      '読んだ本の感想や評価を記録して、あなただけの本棚を作りましょう。他の読者のレビューやリアクションを通じて、自分とは違う感想や視点にも出会えます。',
                 ),
                 _buildServicePoint(
-                  icon: Icons.people_outline,
-                  title: '他の読者の感想に触れる',
+                  icon: Icons.calendar_month_outlined,
+                  title: '読書カレンダー',
                   description:
-                      '他ユーザーのレビューやリアクションを通じて、同じ作品を読んだ人の、自分と異なる感想に触れることができます。',
+                      '読書タイマーを使って読書時間を計測し、日ごとの読書記録をカレンダーで振り返れます。フォロワーとの共有やリアクションも楽しめます。',
                 ),
                 _buildServicePoint(
                   icon: Icons.menu_book_outlined,
                   title: '次に読む本を見つける',
                   description:
-                      '「タイトル・著者・出版社」で検索することができます。気になる書籍のレビューを読んで、次に読む本を決めましょう！',
+                      '作品名・著者名・出版社名で本を検索できます。レビューを参考にしながら、気になった本は「読みたい！」に保存して、マイページからいつでも確認しましょう。',
                 ),
               ],
             ),
