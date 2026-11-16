@@ -241,6 +241,34 @@ async function serveNdl(request, context, { cache, requestHandler, cacheJson = f
   }
 }
 
+// A verified public catalog cache hit never reaches the upstream provider.
+// Check it before the 24/min catalog *miss* limiter; the 120/min general API
+// limiter still applies. Never allow cached API errors or writes to bypass
+// the catalog quota.
+async function readCachedPublicCatalog(request, cache = globalThis.caches?.default) {
+  if (request.method !== "GET" || !cache) return null;
+  const path = new URL(request.url).pathname.replace(/\/{2,}/g, "/");
+  if (path !== "/api/ndl" && path !== "/api/home-catalog") return null;
+  try {
+    const key = new Request(request.url, { method: "GET" });
+    const hit = await cache.match(key);
+    if (!hit || hit.status !== 200) return null;
+    const mime = hit.headers.get("Content-Type") || "";
+    if (path === "/api/ndl" && !/^application\/xml\b/i.test(mime)) {
+      return null;
+    }
+    if (path === "/api/home-catalog" &&
+        !/^application\/json\b/i.test(mime)) {
+      return null;
+    }
+    return hit;
+  } catch {
+    // Cache API can be unavailable in tests or on an edge: do not serve
+    // an error, and keep the normal protected upstream path.
+    return null;
+  }
+}
+
 async function routeRequest(request, env, context) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/{2,}/g, "/");
@@ -338,13 +366,17 @@ export default {
         url.protocol = "https:";
         return Response.redirect(url.toString(), 308);
       }
+      const cachedCatalog = await readCachedPublicCatalog(request);
       const block = await guardRequest(request, env, {
         isCrawler: BOT_PATTERN.test(request.headers.get("user-agent") || ""),
         seoPath: SEO_PATH_PATTERN.test(url.pathname),
+        catalogCacheHit: cachedCatalog !== null,
       });
       if (block) return withEnvironmentHeaders(block, env, request);
+      // A cached, public, previously successful response consumes no
+      // catalog-miss quota, but has passed the general API rate guard.
       return withEnvironmentHeaders(
-        await routeRequest(request, env, context),
+        cachedCatalog ?? await routeRequest(request, env, context),
         env,
         request,
       );
@@ -366,6 +398,7 @@ export const _test = {
   queryFromUrl,
   routeRequest,
   serveNdl,
+  readCachedPublicCatalog,
 };
 
 // Wrangler Durable Object binding targets the entrypoint's named export.
