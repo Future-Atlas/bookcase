@@ -161,18 +161,20 @@ test("cache flag cannot bypass catalog limiter for non-cached routes or writes",
   const {env, calls} = createLimiters({catalogAllowed: false});
   const urls = [
     "https://site.test/api/rakuten?endpoint=book",
-    "https://site.test/api/openbd?isbn=9780140328721",
   ];
   for (const url of urls) {
     const response = await guardRequest(new Request(url), env,
       {catalogCacheHit: true});
     assert.equal(response?.status, 429);
   }
-  const post = await guardRequest(new Request(
+  for (const endpoint of [
     "https://site.test/api/home-catalog?lang=jpn&topic=%E6%97%A5%E6%9C%AC&page=1",
-    {method: "POST"}),
-  env, {catalogCacheHit: true});
-  assert.equal(post?.status, 429);
+    "https://site.test/api/openbd?isbn=9780140328721",
+  ]) {
+    const post = await guardRequest(new Request(endpoint, {method: "POST"}),
+      env, {catalogCacheHit: true});
+    assert.equal(post?.status, 429);
+  }
   assert.equal(calls.filter(c => c.name === "catalog").length, 3);
 });
 
@@ -229,4 +231,17 @@ test("cached errors or mismatched content types never bypass the catalog limiter
     assert.equal(blocked?.status, 429);
     assert.equal(calls.filter(call => call.name === "catalog").length, 1);
   }
+});
+
+
+test("cached, validated openBD metadata avoids repeating the catalog quota", async () => {
+  const req = new Request("https://site.test/api/openbd?isbn=9780140328721");
+  const cache = {async match() {
+    return Response.json([{"summary": {"isbn": "9780140328721"}}]);
+  }};
+  const hit = await workerTest.readCachedPublicCatalog(req, cache);
+  assert.equal(hit?.status, 200);
+  const {env, calls} = createLimiters({catalogAllowed: false});
+  assert.equal(await guardRequest(req, env, {catalogCacheHit: !!hit}), null);
+  assert.deepEqual(calls.map(item => item.name), ["api"]);
 });
