@@ -44,7 +44,7 @@ export async function guardRequest(request, env, flags) {
   // This flag is set by the Worker only after finding a verified, cached
   // public GET response. A cache hit has no upstream catalog cost, but must
   // continue to count against the general API limiter (120/min/IP).
-  const path = new URL(request.url).pathname.replace(/\\/{2,}/g, "/");
+  const path = new URL(request.url).pathname.replace(/\/{2,}/g, "/");
   const cachedPublicCatalog =
     flags?.catalogCacheHit === true &&
     request.method === "GET" &&
