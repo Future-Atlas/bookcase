@@ -10,6 +10,7 @@ const COSTLY_PATHS = new Set([
 const PUBLIC_CACHEABLE_CATALOG_PATHS = new Set([
   "/api/home-catalog",
   "/api/ndl",
+  "/api/openbd",
 ]);
 
 function protectedRoute(request, { isCrawler = false, seoPath = false } = {}) {
