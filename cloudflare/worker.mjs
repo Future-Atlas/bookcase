@@ -195,7 +195,8 @@ function withEnvironmentHeaders(response, env, request) {
 // The public NDL proxy must not repeat the same slow upstream search on
 // each visit. Cloudflare Cache API is per data center; in-flight coalescing
 // prevents concurrent requests in one isolate from amplifying a timeout.
-// Only successful public RSS is cacheable (api/ndl.js sets the 10m TTL).
+// Only successful public XML or validated catalog JSON is cacheable;
+// providers set short-lived TTLs (10m) so withdrawn metadata expires.
 const ndlInFlight = new Map();
 
 async function serveNdl(request, context, { cache, requestHandler, cacheJson = false } = {}) {
@@ -248,7 +249,8 @@ async function serveNdl(request, context, { cache, requestHandler, cacheJson = f
 async function readCachedPublicCatalog(request, cache = globalThis.caches?.default) {
   if (request.method !== "GET" || !cache) return null;
   const path = new URL(request.url).pathname.replace(/\/{2,}/g, "/");
-  if (path !== "/api/ndl" && path !== "/api/home-catalog") return null;
+  if (path !== "/api/ndl" && path !== "/api/home-catalog" &&
+      path !== "/api/openbd") return null;
   try {
     const key = new Request(request.url, { method: "GET" });
     const hit = await cache.match(key);
@@ -257,7 +259,7 @@ async function readCachedPublicCatalog(request, cache = globalThis.caches?.defau
     if (path === "/api/ndl" && !/^application\/xml\b/i.test(mime)) {
       return null;
     }
-    if (path === "/api/home-catalog" &&
+    if ((path === "/api/home-catalog" || path === "/api/openbd") &&
         !/^application\/json\b/i.test(mime)) {
       return null;
     }
@@ -304,7 +306,12 @@ async function routeRequest(request, env, context) {
       cacheJson: true,
     });
   }
-  if (path === "/api/openbd") return invoke(openbd, request);
+  if (path === "/api/openbd") {
+    return serveNdl(request, context, {
+      requestHandler: () => invoke(openbd, request),
+      cacheJson: true,
+    });
+  }
   if (path === "/api/book-covers") return invoke(bookCovers, request);
   if (path === "/api/rakuten") {
     // Approved Cloudflare environments use server-owned credentials and the
