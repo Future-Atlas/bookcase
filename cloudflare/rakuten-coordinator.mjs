@@ -10,6 +10,7 @@ const MAX_CACHED = 120;
 const ALLOWED_PATHS = new Set([
   "/services/api/BooksBook/Search/20170404",
   "/services/api/BooksForeignBook/Search/20170404",
+  "/services/api/BooksTotal/Search/20170404",
 ]);
 
 function errorResult(status, error, retryAfter = null) {

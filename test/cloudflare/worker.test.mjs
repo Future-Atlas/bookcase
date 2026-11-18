@@ -274,6 +274,53 @@ test("production Rakuten proxy uses server credentials and the global quota obje
   assert.equal(requests.length, 0);
 });
 
+test("Rakuten total search accepts one broad keyword request", async () => {
+  const { env } = environment({ appEnv: "production" });
+  const called = [];
+  env.RAKUTEN_APP_ID = "production-id";
+  env.RAKUTEN_ACCESS_KEY = "production-access-key";
+  env.RAKUTEN_QUOTA = {
+    idFromName() { return "global-app-quota"; },
+    get() {
+      return {
+        async fetch(_url, options) {
+          called.push(JSON.parse(options.body).url);
+          return Response.json({ Items: [] });
+        },
+      };
+    },
+  };
+  const response = await worker.fetch(new Request(
+    "https://www.sharemarium.com/api/rakuten?endpoint=total" +
+      "&keyword=one%20piece&booksGenreId=000&field=0" +
+      "&outOfStockFlag=1&sort=standard&hits=20",
+  ), env);
+  assert.equal(response.status, 200);
+  assert.equal(called.length, 1);
+  const upstream = new URL(called[0]);
+  assert.equal(upstream.pathname, "/services/api/BooksTotal/Search/20170404");
+  assert.equal(upstream.searchParams.get("keyword"), "one piece");
+  assert.equal(upstream.searchParams.get("booksGenreId"), "000");
+  assert.equal(upstream.searchParams.get("field"), "0");
+  assert.equal(upstream.searchParams.get("outOfStockFlag"), "1");
+});
+
+test("Rakuten total search rejects narrow fields and non-root genres", async () => {
+  const { env } = environment({ appEnv: "production" });
+  env.RAKUTEN_APP_ID = "production-id";
+  env.RAKUTEN_ACCESS_KEY = "production-access-key";
+  env.RAKUTEN_QUOTA = { idFromName() { return "id"; }, get() { throw new Error("must not call"); } };
+  for (const query of [
+    "endpoint=total&title=人間失格&booksGenreId=000",
+    "endpoint=total&keyword=人間失格&booksGenreId=001",
+  ]) {
+    const response = await worker.fetch(
+      new Request(`https://www.sharemarium.com/api/rakuten?${query}`), env,
+    );
+    assert.equal(response.status, 400);
+  }
+});
+
 test("staging Rakuten fails closed without quota or secrets", async () => {
   const { env, requests } = environment();
   env.RAKUTEN_APP_ID = "staging-id";
