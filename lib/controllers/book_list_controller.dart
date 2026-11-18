@@ -122,6 +122,13 @@ class BookListController extends ChangeNotifier {
 
   // 初期化
   bool _timelineOnly = false;
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    // Provider requests can finish after sign-out or navigation reset.
+    if (!_disposed) super.notifyListeners();
+  }
 
   void initialize(BuildContext context, {bool timelineOnly = false}) {
     _timelineOnly = timelineOnly;
@@ -131,6 +138,7 @@ class BookListController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _featuredLookupGeneration++;
     searchController.removeListener(_onSearchChanged);
     _searchDebounce?.cancel();
@@ -321,8 +329,12 @@ class BookListController extends ChangeNotifier {
       final index = featuredBooks.indexWhere((book) => book.id == original.id);
       if (index < 0) continue;
       final hydrated = original.copyWith(
-        coverUrl: fresh.coverUrl,
-        coverSource: fresh.coverSource,
+        coverUrl: fresh.coverUrl.trim().isNotEmpty
+            ? fresh.coverUrl
+            : original.coverUrl,
+        coverSource: fresh.coverUrl.trim().isNotEmpty
+            ? fresh.coverSource
+            : original.coverSource,
         coverAttributionUrl: fresh.coverAttributionUrl,
         description: fresh.description,
         rakutenAffiliateUrl: fresh.rakutenAffiliateUrl,
@@ -354,35 +366,40 @@ class BookListController extends ChangeNotifier {
     isLoadingTimeline = true;
     notifyListeners();
 
-    _allowAdultContent = await SupabaseService().canViewAdultContent();
-    _catalogRepository = BookRepository(allowAdultContent: _allowAdultContent);
+    // Keep previously fetched Home cards visible during subsequent refreshes.
+    // A transient catalog failure must not replace them with an empty state.
+    bool canViewAdult;
+    try {
+      canViewAdult = await SupabaseService().canViewAdultContent();
+    } catch (_) {
+      canViewAdult = _allowAdultContent;
+    }
+    final accessChanged = _allowAdultContent != canViewAdult;
+    _allowAdultContent = canViewAdult;
+    if (accessChanged) {
+      // Never retain adult-visible cards when view permissions change.
+      _catalogRepository = BookRepository(allowAdultContent: canViewAdult);
+      recommendedPage = japanesePage = westernPage = popularPage = 1;
+      hasMoreRecommended = hasMoreJapanese = hasMoreWestern = hasMorePopular = true;
+      _recommendedPageCache.clear();
+      _japanesePageCache.clear();
+      _westernPageCache.clear();
+      _popularPageCache.clear();
+      _recommendedReachedEnd = false;
+      _japaneseReachedEnd = false;
+      _westernReachedEnd = false;
+      _popularReachedEnd = false;
+      recommendedBooks = [];
+      japaneseBooks = [];
+      westernBooks = [];
+      popularBooks = [];
+      featuredBooks = [];
+      timelinePosts = [];
+      timelineReplies = {};
+      notifyListeners();
+    }
     final repository = _repository;
-
-    recommendedPage = 1;
-    japanesePage = 1;
-    westernPage = 1;
-    popularPage = 1;
-    hasMoreRecommended = true;
-    hasMoreJapanese = true;
-    hasMoreWestern = true;
-    hasMorePopular = true;
-    _recommendedPageCache.clear();
-    _japanesePageCache.clear();
-    _westernPageCache.clear();
-    _popularPageCache.clear();
-    _recommendedReachedEnd = false;
-    _japaneseReachedEnd = false;
-    _westernReachedEnd = false;
-    _popularReachedEnd = false;
-    recommendedBooks = [];
-    japaneseBooks = [];
-    westernBooks = [];
-    popularBooks = [];
-    featuredBooks = [];
     final featuredGeneration = ++_featuredLookupGeneration;
-    timelinePosts = [];
-    timelineReplies = {};
-    notifyListeners();
 
     try {
       final featured = await SupabaseService().fetchFeaturedBooks();
@@ -394,7 +411,7 @@ class BookListController extends ChangeNotifier {
           )
           .toList(growable: false);
     } catch (_) {
-      featuredBooks = [];
+      // Preserve any previous featured covers when the API is unavailable.
     } finally {
       isLoadingFeatured = false;
       notifyListeners();
@@ -405,17 +422,21 @@ class BookListController extends ChangeNotifier {
 
     Future<void> loadRecommended() async {
       try {
-        recommendedBooks = await repository.fetchBooksByGenre(
+        final books = await repository.fetchBooksByGenre(
           '新着',
           page: recommendedPage,
         );
-        _recommendedPageCache[recommendedPage] = recommendedBooks;
-        _recommendedReachedEnd = recommendedBooks.isEmpty ||
-            !repository.hasMoreHomeBooks('新着');
-        hasMoreRecommended = !_recommendedReachedEnd;
+        // A provider can silently return [] on a transient 429/5xx. Keep
+        // the last successful page and its pagination cursor in that case.
+        if (books.isNotEmpty || recommendedBooks.isEmpty) {
+          recommendedBooks = books;
+          _recommendedPageCache[recommendedPage] = books;
+          _recommendedReachedEnd = books.isEmpty ||
+              !repository.hasMoreHomeBooks('新着');
+          hasMoreRecommended = !_recommendedReachedEnd;
+        }
       } catch (_) {
-        recommendedBooks = [];
-        hasMoreRecommended = false;
+        if (recommendedBooks.isEmpty) hasMoreRecommended = false;
       } finally {
         isLoadingRecommended = false;
         notifyListeners();
@@ -424,17 +445,21 @@ class BookListController extends ChangeNotifier {
 
     Future<void> loadJapanese() async {
       try {
-        japaneseBooks = await repository.fetchBooksByGenre(
+        final books = await repository.fetchBooksByGenre(
           '和書',
           page: japanesePage,
         );
-        _japanesePageCache[japanesePage] = japaneseBooks;
-        _japaneseReachedEnd = japaneseBooks.isEmpty ||
-            !repository.hasMoreHomeBooks('和書');
-        hasMoreJapanese = !_japaneseReachedEnd;
+        // A provider can silently return [] on a transient 429/5xx. Keep
+        // the last successful page and its pagination cursor in that case.
+        if (books.isNotEmpty || japaneseBooks.isEmpty) {
+          japaneseBooks = books;
+          _japanesePageCache[japanesePage] = books;
+          _japaneseReachedEnd = books.isEmpty ||
+              !repository.hasMoreHomeBooks('和書');
+          hasMoreJapanese = !_japaneseReachedEnd;
+        }
       } catch (_) {
-        japaneseBooks = [];
-        hasMoreJapanese = false;
+        if (japaneseBooks.isEmpty) hasMoreJapanese = false;
       } finally {
         isLoadingJapanese = false;
         notifyListeners();
@@ -443,17 +468,21 @@ class BookListController extends ChangeNotifier {
 
     Future<void> loadWestern() async {
       try {
-        westernBooks = await repository.fetchBooksByGenre(
+        final books = await repository.fetchBooksByGenre(
           'English',
           page: westernPage,
         );
-        _westernPageCache[westernPage] = westernBooks;
-        _westernReachedEnd = westernBooks.isEmpty ||
-            !repository.hasMoreHomeBooks('English');
-        hasMoreWestern = !_westernReachedEnd;
+        // A provider can silently return [] on a transient 429/5xx. Keep
+        // the last successful page and its pagination cursor in that case.
+        if (books.isNotEmpty || westernBooks.isEmpty) {
+          westernBooks = books;
+          _westernPageCache[westernPage] = books;
+          _westernReachedEnd = books.isEmpty ||
+              !repository.hasMoreHomeBooks('English');
+          hasMoreWestern = !_westernReachedEnd;
+        }
       } catch (_) {
-        westernBooks = [];
-        hasMoreWestern = false;
+        if (westernBooks.isEmpty) hasMoreWestern = false;
       } finally {
         isLoadingWestern = false;
         notifyListeners();
@@ -462,21 +491,26 @@ class BookListController extends ChangeNotifier {
 
     Future<void> loadPopular() async {
       try {
-        popularBooks = await repository.fetchBooksByGenre(
+        final books = await repository.fetchBooksByGenre(
           'ベストセラー',
           page: popularPage,
         );
-        _popularPageCache[popularPage] = popularBooks;
-        _popularReachedEnd = popularBooks.isEmpty;
-        hasMorePopular = !_popularReachedEnd;
+        // A provider can silently return [] on a transient 429/5xx. Keep
+        // the last successful page and its pagination cursor in that case.
+        if (books.isNotEmpty || popularBooks.isEmpty) {
+          popularBooks = books;
+          _popularPageCache[popularPage] = books;
+          _popularReachedEnd = books.isEmpty;
+          hasMorePopular = !_popularReachedEnd;
+        }
       } catch (_) {
-        popularBooks = [];
-        hasMorePopular = false;
+        if (popularBooks.isEmpty) hasMorePopular = false;
       } finally {
         isLoadingPopular = false;
         notifyListeners();
       }
     }
+
     // Do not let a slow NDL new-arrivals query block the independent
     // language feeds or the user's timeline. Language feeds stay sequential
     // to avoid parallel requests to the low-volume public metadata service.
@@ -502,8 +536,7 @@ class BookListController extends ChangeNotifier {
         timelinePosts.map((post) => post.id).toList(growable: false),
       );
     } catch (_) {
-      timelinePosts = [];
-      timelineReplies = {};
+      // Retain the last working timeline when its API temporarily fails.
     } finally {
       isLoadingTimeline = false;
       notifyListeners();
@@ -577,6 +610,32 @@ class BookListController extends ChangeNotifier {
       hasMoreWestern = false;
     } finally {
       isLoadingWestern = false;
+      notifyListeners();
+    }
+  }
+
+  /// Let readers retry a transient Rakuten bestseller failure without
+  /// reloading the entire Home or discarding a previously successful page.
+  Future<void> retryPopular() async {
+    if (isLoadingPopular || isLoadingMorePopular) return;
+    isLoadingPopular = true;
+    notifyListeners();
+    try {
+      _repository.resetHomeBooks('ベストセラー');
+      final books = await _repository.fetchBooksByGenre('ベストセラー', page: 1);
+      if (books.isNotEmpty || popularBooks.isEmpty) {
+        popularBooks = books;
+        popularPage = 1;
+        _popularPageCache
+          ..clear()
+          ..[1] = books;
+        _popularReachedEnd = books.isEmpty;
+        hasMorePopular = !_popularReachedEnd;
+      }
+    } catch (_) {
+      if (popularBooks.isEmpty) hasMorePopular = false;
+    } finally {
+      isLoadingPopular = false;
       notifyListeners();
     }
   }

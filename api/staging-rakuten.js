@@ -4,6 +4,7 @@
 const ENDPOINTS = Object.freeze({
   book: "https://openapi.rakuten.co.jp/services/api/BooksBook/Search/20170404",
   foreign: "https://openapi.rakuten.co.jp/services/api/BooksForeignBook/Search/20170404",
+  total: "https://openapi.rakuten.co.jp/services/api/BooksTotal/Search/20170404",
 });
 const SORTS = new Set([
   "standard", "sales", "+releaseDate", "-releaseDate", "+itemPrice",
@@ -11,7 +12,8 @@ const SORTS = new Set([
 ]);
 const TEXT_FIELDS = ["title", "author", "publisherName", "keyword"];
 const ALLOWED_INPUTS = new Set([
-  "endpoint", "page", "hits", "booksGenreId", "isbn", "sort", ...TEXT_FIELDS,
+  "endpoint", "page", "hits", "booksGenreId", "isbn", "sort", "field",
+  "outOfStockFlag", ...TEXT_FIELDS,
 ]);
 
 function badRequest(res) {
@@ -66,10 +68,13 @@ function createHandler({ request, env = {} } = {}) {
       query.set("affiliateId", String(env.RAKUTEN_AFFILIATE_ID).trim());
     }
     const genre = scalar("booksGenreId");
+    const validGenreRoot = endpoint === "total"
+      ? genre === "000"
+      : genre?.startsWith(endpoint === "foreign" ? "005" : "001");
     if (genre === null ||
         (genre !== "" &&
           (!/^\d{3}(?:\d{3}){0,3}$/.test(genre) ||
-            !genre.startsWith(endpoint === "foreign" ? "005" : "001")))) {
+            !validGenreRoot))) {
       return badRequest(res);
     }
     if (genre) query.set("booksGenreId", genre);
@@ -84,6 +89,18 @@ function createHandler({ request, env = {} } = {}) {
       return badRequest(res);
     }
     if (sort) query.set("sort", sort);
+    const field = scalar("field");
+    if (field === null ||
+        (field !== "" && (endpoint !== "total" || !/^[01]$/.test(field)))) {
+      return badRequest(res);
+    }
+    if (field) query.set("field", field);
+    const outOfStockFlag = scalar("outOfStockFlag");
+    if (outOfStockFlag === null ||
+        (outOfStockFlag !== "" && !/^[01]$/.test(outOfStockFlag))) {
+      return badRequest(res);
+    }
+    if (outOfStockFlag) query.set("outOfStockFlag", outOfStockFlag);
     for (const field of TEXT_FIELDS) {
       const value = scalar(field);
       if (value === null || value.length > 120 ||
@@ -91,6 +108,11 @@ function createHandler({ request, env = {} } = {}) {
         return badRequest(res);
       }
       if (value.trim()) query.set(field, value.trim());
+    }
+    if (endpoint === "total" &&
+        (!query.has("keyword") || query.has("isbn") || query.has("title") ||
+          query.has("author") || query.has("publisherName"))) {
+      return badRequest(res);
     }
     if (!genre && !isbn && !TEXT_FIELDS.some(field => query.has(field))) {
       return badRequest(res);

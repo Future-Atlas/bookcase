@@ -22,6 +22,7 @@ class RakutenKeywordSearchBatch {
 
   final List<Book> books;
   final bool hasMore;
+
   /// Some fields failed. Keep successful candidates and retry this upstream
   /// window later instead of treating incomplete results as exhaustive.
   final bool temporarilyUnavailable;
@@ -87,6 +88,28 @@ class RakutenApi {
     }
 
     return variants.where((value) => value.isNotEmpty).toList();
+  }
+
+  /// The total-search endpoint already searches title, author and publisher.
+  /// Only add a generic hiragana-to-katakana spelling for all-hiragana input;
+  /// mixed Japanese such as `蜘蛛の` must not be changed to the unnatural
+  /// `蜘蛛ノ`. Product names are deliberately not hard-coded here.
+  static List<String> buildBroadSearchKeywordVariants(String keyword) {
+    final original = keyword.trim();
+    if (original.isEmpty) return const [];
+    final variants = <String>{original};
+    if (RegExp(r'^[ぁ-んゝゞー\s\u3000]+$').hasMatch(original)) {
+      final katakana = String.fromCharCodes(
+        original.runes.map((codePoint) {
+          if (codePoint >= 0x3041 && codePoint <= 0x3096) {
+            return codePoint + 0x60;
+          }
+          return codePoint;
+        }),
+      );
+      variants.add(katakana);
+    }
+    return variants.toList(growable: false);
   }
 
   // A 429 is a *shared application-ID quota* event, not an invitation to
@@ -206,6 +229,7 @@ class RakutenApi {
       queryParameters['booksGenreId'] = '001';
       queryParameters[field] = selectedGenre.trim();
       queryParameters['sort'] = sort ?? 'reviewCount';
+      queryParameters['outOfStockFlag'] = '1';
     } else if (selectedGenre.contains('English') ||
         selectedGenre.contains('洋書')) {
       endpoint = 'foreign';
@@ -370,14 +394,25 @@ class RakutenApi {
     int count = 10,
     List<String>? searchFields,
     Future<List<Book>> Function(
-      String field, String variant, int page, int count
-    )? fieldSearch,
+      String field,
+      String variant,
+      int page,
+      int count,
+    )?
+    fieldSearch,
+    Future<RakutenKeywordSearchBatch> Function(
+      String term,
+      int page,
+      int count,
+    )?
+    totalSearch,
   }) async => (await searchByKeywordPage(
     keyword: keyword,
     page: page,
     count: count,
     searchFields: searchFields,
     fieldSearch: fieldSearch,
+    totalSearch: totalSearch,
   )).books;
 
   /// Fetch full upstream windows for each field, not 4/3/3 individual API
@@ -392,9 +427,62 @@ class RakutenApi {
     int count = 10,
     List<String>? searchFields,
     Future<List<Book>> Function(
-      String field, String variant, int page, int count
-    )? fieldSearch,
+      String field,
+      String variant,
+      int page,
+      int count,
+    )?
+    fieldSearch,
+    Future<RakutenKeywordSearchBatch> Function(
+      String term,
+      int page,
+      int count,
+    )?
+    totalSearch,
   }) async {
+    // Unit-test injection retains the legacy field-specific behaviour. Real
+    // traffic uses BooksTotal first so a single request can match title,
+    // author and publisher without exhausting the shared Rakuten quota.
+    if (fieldSearch == null) {
+      final broadTerms = buildBroadSearchKeywordVariants(keyword);
+      if (broadTerms.isEmpty) {
+        return const RakutenKeywordSearchBatch(books: [], hasMore: false);
+      }
+      final merged = <String, Book>{};
+      var succeeded = false;
+      var potentiallyMore = false;
+      Object? failure;
+      for (final term in broadTerms) {
+        try {
+          final batch = totalSearch != null
+              ? await totalSearch(term, page, count)
+              : await _searchTotalKeywordPage(
+                  keyword: term,
+                  page: page,
+                  count: count,
+                );
+          succeeded = true;
+          potentiallyMore = potentiallyMore || batch.hasMore;
+          for (final book in batch.books) {
+            merged.putIfAbsent(book.id, () => book);
+          }
+        } catch (error) {
+          failure = error;
+          break;
+        }
+      }
+      if (merged.isNotEmpty || failure != null) {
+        if (!succeeded && failure != null) throw failure;
+        return RakutenKeywordSearchBatch(
+          books: merged.values.toList(growable: false),
+          hasMore: (potentiallyMore || failure != null) && page < 100,
+          temporarilyUnavailable: failure != null,
+        );
+      }
+      // A legitimate zero-hit result falls through to the narrow legacy
+      // fields. This preserves compatibility with unusual catalogue records.
+    }
+
     const allowedFields = {'title', 'author', 'publisherName'};
     final fields = (searchFields ?? const <String>[])
         .where(allowedFields.contains)
@@ -469,4 +557,48 @@ class RakutenApi {
     );
   }
 
+  static Future<RakutenKeywordSearchBatch> _searchTotalKeywordPage({
+    required String keyword,
+    required int page,
+    required int count,
+  }) async {
+    final effectiveCount = count.clamp(1, 30);
+    final response = await _requestRakuten('total', {
+      'keyword': keyword.trim(),
+      'booksGenreId': '000',
+      'field': '0',
+      'outOfStockFlag': '1',
+      'sort': 'standard',
+      'page': '$page',
+      'hits': '$effectiveCount',
+    });
+    if (response?.statusCode == 404) {
+      return const RakutenKeywordSearchBatch(books: [], hasMore: false);
+    }
+    if (response == null || response.statusCode != 200) {
+      throw StateError('Rakuten total search unavailable');
+    }
+    final data = jsonDecode(utf8.decode(response.bodyBytes));
+    final items = data['Items'] as List<dynamic>? ?? const [];
+    final books = <Book>[];
+    for (final entry in items) {
+      if (entry is! Map) continue;
+      final raw = entry['Item'];
+      if (raw is! Map<String, dynamic>) continue;
+      final isbn = (raw['isbn']?.toString() ?? '')
+          .replaceAll(RegExp(r'[\s-]'), '')
+          .toUpperCase();
+      // BooksTotal also covers non-book merchandise. ISBN validation keeps
+      // Sharemarium's search results limited to actual books.
+      if (!RegExp(r'^(?:\d{13}|\d{9}[\dX])$').hasMatch(isbn)) continue;
+      books.add(_bookFromRakutenData(raw, fallbackId: isbn, genre: ''));
+    }
+    final pageCount = data['pageCount'] is num
+        ? (data['pageCount'] as num).toInt()
+        : int.tryParse(data['pageCount']?.toString() ?? '');
+    final hasMore = pageCount != null
+        ? page < pageCount
+        : items.length >= effectiveCount;
+    return RakutenKeywordSearchBatch(books: books, hasMore: hasMore);
+  }
 }

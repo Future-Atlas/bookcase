@@ -99,11 +99,21 @@ class BookRepository {
   Set<String> _searchSeenIds = <String>{};
   Future<List<Book>>? _popularCache;
 
+  static String _foldKatakanaToHiragana(String input) =>
+      String.fromCharCodes(input.runes.map((codePoint) {
+        if (codePoint >= 0x30A1 && codePoint <= 0x30F6) {
+          return codePoint - 0x60;
+        }
+        return codePoint;
+      }));
+
   static String _normalizeForSearch(String input) =>
-      input.toLowerCase().replaceAll(RegExp(r'[^0-9a-zぁ-んァ-ヶ一-龥]+'), '');
+      _foldKatakanaToHiragana(input.toLowerCase())
+          .replaceAll(RegExp(r'[^0-9a-zぁ-ん一-龥]+'), '');
 
   static String _normalizeForExact(String input) =>
-      input.trim().toLowerCase().replaceAll(RegExp(r'[\s\u3000・･]+'), '');
+      _foldKatakanaToHiragana(input.trim().toLowerCase())
+          .replaceAll(RegExp(r'[\s\u3000・･]+'), '');
 
   static int _matchQuality(String value, String query, List<String> tokens) {
     if (value == query) return 4;

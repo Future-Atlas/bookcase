@@ -166,6 +166,75 @@ void main() {
     ]);
   });
 
+  test('横断検索は全ひらがなだけカタカナ表記も検索する', () {
+    expect(RakutenApi.buildBroadSearchKeywordVariants('なると'), ['なると', 'ナルト']);
+    expect(RakutenApi.buildBroadSearchKeywordVariants('蜘蛛の'), ['蜘蛛の']);
+    expect(RakutenApi.buildBroadSearchKeywordVariants('one piece'), ['one piece']);
+  });
+
+  test('通常検索はタイトル・著者・出版社を横断する1回の検索を優先する', () async {
+    final calls = <String>[];
+    final result = await RakutenApi.searchByKeywordPage(
+      keyword: '太宰',
+      page: 1,
+      count: 20,
+      totalSearch: (term, page, count) async {
+        calls.add('$term:$page:$count');
+        return RakutenKeywordSearchBatch(
+          books: [_book(
+            id: '9780000000001',
+            title: '人間失格',
+            author: '太宰治',
+            publisher: '出版社',
+          )],
+          hasMore: true,
+        );
+      },
+    );
+    expect(calls, ['太宰:1:20']);
+    expect(result.books.single.title, '人間失格');
+    expect(result.hasMore, isTrue);
+  });
+
+  test('ひらがな検索はカタカナ候補を統合して重複を除く', () async {
+    final calls = <String>[];
+    final same = _book(
+      id: '9780000000002',
+      title: 'NARUTO―ナルト―',
+      author: '岸本斉史',
+      publisher: '集英社',
+    );
+    final result = await RakutenApi.searchByKeywordPage(
+      keyword: 'なると',
+      totalSearch: (term, page, count) async {
+        calls.add(term);
+        return RakutenKeywordSearchBatch(books: [same], hasMore: false);
+      },
+    );
+    expect(calls, ['なると', 'ナルト']);
+    expect(result.books, [same]);
+  });
+
+  test('ひらがな検索ではカタカナ表記の作品も一致候補として順位付けする', () {
+    final ranked = BookRepository.rankSearchResults([
+      _book(
+        id: 'naruto',
+        title: 'NARUTO―ナルト― 72',
+        author: '岸本斉史',
+        publisher: '集英社',
+        reviewCount: 100,
+      ),
+      _book(
+        id: 'generic',
+        title: '80代になると知っておきたいこと',
+        author: '別の著者',
+        publisher: '出版社',
+      ),
+    ], 'なると');
+
+    expect(ranked.first.id, 'naruto');
+  });
+
   group('検索入力の分類', () {
     test('社で終わる場合は出版社を優先する', () {
       expect(
