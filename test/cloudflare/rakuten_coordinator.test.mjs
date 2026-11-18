@@ -60,6 +60,26 @@ test("coordinator validates credential ownership and blocks untrusted endpoints"
   assert.equal((await coordinator.fetch(new Request("https://internal/", { method: "GET" }))).status, 405);
 });
 
+test("coordinator allows the Rakuten Books total-search endpoint", async () => {
+  const coordinator = makeCoordinator();
+  const previous = global.fetch;
+  let pathname;
+  global.fetch = async (url) => {
+    pathname = new URL(url).pathname;
+    return Response.json({ Items: [] });
+  };
+  try {
+    const response = await coordinator.fetch(request({
+      path: "BooksTotal/Search",
+      title: "one piece",
+    }));
+    assert.equal(response.status, 200);
+    assert.equal(pathname, "/services/api/BooksTotal/Search/20170404");
+  } finally {
+    global.fetch = previous;
+  }
+});
+
 test("identical requests are coalesced and a successful response is cached", async () => {
   const coordinator = makeCoordinator();
   const oldFetch = global.fetch;
