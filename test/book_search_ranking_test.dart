@@ -215,6 +215,26 @@ void main() {
     expect(result.books, [same]);
   });
 
+  test('ひらがな検索ではカタカナ表記の作品も一致候補として順位付けする', () {
+    final ranked = BookRepository.rankSearchResults([
+      _book(
+        id: 'naruto',
+        title: 'NARUTO―ナルト― 72',
+        author: '岸本斉史',
+        publisher: '集英社',
+        reviewCount: 100,
+      ),
+      _book(
+        id: 'generic',
+        title: '80代になると知っておきたいこと',
+        author: '別の著者',
+        publisher: '出版社',
+      ),
+    ], 'なると');
+
+    expect(ranked.first.id, 'naruto');
+  });
+
   group('検索入力の分類', () {
     test('社で終わる場合は出版社を優先する', () {
       expect(
