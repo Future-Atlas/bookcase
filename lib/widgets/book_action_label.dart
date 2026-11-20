@@ -21,13 +21,14 @@ class BookActionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final service = Provider.of<SupabaseService>(context, listen: false);
+    final service = Provider.of<SupabaseService>(context);
     return FutureBuilder<BookEngagementCounts>(
       future: service.fetchBookEngagementCounts(bookId),
       builder: (context, snapshot) {
         final counts = snapshot.data;
+        final bookState = service.wantToReadStateFor(bookId);
         final count = wantToRead
-            ? counts?.wantToReadCount ?? 0
+            ? bookState?.count ?? counts?.wantToReadCount ?? 0
             : counts?.readCount ?? 0;
         return Text(
           '$label $count',
