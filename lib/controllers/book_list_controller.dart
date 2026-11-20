@@ -148,8 +148,19 @@ class BookListController extends ChangeNotifier {
 
   void _onSearchChanged() {
     _searchGeneration++;
-    searchQuery = searchController.text.trim();
     _searchDebounce?.cancel();
+    final value = searchController.value;
+    searchQuery = value.text.trim();
+
+    // Japanese IMEs notify listeners while the user is still converting text.
+    // Searching those transient values wastes the shared catalogue quota and
+    // can make the final, committed query appear to return no results.
+    if (isComposingSearchInput(value)) {
+      isSearching = false;
+      searchTemporarilyUnavailable = false;
+      notifyListeners();
+      return;
+    }
 
     if (searchQuery.isEmpty) {
       searchTemporarilyUnavailable = false;
@@ -175,6 +186,10 @@ class BookListController extends ChangeNotifier {
       }
     });
   }
+
+  @visibleForTesting
+  static bool isComposingSearchInput(TextEditingValue value) =>
+      value.composing.isValid && !value.composing.isCollapsed;
 
   void setUserSearchMode(bool enabled) {
     if (userSearchMode == enabled) return;
