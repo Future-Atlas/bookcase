@@ -7,6 +7,11 @@ const COSTLY_PATHS = new Set([
   "/api/openbd",
   "/api/rakuten",
 ]);
+const PUBLIC_CACHEABLE_CATALOG_PATHS = new Set([
+  "/api/home-catalog",
+  "/api/ndl",
+  "/api/openbd",
+]);
 
 function protectedRoute(request, { isCrawler = false, seoPath = false } = {}) {
   const url = new URL(request.url);
@@ -37,15 +42,24 @@ function rejection(status, code) {
 export async function guardRequest(request, env, flags) {
   const { protectedPath, costly } = protectedRoute(request, flags);
   if (!protectedPath) return null;
+  // This flag is set by the Worker only after finding a verified, cached
+  // public GET response. A cache hit has no upstream catalog cost, but must
+  // continue to count against the general API limiter (120/min/IP).
+  const path = new URL(request.url).pathname.replace(/\/{2,}/g, "/");
+  const cachedPublicCatalog =
+    flags?.catalogCacheHit === true &&
+    request.method === "GET" &&
+    PUBLIC_CACHEABLE_CATALOG_PATHS.has(path);
+  const uncachedCostly = costly && !cachedPublicCatalog;
   if (typeof env?.API_RATE_LIMIT?.limit !== "function" ||
-      (costly && typeof env?.CATALOG_RATE_LIMIT?.limit !== "function")) {
+      (uncachedCostly && typeof env?.CATALOG_RATE_LIMIT?.limit !== "function")) {
     return rejection(503, "rate_limit_unavailable");
   }
   const key = request.headers.get("cf-connecting-ip") || "unidentified";
   try {
     const general = await env.API_RATE_LIMIT.limit({ key: `${key}:api` });
     if (!general?.success) return rejection(429, "rate_limited");
-    if (costly) {
+    if (uncachedCostly) {
       const catalog = await env.CATALOG_RATE_LIMIT.limit({
         key: `${key}:catalog`,
       });

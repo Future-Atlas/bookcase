@@ -137,3 +137,111 @@ test("hostile query keys do not alter the parameter object's prototype", () => {
   assert.equal(query.title,"Japan");
   assert.equal({}.malicious,undefined);
 });
+
+
+test("verified cache hit skips only expensive catalog limiter and remains generally rate limited", async () => {
+  const {env, calls} = createLimiters({catalogAllowed: false});
+  const request = new Request(
+    "https://site.test/api/home-catalog?lang=jpn&topic=%E6%97%A5%E6%9C%AC&page=1",
+    {headers: {"cf-connecting-ip": "203.0.113.77"}},
+  );
+  const cache = {
+    async match() {
+      return Response.json({books: [], rawCount: 0, hasMore: false,
+        catalogSource: "openlibrary"});
+    },
+  };
+  const hit = await workerTest.readCachedPublicCatalog(request, cache);
+  assert.equal(hit?.status, 200);
+  assert.equal(await guardRequest(request, env, {catalogCacheHit: !!hit}), null);
+  assert.deepEqual(calls, [{name: "api", key: "203.0.113.77:api"}]);
+});
+
+test("cache flag cannot bypass catalog limiter for non-cached routes or writes", async () => {
+  const {env, calls} = createLimiters({catalogAllowed: false});
+  const urls = [
+    "https://site.test/api/rakuten?endpoint=book",
+  ];
+  for (const url of urls) {
+    const response = await guardRequest(new Request(url), env,
+      {catalogCacheHit: true});
+    assert.equal(response?.status, 429);
+  }
+  for (const endpoint of [
+    "https://site.test/api/home-catalog?lang=jpn&topic=%E6%97%A5%E6%9C%AC&page=1",
+    "https://site.test/api/openbd?isbn=9780140328721",
+  ]) {
+    const post = await guardRequest(new Request(endpoint, {method: "POST"}),
+      env, {catalogCacheHit: true});
+    assert.equal(post?.status, 429);
+  }
+  assert.equal(calls.filter(c => c.name === "catalog").length, 3);
+});
+
+test("Worker can serve a cached public catalog response even after catalog quota is exhausted", async () => {
+  const prev = globalThis.caches;
+  const responseBody = {
+    books: [{id: "9784000000001", isbn: "9784000000001", title: "検証書籍",
+      languageCode: "jpn"}],
+    rawCount: 1, hasMore: false, catalogSource: "openlibrary",
+  };
+  globalThis.caches = {
+    default: {
+      async match() {
+        return Response.json(responseBody, {
+          headers: {"Content-Type": "application/json; charset=utf-8"},
+        });
+      },
+    },
+  };
+  try {
+    const {env, calls} = createLimiters({catalogAllowed: false});
+    const req = new Request(
+      "https://site.test/api/home-catalog?lang=jpn&topic=%E6%97%A5%E6%9C%AC&page=1",
+    );
+    const served = await worker.fetch(req, env);
+    assert.equal(served.status, 200);
+    assert.deepEqual(await served.json(), responseBody);
+    assert.deepEqual(calls.map(call => call.name), ["api"]);
+
+    const {env: generalBlocked} = createLimiters({
+      apiAllowed: false, catalogAllowed: false,
+    });
+    const denied = await worker.fetch(req, generalBlocked);
+    assert.equal(denied.status, 429);
+    assert.deepEqual(await denied.json(), {error: "rate_limited"});
+  } finally {
+    if (prev === undefined) delete globalThis.caches;
+    else globalThis.caches = prev;
+  }
+});
+
+test("cached errors or mismatched content types never bypass the catalog limiter", async () => {
+  const request = new Request(
+    "https://site.test/api/home-catalog?lang=eng&topic=Japan&page=1",
+  );
+  for (const response of [
+    Response.json({error: "catalog_source_busy"}, {status: 503}),
+    new Response("<rss/>", {status: 200, headers: {"Content-Type": "application/xml"}}),
+  ]) {
+    const cache = {async match() {return response;}};
+    assert.equal(await workerTest.readCachedPublicCatalog(request, cache), null);
+    const {env, calls} = createLimiters({catalogAllowed: false});
+    const blocked = await guardRequest(request, env, {catalogCacheHit: false});
+    assert.equal(blocked?.status, 429);
+    assert.equal(calls.filter(call => call.name === "catalog").length, 1);
+  }
+});
+
+
+test("cached, validated openBD metadata avoids repeating the catalog quota", async () => {
+  const req = new Request("https://site.test/api/openbd?isbn=9780140328721");
+  const cache = {async match() {
+    return Response.json([{"summary": {"isbn": "9780140328721"}}]);
+  }};
+  const hit = await workerTest.readCachedPublicCatalog(req, cache);
+  assert.equal(hit?.status, 200);
+  const {env, calls} = createLimiters({catalogAllowed: false});
+  assert.equal(await guardRequest(req, env, {catalogCacheHit: !!hit}), null);
+  assert.deepEqual(calls.map(item => item.name), ["api"]);
+});
