@@ -217,7 +217,8 @@ class _ReadingTimerScreenState extends State<ReadingTimerScreen> {
               const SizedBox(height: 24),
               const Text(
                 '1回の計測は最大24時間です。\n'
-                '画面を閉じても、計測中の記録はカレンダーから再開できます。',
+                '画面を閉じても、計測中の記録はカレンダーから再開できます。\n'
+                '計測中は自分だけに表示されます。終了すると、カレンダーを閲覧できるフォロワーに記録が共有され、通知が届きます。',
                 textAlign: TextAlign.center,
               ),
               if (_error != null) ...[
