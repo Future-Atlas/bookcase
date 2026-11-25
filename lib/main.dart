@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'widgets/reading_calendar_intro.dart';
 import 'config/app_environment.dart';
 import 'services/supabase_service.dart';
 import 'services/theme_service.dart';
@@ -220,6 +222,57 @@ class _MainNavigationShellState extends State<MainNavigationShell>
 
   late int _currentScreenIndex;
   late bool _openPrivacyPasswordRecovery;
+  bool _shellRouteReady = false;
+  bool _openOwnCalendar = false;
+  final Set<String> _handledCalendarIntro = {};
+  bool _checkingCalendarIntro = false;
+
+  bool get _canShowCalendarIntro =>
+      mounted && _shellRouteReady && !_openPrivacyPasswordRecovery &&
+      (_currentScreenIndex == 0 || _currentScreenIndex == 1) &&
+      !_currentAppPathFromUri(Uri.base).startsWith('/book/') &&
+      ModalRoute.of(context)?.isCurrent == true;
+
+  Future<void> _maybeShowCalendarIntro(String id) async {
+    if (!_canShowCalendarIntro || _checkingCalendarIntro ||
+        _handledCalendarIntro.contains(id) || id.isEmpty) return;
+    final service = context.read<SupabaseService>();
+    bool sameAccount() => service.isAuthenticated && service.activeProfileId == id;
+    if (!sameAccount()) return;
+    _checkingCalendarIntro = true;
+    final key = 'reading_calendar_intro_v1:$id';
+    final prefs = SharedPreferencesAsync();
+    try {
+      var seen = false;
+      try {
+        seen = await prefs.getBool(key) ?? false;
+      } catch (_) {
+        // Private browsing may not provide persistent storage.
+      }
+      if (seen) {
+        _handledCalendarIntro.add(id);
+        return;
+      }
+      if (!_canShowCalendarIntro || !sameAccount()) return;
+      _handledCalendarIntro.add(id);
+      final open = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const ReadingCalendarIntro(),
+      );
+      if (mounted && sameAccount() && open == true) {
+        setState(() => _openOwnCalendar = true);
+        _setCurrentScreenIndex(1);
+      }
+      try {
+        await prefs.setBool(key, true);
+      } catch (_) {
+        // The in-memory flag still prevents repeats in this session.
+      }
+    } finally {
+      _checkingCalendarIntro = false;
+    }
+  }
   String? _adminCheckedUserId;
   bool _isAdmin = false;
   String? _viewedProfileId;
@@ -408,6 +461,7 @@ class _MainNavigationShellState extends State<MainNavigationShell>
     if (_currentScreenIndex != index) {
       setState(() {
         _currentScreenIndex = index;
+        if (index != 1) _openOwnCalendar = false;
       });
     }
     if (syncUrl) {
@@ -489,10 +543,15 @@ class _MainNavigationShellState extends State<MainNavigationShell>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // A direct /posts URL can place a post route above the initial home
       // route. Do not let the hidden home shell overwrite that URL with '/'.
-      if (!mounted || ModalRoute.of(context)?.isCurrent == false) return;
+      if (!mounted) return;
+      if (ModalRoute.of(context)?.isCurrent == false) {
+        setState(() => _shellRouteReady = true);
+        return;
+      }
       await _restorePendingPrivacyPasswordRecovery();
-      if (!mounted ||
-          ModalRoute.of(context)?.isCurrent == false ||
+      if (!mounted) return;
+      setState(() => _shellRouteReady = true);
+      if (ModalRoute.of(context)?.isCurrent == false ||
           _openPrivacyPasswordRecovery) {
         return;
       }
@@ -651,6 +710,11 @@ class _MainNavigationShellState extends State<MainNavigationShell>
     return Consumer<SupabaseService>(
       builder: (context, service, _) {
         final currentUserId = service.activeProfileId;
+        if (_shellRouteReady && service.isAuthenticated && currentUserId.isNotEmpty &&
+            !_handledCalendarIntro.contains(currentUserId) &&
+            ModalRoute.isCurrentOf(context) == true) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowCalendarIntro(currentUserId));
+        }
         if (_adminCheckedUserId != currentUserId) {
           _adminCheckedUserId = currentUserId;
           _isAdmin = false;
@@ -880,7 +944,8 @@ class _MainNavigationShellState extends State<MainNavigationShell>
                       duration: const Duration(milliseconds: 300),
                       child: _currentScreenIndex == 1
                         ? UserProfileScreen(
-                            key: const ValueKey('UserProfileScreen'),
+                            key: ValueKey(_openOwnCalendar ? 'OwnCalendar' : 'UserProfileScreen'),
+                            openCalendar: _openOwnCalendar,
                             onBack: _goToBookList,
                             showAppBar: false,
                           )

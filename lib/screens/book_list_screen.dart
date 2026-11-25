@@ -1224,7 +1224,6 @@ class _BookListScreenState extends State<BookListScreen> {
               ),
             ],
           ),
-          const Text('新機能：マイページの「カレンダー」で読書時間を計測できます。'),
           if (_isServiceIntroductionExpanded) ...[
             const SizedBox(height: 10),
             Text(
