@@ -2976,14 +2976,18 @@ class SupabaseService extends ChangeNotifier {
   Future<List<Book>> _resolveBooksByIds(List<String> bookIds) async {
     if (bookIds.isEmpty) return [];
 
-    final results = await Future.wait(
-      bookIds.map((id) => const BookCatalogLookup().fetchById(id)),
-    );
-
     final books = <Book>[];
-    for (var i = 0; i < bookIds.length; i++) {
-      final id = bookIds[i];
-      final resolved = results[i];
+    for (final id in bookIds) {
+      // Profile posts usually resolved this edition immediately before the
+      // shelf was loaded. Avoid a second burst of requests for the same ISBNs.
+      var resolved = _postBookMetadata.cachedBook(id);
+      if (resolved == null) {
+        try {
+          resolved = await const BookCatalogLookup().fetchById(id);
+        } catch (_) {
+          // A transient lookup failure must not discard the rest of the shelf.
+        }
+      }
       if (resolved != null) {
         books.add(resolved);
         continue;

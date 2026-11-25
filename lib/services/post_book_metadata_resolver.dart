@@ -17,6 +17,8 @@ class PostBookMetadataResolver {
   final int maxCachedBooks;
   final Map<String, Book> _coverCache = <String, Book>{};
 
+  Book? cachedBook(String id) => _coverCache[id.trim()];
+
   Future<List<Post>> enrich(List<Post> posts) async {
     if (posts.isEmpty) return posts;
 

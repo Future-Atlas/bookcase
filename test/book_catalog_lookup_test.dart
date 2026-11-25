@@ -15,6 +15,20 @@ Book sample(String id, {String coverUrl = '', String coverSource = ''}) => Book(
 );
 
 void main() {
+  test('legacy ISBN-10 resolves the same edition without changing shelf ID', () async {
+    final lookup = BookCatalogLookup(
+      useRakuten: true,
+      rakutenFetcher: (id) async {
+        expect(id, '9784101269313');
+        return sample(id, coverUrl: 'https://cover.openbd.jp/$id.jpg');
+      },
+      openBdEnricher: (books) async => books,
+    );
+    final book = await lookup.fetchById('4-10-126931-9');
+    expect(book?.id, '4-10-126931-9');
+    expect(book?.isbn, '9784101269313');
+    expect(book?.coverUrl, isNotEmpty);
+  });
   test('Rakuten detail prefers openBD enrichment when available', () async {
     final calls = <String>[];
     final lookup = BookCatalogLookup(

@@ -24,7 +24,7 @@ test("terms already explain advertisements, sponsored reviews and third-party tr
   assert.match(terms, /「広告」「PR」「献本」「提供」/);
 });
 
-test("privacy policy identifies active Ninja AdMax and conditional Google ads", () => {
+test("privacy policy identifies paused Ninja AdMax and conditional Google ads", () => {
   const policy = read("lib/screens/privacy_policy_screen.dart");
   assert.match(policy, /忍者ツールズ株式会社/);
   assert.match(policy, /忍者AdMax/);
@@ -34,13 +34,13 @@ test("privacy policy identifies active Ninja AdMax and conditional Google ads", 
   assert.match(policy, /https:\/\/adssettings\.google\.com\//);
   assert.match(policy, /2026年10月29日／バージョン1\.14\.0/);
   assert.match(policy, /2026年10月31日／バージョン1\.15\.0/);
-  assert.match(policy, /\*\*最終改定日\*\*\s*2026年10月31日/);
+  assert.match(policy, /\*\*最終改定日\*\*\s*2026年11月24日/);
 });
 
 test("external-transmission disclosure names the actual advertising recipient", () => {
   const disclosure = read("lib/screens/external_transmission_screen.dart");
   assert.match(disclosure, /忍者ツールズ株式会社（忍者AdMax）/);
-  assert.match(disclosure, /忍者AdMaxの広告を掲載します/);
+  assert.match(disclosure, /広告配信は現在休止しています/);
   assert.match(disclosure, /IPアドレス、通信に関するリクエスト情報/);
   assert.match(disclosure, /認証トークン又はレビュー本文/);
   assert.match(disclosure, /https:\/\/corp\.ninja\.co\.jp\/privacy\/tieup\//);
@@ -50,11 +50,11 @@ test("external-transmission disclosure names the actual advertising recipient", 
 
 test("legal versions are independent and trigger re-confirmation for signed-in users", () => {
   const versions = read("lib/services/legal_document_versions.dart");
-  assert.match(versions, /bundle = '1\.19\.0'/);
-  assert.match(versions, /terms = '1\.16\.0'/);
-  assert.match(versions, /privacy = '1\.15\.0'/);
+  assert.match(versions, /bundle = '1\.20\.0'/);
+  assert.match(versions, /terms = '1\.17\.0'/);
+  assert.match(versions, /privacy = '1\.16\.0'/);
   assert.match(versions, /communityGuidelines = '1\.4\.0'/);
-  assert.match(versions, /externalTransmission = '1\.12\.0'/);
+  assert.match(versions, /externalTransmission = '1\.13\.0'/);
 });
 
 test("terms and community guidelines state the 1000 character review limit", () => {
@@ -68,12 +68,12 @@ test("terms and community guidelines state the 1000 character review limit", () 
 
 test("legal revision history agrees with current document versions", () => {
   const doc = read("docs/legal_changelog.md");
-  assert.match(doc, /利用規約 \| 1\.16\.0/);
+  assert.match(doc, /利用規約 \| 1\.17\.0/);
   assert.match(doc, /コミュニティガイドライン \| 1\.4\.0/);
   assert.match(doc, /2026年10月31日 \| 1\.16\.0/);
   assert.match(doc, /2026年10月14日 \| 1\.4\.0/);
-  assert.match(doc, /プライバシーポリシー \| 1\.15\.0/);
-  assert.match(doc, /外部送信に関する公表事項 \| 1\.12\.0/);
+  assert.match(doc, /プライバシーポリシー \| 1\.16\.0/);
+  assert.match(doc, /外部送信に関する公表事項 \| 1\.13\.0/);
   assert.match(doc, /2026年10月31日 \| 1\.15\.0/);
 });
 
@@ -88,6 +88,9 @@ test("SEO legal rendering inherits disclosure without injecting ad scripts", asy
     await handler({query: {path: route}}, res);
     assert.equal(res.statusCode, 200);
     assert.match(res.body, new RegExp(marker));
+    assert.match(res.body, /読書タイマー/);
+    assert.match(res.body, /Cloudflare/);
+    assert.doesNotMatch(res.body, /images\.weserv\.nl/);
     assert.doesNotMatch(res.body, /<script\b/i);
     assert.doesNotMatch(res.body, /pagead2\.googlesyndication\.com/);
   }
