@@ -6,9 +6,8 @@ import '../config/app_environment.dart';
 const bool timelineAdDeliveryPaused = true;
 
 bool get timelineAdDisplayReady =>
-    AppEnvironmentConfig.current == AppEnvironment.staging ||
-    timelineAdDeliveryPaused ||
-    timelineAdReady;
+    !timelineAdDeliveryPaused &&
+    (AppEnvironmentConfig.current == AppEnvironment.staging || timelineAdReady);
 
 /// Disabled unless a Web release explicitly opts into Ninja AdMax.
 const bool timelineAdEnabled = bool.fromEnvironment(

@@ -107,12 +107,17 @@ class BookRepository {
         return codePoint;
       }));
 
+  static String _foldFullWidthAscii(String input) => String.fromCharCodes(
+    input.runes.map((point) =>
+        point >= 0xFF01 && point <= 0xFF5E ? point - 0xFEE0 : point),
+  );
+
   static String _normalizeForSearch(String input) =>
-      _foldKatakanaToHiragana(input.toLowerCase())
-          .replaceAll(RegExp(r'[^0-9a-zぁ-ん一-龥]+'), '');
+      _foldKatakanaToHiragana(_foldFullWidthAscii(input).toLowerCase())
+          .replaceAll(RegExp(r'[^0-9a-zぁ-ん一-龥々]+'), '');
 
   static String _normalizeForExact(String input) =>
-      _foldKatakanaToHiragana(input.trim().toLowerCase())
+      _foldKatakanaToHiragana(_foldFullWidthAscii(input.trim()).toLowerCase())
           .replaceAll(RegExp(r'[\s\u3000・･]+'), '');
 
   static int _matchQuality(String value, String query, List<String> tokens) {
@@ -698,7 +703,7 @@ class BookRepository {
   Future<BookSearchBatch> searchBooksPage(
     String query, {int page = 1, int count = 10}
   ) async {
-    final clean = query.trim();
+    final clean = _foldFullWidthAscii(query.trim());
     if (clean.isEmpty) {
       return BookSearchBatch(books: await fetchAllBooks(), hasMore: false);
     }
