@@ -331,6 +331,15 @@ void main() {
     expect(ranked.first.id, 'exact');
   });
 
+  test('全角英数字と漢字の繰り返し記号を検索時に失わない', () {
+    final books = [
+      _book(id: 'ai', title: 'AIを学ぶ', author: '著者', publisher: '出版社'),
+      _book(id: 'repeat', title: '人々の物語', author: '著者', publisher: '出版社'),
+    ];
+    expect(BookRepository.rankSearchResults(books, 'ＡＩ').first.id, 'ai');
+    expect(BookRepository.rankSearchResults(books, '人々').first.id, 'repeat');
+  });
+
   test('漢字のみの書名もタイトル完全一致なら著者の部分一致より先に表示される', () {
     final ranked = BookRepository.rankSearchResults([
       _book(

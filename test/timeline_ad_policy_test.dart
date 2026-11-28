@@ -2,6 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sharemarium/widgets/timeline_ad_policy.dart';
 
 void main() {
+  test('paused ad delivery also hides empty placement frames', () {
+    expect(timelineAdDeliveryPaused, isTrue);
+    expect(timelineAdDisplayReady, isFalse);
+  });
   test('ads are inserted between real posts at the configured interval', () {
     expect(timelineAdSlotCount(0), 0);
     expect(timelineAdSlotCount(1), 0);

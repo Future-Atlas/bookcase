@@ -2393,19 +2393,8 @@ class _PagedBookScrollerState extends State<_PagedBookScroller> {
       return;
     }
 
-    final position = _scrollController.position;
-    if (position.extentBefore > 1) {
-      _isAutoScrolling = true;
-      try {
-        await _scrollController.animateTo(
-          position.minScrollExtent,
-          duration: const Duration(milliseconds: 650),
-          curve: Curves.easeInOutCubic,
-        );
-      } finally {
-        _isAutoScrolling = false;
-      }
-    }
+    // The upstream catalog is exhausted. Stay at the last book instead of
+    // silently replaying the same first page as if it were new titles.
   }
 
   Future<bool> _moveOneBook() async {
